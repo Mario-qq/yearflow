@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Navigate, NavLink, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { useStore } from './store/useStore';
 import { applyTheme, subscribeSystemTheme } from './lib/theme';
+import { GanttToolbar } from './gantt/GanttToolbar';
 import GanttPage from './pages/GanttPage';
 import CheckInPage from './pages/CheckInPage';
 import ReviewPage from './pages/ReviewPage';
@@ -16,6 +17,13 @@ const NAV = [
 
 const THEME_LABEL = { light: '浅色', dark: '深色', system: '跟随系统' } as const;
 const THEME_NEXT = { light: 'dark', dark: 'system', system: 'light' } as const;
+
+/** 甘特图工具组只在 /gantt 路由出现在顶栏中间（SPEC 4.1 单条顶栏） */
+function GanttToolbarSlot() {
+  const { pathname } = useLocation();
+  if (!pathname.startsWith('/gantt')) return null;
+  return <GanttToolbar />;
+}
 
 /** 移动端（<768px）默认路由落打卡面板（SPEC 第五节） */
 function HomeRedirect() {
@@ -70,7 +78,10 @@ export default function App() {
               </NavLink>
             ))}
           </nav>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex flex-1 justify-center">
+            <GanttToolbarSlot />
+          </div>
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => updateSettings({ theme: THEME_NEXT[theme] })}

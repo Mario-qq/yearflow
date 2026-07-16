@@ -50,6 +50,7 @@
   --danger: #d4453a;          /* 今日线、缺卡点、冲突连线 */
   --danger-soft: color-mix(in srgb, var(--danger) 15%, transparent);
   --info: #3a8fd4;
+  --text-on-accent: #ffffff;  /* accent/danger 实底上的文字（今天圆底、「今」标签） */
 
   /* ── 圆角 ── */
   --radius-sm: 4px;

@@ -3,7 +3,7 @@
  * 确定性伪随机（固定种子），同一天重复载入结果一致。
  * Goal.color 存 tokens.css 的色板键（goal-1..goal-5），UI 用 var(--goal-N) 解析。
  */
-import type { CheckIn, Goal, Milestone, Task } from '../types/domain';
+import type { CheckIn, ExemptionPeriod, Goal, Milestone, Task } from '../types/domain';
 import type { DataBundle } from '../store/types';
 import { dayjs, toDay } from '../lib/date';
 import { expandScheduledDays } from '../lib/derive';
@@ -105,7 +105,13 @@ export function buildSeedBundle(today: string): DataBundle {
     }
   }
 
-  return { goals, tasks, milestones, checkIns, exemptions: [], reviews: [] };
+  // 免打卡区间：演示时间轴斜纹底纹 + 表头 reason 标注（均在未来，不影响已生成的打卡/派生数据）
+  const exemptions: ExemptionPeriod[] = [
+    { id: 'seed-ex-trip', startDate: '2026-07-20', endDate: '2026-07-24', reason: '出差上海', updatedAt: now },
+    { id: 'seed-ex-holiday', startDate: '2026-10-01', endDate: '2026-10-07', reason: '国庆假期', updatedAt: now },
+  ];
+
+  return { goals, tasks, milestones, checkIns, exemptions, reviews: [] };
 }
 
 /** 判断当前库是否是（或包含）示例数据（"清空示例数据"入口用） */

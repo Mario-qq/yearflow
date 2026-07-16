@@ -8,7 +8,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   yearInView: new Date().getFullYear(),
   ganttView: {
     zoom: 'month',
-    scrollDate: new Date().toISOString().slice(0, 10),
+    scrollDate: '', // 空 = 从未记录：首次进入甘特页平滑滚到今日线视口 1/3 处
+
     collapsedGoalIds: [],
     gridColumns: DEFAULT_GRID_COLUMNS,
     gridWidth: 320,

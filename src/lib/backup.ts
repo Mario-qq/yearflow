@@ -89,7 +89,7 @@ const reviewSchema = z.object({
 
 const ganttViewSchema = z.object({
   zoom: z.enum(['year', 'quarter', 'month', 'week']),
-  scrollDate: dateStr,
+  scrollDate: dateStr.or(z.literal('')), // 空 = 从未记录（首次进甘特页滚到今日线）
   collapsedGoalIds: z.array(z.string()),
   gridColumns: z.array(z.string()),
   gridWidth: z.number(),
