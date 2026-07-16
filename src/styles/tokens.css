@@ -24,6 +24,8 @@
   --weekend-tint: rgba(20, 20, 30, 0.03);      /* 周末整列底纹 */
   --exemption-stripe: rgba(20, 20, 30, 0.05);  /* 免打卡区间斜纹色 */
   --row-hover: rgba(20, 20, 30, 0.04);         /* 十字定位/联动整行淡背景 */
+  --bar-inner-stroke: transparent;             /* bar 内描边：深色主题下防止与背景糊在一起 */
+  --missed-dot: color-mix(in srgb, var(--danger) 45%, transparent); /* 缺卡点/全缺周淡红（自动跟随深色 --danger） */
 
   /* ── 5 个目标预设色（Okabe-Ito 衍生，色弱可辨，深浅主题均清晰） ── */
   --goal-1: #2f6fd0; /* 蓝 */
@@ -105,6 +107,7 @@
   --weekend-tint: rgba(235, 235, 255, 0.035); /* 深色下为淡亮底纹 */
   --exemption-stripe: rgba(235, 235, 255, 0.06);
   --row-hover: rgba(235, 235, 255, 0.05);
+  --bar-inner-stroke: rgba(255, 255, 255, 0.1); /* SPEC §8：深色下 bar 加 1px 内描边 */
 
   /* 目标色深色下提亮一档，保证与深底对比 */
   --goal-1: #5b93ea;

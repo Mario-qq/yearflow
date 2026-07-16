@@ -1,6 +1,6 @@
 /**
- * 行层：目标分组底带 + 行分隔线。Phase 2② 在此之上渲染任务 bar / 打卡点阵 / 汇总条。
- * 行几何一律来自 rowLayout（与左侧网格严格同源）。
+ * 行层：目标分组底带 + 行分隔线（行虚拟化：只渲染 [rowStart, rowEnd]）。
+ * 行几何一律来自 rowLayout（与左侧网格严格同源）。bar/点阵在 BarsLayer 渲染。
  */
 import { memo } from 'react';
 import type { RowLayout } from './rowLayout';
@@ -8,12 +8,14 @@ import { GOAL_BAND_OPACITY } from './constants';
 
 interface Props {
   layout: RowLayout;
+  rowStart: number;
+  rowEnd: number;
 }
 
-export const RowsLayer = memo(function RowsLayer({ layout }: Props) {
+export const RowsLayer = memo(function RowsLayer({ layout, rowStart, rowEnd }: Props) {
   return (
     <div className="absolute inset-0" aria-hidden>
-      {layout.rows.map((r) => (
+      {layout.rows.slice(rowStart, rowEnd + 1).map((r) => (
         <div
           key={r.id}
           className="absolute left-0 right-0"

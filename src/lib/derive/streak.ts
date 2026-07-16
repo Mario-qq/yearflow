@@ -22,6 +22,25 @@ export function bestStatusByDate(checkIns: CheckIn[], goalId: string): Map<strin
 }
 
 /**
+ * 任务口径的每日最强状态：goalId 匹配，且 CheckIn 未指定 taskId 或与本任务一致
+ * （归属规则与 checkedDatesFor 一致）。甘特打卡点阵按此着色。
+ */
+export function statusByDateFor(
+  checkIns: CheckIn[],
+  goalId: string,
+  taskId?: string,
+): Map<string, CheckInStatus> {
+  const map = new Map<string, CheckInStatus>();
+  for (const c of checkIns) {
+    if (c.deletedAt || c.goalId !== goalId) continue;
+    if (c.taskId && taskId && c.taskId !== taskId) continue;
+    const prev = map.get(c.date);
+    if (!prev || STATUS_RANK[c.status] > STATUS_RANK[prev]) map.set(c.date, c.status);
+  }
+  return map;
+}
+
+/**
  * 按 Goal 计算 streak（SPEC 派生概念）：
  * - 应打卡日 = 该目标所有任务应打卡日的并集（已减免打卡区间）
  * - done / partial 延续并 +1

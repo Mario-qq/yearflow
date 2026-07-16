@@ -174,3 +174,8 @@ export const useStore = create<StoreState>()((set, get) => ({
     return bundle as unknown as DataBundle;
   },
 }));
+
+// dev 观测：控制台/验证脚本直接访问 store（生产构建剔除）
+if (import.meta.env.DEV) {
+  (window as unknown as Record<string, unknown>).__store = useStore;
+}

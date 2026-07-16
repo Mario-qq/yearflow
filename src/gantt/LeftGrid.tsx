@@ -11,11 +11,13 @@ import { goalColor } from '../lib/colors';
 
 interface Props {
   layout: RowLayout;
+  rowStart: number;
+  rowEnd: number;
   goals: Record<string, Goal>;
   tasks: Record<string, Task>;
 }
 
-export const LeftGrid = memo(function LeftGrid({ layout, goals, tasks }: Props) {
+export const LeftGrid = memo(function LeftGrid({ layout, rowStart, rowEnd, goals, tasks }: Props) {
   return (
     <div
       className="sticky left-0 z-20"
@@ -27,7 +29,7 @@ export const LeftGrid = memo(function LeftGrid({ layout, goals, tasks }: Props) 
         borderRight: '1px solid var(--border-default)',
       }}
     >
-      {layout.rows.map((r) => {
+      {layout.rows.slice(rowStart, rowEnd + 1).map((r) => {
         if (r.kind === 'goal') {
           const goal = goals[r.id];
           if (!goal) return null;

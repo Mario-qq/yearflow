@@ -21,6 +21,7 @@ export const ROW_H_GOAL = 40; // 目标分组行
 export const ROW_H_TASK = 48; // 任务行（bar 22 + 间距 4 + 点阵 10 + 上下留白 6×2）
 
 /** 任务行内部纵向布局（Phase 2② 使用） */
+export const BAR_TOP = 6; // bar 距行顶偏移（= 上留白）
 export const BAR_H = 22;
 export const BAR_DOT_GAP = 4;
 export const DOT_ROW_H = 10;
@@ -28,6 +29,28 @@ export const DOT_D = 7; // 打卡点直径
 export const HEAT_H = 3; // 热度条高度（紧贴 bar 底）
 /** 日宽低于此值时打卡点阵退化为热度条 */
 export const HEAT_MODE_THRESHOLD = 10;
+
+/** bar 外观（SPEC 4.4） */
+export const BAR_REMAINDER_ALPHA = 25; // 右侧剩余段透明度 %
+export const BAR_LABEL_PAD = 6; // bar 内/外标签水平内边距
+export const BAR_LABEL_FONT = 12; // 标签字号（textWidth 测量用）
+export const BEHIND_BADGE = 7; // 落后警示角标（右上角三角）边长
+export const PAUSED_STRIPE_W = 4; // paused 斜纹条纹宽
+
+/** 打卡可视化透明度（%，配 color-mix） */
+export const DOT_FUTURE_ALPHA = 8; // 未来应打卡占位点
+export const HEAT_ALPHA_STEPS = [15, 36, 57, 78, 100]; // 周完成率五档
+
+/** 目标行：汇总条与里程碑 */
+export const SUMMARY_BAR_H = 6;
+export const SUMMARY_HEAT_GAP = 2; // 折叠时聚合热度条与汇总条的间距
+export const MILESTONE_D = 14; // 菱形对角线
+export const MILESTONE_LABEL_GAP = 4; // 菱形与名称标签间距
+
+/** bar tooltip */
+export const TOOLTIP_DELAY_MS = 400; // 悬停出现延时
+export const TOOLTIP_W = 240;
+export const TOOLTIP_OFFSET = 12; // 距光标偏移
 
 /** 表头：双层各 28px */
 export const HEADER_LAYER_H = 28;
@@ -47,6 +70,8 @@ export const SCROLL_TWEEN_MAX_MS = 600;
 
 /** mini-map（Phase 2② 使用） */
 export const MINIMAP_H = 28;
+export const MINIMAP_LINE_H = 2; // 每目标的任务分布线段高
+export const MINIMAP_PAD_Y = 4; // 泳道区上下留白
 
 /** 目标分组行底色不透明度（盖在周末底纹之上仍保留网格可见性） */
 export const GOAL_BAND_OPACITY = 0.6;
