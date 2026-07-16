@@ -1,0 +1,125 @@
+/**
+ * tokens.css — YearFlow 设计令牌（SPEC 第八节）
+ * 所有组件只允许引用这里的变量，禁止散落颜色/尺寸魔数。
+ * 主题切换：JS 把解析后的主题（system 已解析为实际值）写到 <html data-theme="light|dark">。
+ */
+
+:root {
+  /* ── 中性色阶（浅色主题）：背景 / 面板 / 边框 / 文字 四层 ── */
+  --bg-base: #f7f7f8;        /* 应用底 */
+  --bg-panel: #ffffff;       /* 卡片/面板/网格底 */
+  --bg-subtle: #f0f0f2;      /* hover 行、周末底纹基色 */
+  --bg-raised: #ffffff;      /* 浮层/popover/抽屉 */
+
+  --border-subtle: #ececee;  /* 最淡网格线（日/周分隔） */
+  --border-default: #dcdcdf; /* 月分隔、面板边框 */
+  --border-strong: #b9b9bf;  /* 季度分隔、输入框 focus 前 */
+
+  --text-primary: #1a1a1f;
+  --text-secondary: #55555e;
+  --text-tertiary: #8b8b94;
+  --text-disabled: #b9b9bf;
+
+  /* 特殊底纹 */
+  --weekend-tint: rgba(20, 20, 30, 0.03);      /* 周末整列底纹 */
+  --exemption-stripe: rgba(20, 20, 30, 0.05);  /* 免打卡区间斜纹色 */
+  --row-hover: rgba(20, 20, 30, 0.04);         /* 十字定位/联动整行淡背景 */
+
+  /* ── 5 个目标预设色（Okabe-Ito 衍生，色弱可辨，深浅主题均清晰） ── */
+  --goal-1: #2f6fd0; /* 蓝 */
+  --goal-2: #d97a16; /* 橙 */
+  --goal-3: #0f9d6e; /* 绿 */
+  --goal-4: #b8579f; /* 紫红 */
+  --goal-5: #cc4f38; /* 朱红 */
+  --goal-1-40: color-mix(in srgb, var(--goal-1) 40%, transparent);
+  --goal-2-40: color-mix(in srgb, var(--goal-2) 40%, transparent);
+  --goal-3-40: color-mix(in srgb, var(--goal-3) 40%, transparent);
+  --goal-4-40: color-mix(in srgb, var(--goal-4) 40%, transparent);
+  --goal-5-40: color-mix(in srgb, var(--goal-5) 40%, transparent);
+  --goal-1-15: color-mix(in srgb, var(--goal-1) 15%, transparent);
+  --goal-2-15: color-mix(in srgb, var(--goal-2) 15%, transparent);
+  --goal-3-15: color-mix(in srgb, var(--goal-3) 15%, transparent);
+  --goal-4-15: color-mix(in srgb, var(--goal-4) 15%, transparent);
+  --goal-5-15: color-mix(in srgb, var(--goal-5) 15%, transparent);
+
+  /* ── 语义色 ── */
+  --accent: #4a6ee0;          /* 主题主色：今天标记、选中、链接 */
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --success: #17a06a;
+  --warning: #d9910f;
+  --danger: #d4453a;          /* 今日线、缺卡点、冲突连线 */
+  --danger-soft: color-mix(in srgb, var(--danger) 15%, transparent);
+  --info: #3a8fd4;
+
+  /* ── 圆角 ── */
+  --radius-sm: 4px;
+  --radius-md: 6px;   /* 任务 bar */
+  --radius-lg: 10px;  /* 面板/浮层 */
+
+  /* ── 阴影 ── */
+  --shadow-sm: 0 1px 2px rgba(16, 16, 24, 0.06), 0 1px 1px rgba(16, 16, 24, 0.04);
+  --shadow-lg: 0 8px 24px rgba(16, 16, 24, 0.12), 0 2px 6px rgba(16, 16, 24, 0.08);
+
+  /* ── 间距（4px 基准） ── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* ── 字号阶 ── */
+  --font-11: 11px;
+  --font-12: 12px;
+  --font-13: 13px;
+  --font-14: 14px;
+  --font-16: 16px;
+  --font-20: 20px;
+
+  /* ── 动效 ── */
+  --ease: cubic-bezier(0.25, 1, 0.5, 1);
+  --dur-drop: 120ms;    /* 拖拽落位归位 */
+  --dur-zoom: 150ms;    /* 缩放过渡 */
+  --dur-drawer: 200ms;  /* 抽屉滑入 */
+
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --bg-base: #101014;
+  --bg-panel: #17171c;
+  --bg-subtle: #1e1e24;
+  --bg-raised: #202027;
+
+  --border-subtle: #24242b;
+  --border-default: #303038;
+  --border-strong: #4a4a55;
+
+  --text-primary: #ededf0;
+  --text-secondary: #a7a7b3;
+  --text-tertiary: #74747f;
+  --text-disabled: #4a4a55;
+
+  --weekend-tint: rgba(235, 235, 255, 0.035); /* 深色下为淡亮底纹 */
+  --exemption-stripe: rgba(235, 235, 255, 0.06);
+  --row-hover: rgba(235, 235, 255, 0.05);
+
+  /* 目标色深色下提亮一档，保证与深底对比 */
+  --goal-1: #5b93ea;
+  --goal-2: #eb9440;
+  --goal-3: #2fbc8c;
+  --goal-4: #d377bb;
+  --goal-5: #e37257;
+
+  --accent: #6d8bef;
+  --success: #2cb87f;
+  --warning: #e5a63a;
+  --danger: #e05d52;
+  --info: #57a8e5;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 1px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.35);
+
+  color-scheme: dark;
+}
