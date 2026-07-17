@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { useStore } from './store/useStore';
 import { applyTheme, subscribeSystemTheme } from './lib/theme';
@@ -9,8 +9,10 @@ import { ShortcutHelp } from './components/ShortcutHelp';
 import { GanttToolbar } from './gantt/GanttToolbar';
 import GanttPage from './pages/GanttPage';
 import CheckInPage from './pages/CheckInPage';
-import ReviewPage from './pages/ReviewPage';
 import SettingsPage from './pages/SettingsPage';
+
+// 复盘页含 recharts，路由级代码分割避免拖慢甘特首屏
+const ReviewPage = lazy(() => import('./pages/ReviewPage'));
 
 const NAV = [
   { to: '/gantt', label: '甘特图' },
@@ -169,7 +171,14 @@ export default function App() {
             <Route path="/" element={<HomeRedirect />} />
             <Route path="/gantt" element={<GanttPage />} />
             <Route path="/checkin" element={<CheckInPage />} />
-            <Route path="/review" element={<ReviewPage />} />
+            <Route
+              path="/review"
+              element={
+                <Suspense fallback={<div className="p-6 text-tertiary">载入中…</div>}>
+                  <ReviewPage />
+                </Suspense>
+              }
+            />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

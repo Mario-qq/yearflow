@@ -11,6 +11,12 @@ export { weeklyHeat, type WeekHeat } from './heat';
 export { baselineDrift, type BaselineDrift } from './baseline';
 export { dayEntries, dayCompletionRate, type DayGoalEntry } from './dayPanel';
 export {
+  monthlyGoalStats,
+  dailyActivityScores,
+  minutesByGoalByMonth,
+  type MonthGoalStats,
+} from './review';
+export {
   timeProgressPct,
   deriveTaskGantt,
   deriveGoalGantt,

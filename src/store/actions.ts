@@ -10,6 +10,7 @@ import type {
   ExemptionPeriod,
   Goal,
   Milestone,
+  MonthlyReview,
   Task,
 } from '../types/domain';
 import { diffDays, eachDay, fmtDay, toDay, todayStr } from '../lib/date';
@@ -270,6 +271,29 @@ export function removeCheckIn(id: string): void {
   s.execute(`删除「${goalName}」${record.date} 的打卡记录`, [
     { table: 'checkIns', type: 'delete', before: record },
   ]);
+}
+
+// ── 月度复盘（Phase 4：笔记与星评自动保存，调用方防抖） ──────────────────
+
+/** 复盘 upsert：按 month 找现有记录原位更新，否则新建；一条命令 */
+export function saveReview(month: string, patch: { content?: string; rating?: number }): void {
+  const s = useStore.getState();
+  const existing = Object.values(s.reviews).find((r) => !r.deletedAt && r.month === month);
+  const label = `保存 ${month} 复盘`;
+  if (existing) {
+    const after: MonthlyReview = { ...existing, ...patch, updatedAt: nowIso() };
+    if (after.content === existing.content && after.rating === existing.rating) return;
+    s.execute(label, [{ table: 'reviews', type: 'put', before: existing, after }]);
+    return;
+  }
+  const review: MonthlyReview = {
+    id: nanoid(),
+    month,
+    content: patch.content ?? '',
+    rating: patch.rating,
+    updatedAt: nowIso(),
+  };
+  s.execute(label, [{ table: 'reviews', type: 'put', after: review }]);
 }
 
 // ── 复合操作（右键菜单/批量操作条） ──────────────────────────────────────
