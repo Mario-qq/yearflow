@@ -19,6 +19,7 @@ export const ZOOM_DAY_WIDTH: Record<GanttZoom, number> = {
 /** 行高 */
 export const ROW_H_GOAL = 40; // 目标分组行
 export const ROW_H_TASK = 48; // 任务行（bar 22 + 间距 4 + 点阵 10 + 上下留白 6×2）
+export const ROW_H_GHOST = 24; // 目标分组末尾「+ 添加任务」幽灵行（hover 时显示内容）
 
 /** 任务行内部纵向布局（Phase 2② 使用） */
 export const BAR_TOP = 6; // bar 距行顶偏移（= 上留白）
@@ -56,8 +57,20 @@ export const TOOLTIP_OFFSET = 12; // 距光标偏移
 export const HEADER_LAYER_H = 28;
 export const HEADER_H = HEADER_LAYER_H * 2;
 
-/** 左侧任务网格默认宽度 */
-export const LEFT_W = 320;
+/** 左侧任务网格：默认/最小/最大宽度、折叠后的窄轨宽、底部「+ 新建目标」行高 */
+export const GRID_DEFAULT_W = 320;
+export const GRID_MIN_W = 200;
+export const GRID_MAX_W = 600;
+export const GRID_RAIL_W = 24; // 纯图模式保留的展开轨
+export const GRID_FOOTER_H = 36;
+export const GRID_DIVIDER_HIT = 6; // 分隔条拖拽热区宽
+
+/** Ctrl+滚轮连续缩放：灵敏度（deltaY→倍率指数）与松开吸附档位的静默时长 */
+export const WHEEL_ZOOM_SENSITIVITY = 0.0015;
+export const WHEEL_ZOOM_SNAP_MS = 180;
+
+/** 定位闪烁时长（左栏点击定位 bar / 命令面板跳转共用） */
+export const FLASH_MS = 1100;
 
 /** 今日线 */
 export const TODAY_LINE_W = 2;

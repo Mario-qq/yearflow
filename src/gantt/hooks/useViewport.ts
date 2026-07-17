@@ -14,7 +14,6 @@ import { dateToX, xToDate, type TimeScale } from '../timeScale';
 import { tween } from '../lib/tween';
 import {
   HEADER_H,
-  LEFT_W,
   SCROLL_TWEEN_MAX_MS,
   VIEWPORT_H_CHUNK,
   VIEWPORT_V_CHUNK,
@@ -58,10 +57,16 @@ export interface ScrollToDateOptions {
   anchorRatio?: number;
 }
 
-export function useViewport(scrollerRef: RefObject<HTMLDivElement | null>, scale: TimeScale) {
+export function useViewport(
+  scrollerRef: RefObject<HTMLDivElement | null>,
+  scale: TimeScale,
+  leftW: number,
+) {
   const [chunks, setChunks] = useState<Chunks>({ hc0: -1, hc1: 4, vc0: -1, vc1: 4, vw: 0, vh: 0 });
   const scaleRef = useRef(scale);
   scaleRef.current = scale;
+  const leftWRef = useRef(leftW);
+  leftWRef.current = leftW;
   const cancelTweenRef = useRef<(() => void) | null>(null);
   const scrollDateTimer = useRef<number | undefined>(undefined);
 
@@ -71,7 +76,7 @@ export function useViewport(scrollerRef: RefObject<HTMLDivElement | null>, scale
     const vw = el.clientWidth;
     const vh = el.clientHeight;
     const tlX = el.scrollLeft;
-    const tlW = Math.max(0, vw - LEFT_W);
+    const tlW = Math.max(0, vw - leftWRef.current);
     const bodyY = el.scrollTop;
     const bodyH = Math.max(0, vh - HEADER_H);
     const next: Chunks = {
@@ -116,18 +121,18 @@ export function useViewport(scrollerRef: RefObject<HTMLDivElement | null>, scale
     };
   }, [scrollerRef, compute]);
 
-  // 缩放换档：chunk 是 px 语义，dayWidth 一变 px→日期映射即变；scroll 事件要下一帧才到
-  // （useZoomAnimation 的锚点校正也发生在 layout 阶段），这里同帧重算避免闪现错误刻度。
+  // 缩放换档/左栏宽变化：chunk 是 px 语义，dayWidth 或 leftW 一变映射即变；scroll 事件要
+  // 下一帧才到（useZoomAnimation 的锚点校正也发生在 layout 阶段），这里同帧重算避免闪现错误刻度。
   useLayoutEffect(() => {
     compute();
-  }, [scale.dayWidth, compute]);
+  }, [scale.dayWidth, leftW, compute]);
 
   const scrollToX = useCallback(
     (targetTimelineX: number, smooth: boolean) => {
       const el = scrollerRef.current;
       if (!el) return;
       const s = scaleRef.current;
-      const max = Math.max(0, LEFT_W + s.totalWidth - el.clientWidth);
+      const max = Math.max(0, leftWRef.current + s.totalWidth - el.clientWidth);
       const target = Math.max(0, Math.min(max, targetTimelineX));
       cancelTweenRef.current?.();
       if (!smooth) {
@@ -157,7 +162,7 @@ export function useViewport(scrollerRef: RefObject<HTMLDivElement | null>, scale
       const el = scrollerRef.current;
       if (!el) return;
       const s = scaleRef.current;
-      const tlViewW = Math.max(0, el.clientWidth - LEFT_W);
+      const tlViewW = Math.max(0, el.clientWidth - leftWRef.current);
       scrollToX(dateToX(s, date) - tlViewW * anchorRatio, smooth);
     },
     [scrollerRef, scrollToX],

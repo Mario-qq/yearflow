@@ -1,14 +1,15 @@
 /**
  * 行布局（纯函数，vitest 覆盖）——左侧网格与时间轴行对齐的唯一来源。
- * 两侧同时消费同一份 rows 数组；行虚拟化、y→行命中（Phase 3 跨泳道拖拽）都以此为准。
+ * 两侧同时消费同一份 rows 数组；行虚拟化、y→行命中（跨泳道拖拽）都以此为准。
+ * ghost 行 = 每个展开目标分组末尾的「+ 添加任务」矮行（空间常驻，内容 hover 才显示）。
  */
 import type { Goal, Task } from '../types/domain';
-import { ROW_H_GOAL, ROW_H_TASK } from './constants';
+import { ROW_H_GHOST, ROW_H_GOAL, ROW_H_TASK } from './constants';
 
 export interface GanttRow {
-  kind: 'goal' | 'task';
+  kind: 'goal' | 'task' | 'ghost';
   id: string;
-  goalId: string; // goal 行 = 自身 id
+  goalId: string; // goal 行 = 自身 id；ghost 行 = 所属目标 id
   top: number;
   height: number;
 }
@@ -57,8 +58,26 @@ export function buildRowLayout(
       taskRowsByGoal[goal.id].push(row);
       top += ROW_H_TASK;
     }
+    const ghost: GanttRow = { kind: 'ghost', id: `ghost-${goal.id}`, goalId: goal.id, top, height: ROW_H_GHOST };
+    rows.push(ghost);
+    rowById[ghost.id] = ghost;
+    top += ROW_H_GHOST;
   }
   return { rows, totalHeight: top, rowById, taskRowsByGoal };
+}
+
+/** body y 坐标 → 命中行（二分；越界返回 null） */
+export function rowAtY(layout: RowLayout, y: number): GanttRow | null {
+  const { rows } = layout;
+  if (y < 0 || rows.length === 0 || y >= layout.totalHeight) return null;
+  let lo = 0;
+  let hi = rows.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (rows[mid].top + rows[mid].height <= y) lo = mid + 1;
+    else hi = mid;
+  }
+  return rows[lo];
 }
 
 /** 可视 y 范围 → 可视行下标闭区间（虚拟化用） */

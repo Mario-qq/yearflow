@@ -93,6 +93,9 @@ const ganttViewSchema = z.object({
   collapsedGoalIds: z.array(z.string()),
   gridColumns: z.array(z.string()),
   gridWidth: z.number(),
+  // Phase 3 新增：老备份缺省时补默认值
+  gridCollapsed: z.boolean().default(false),
+  gridColWidths: z.record(z.string(), z.number()).default({}),
   showDependencies: z.boolean(),
   showBaseline: z.boolean(),
   filter: z.object({

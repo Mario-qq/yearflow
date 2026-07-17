@@ -13,6 +13,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     collapsedGoalIds: [],
     gridColumns: DEFAULT_GRID_COLUMNS,
     gridWidth: 320,
+    gridCollapsed: false,
+    gridColWidths: {},
     showDependencies: true,
     showBaseline: false,
     filter: {},

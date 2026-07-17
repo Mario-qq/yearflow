@@ -70,6 +70,7 @@ export const BarsLayer = memo(function BarsLayer({
   return (
     <div className="pointer-events-none absolute inset-0">
       {layout.rows.slice(rowStart, rowEnd + 1).map((r) => {
+        if (r.kind === 'ghost') return null;
         if (r.kind === 'goal') {
           const goal = goals[r.id];
           const gg = derive.get(r.id);

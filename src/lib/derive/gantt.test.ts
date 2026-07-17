@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CheckIn, ExemptionPeriod, Task } from '../../types/domain';
-import { deriveGoalGantt, deriveTaskGantt, statusByDateFor, timeProgressPct } from './index';
+import { deriveGoalGantt, deriveTaskGantt, goalMonthlyRate, statusByDateFor, timeProgressPct } from './index';
 
 /* 2026-01 日历参考：01-01 周四，01-03 周六，01-04 周日，01-05 周一，01-10 周六 */
 
@@ -196,5 +196,33 @@ describe('deriveGoalGantt 单目标派生', () => {
       weekStartsOn: 1,
     });
     expect([...g.perTask.keys()]).toEqual(['t1']);
+  });
+});
+
+describe('goalMonthlyRate 目标月完成率', () => {
+  it('done=1、partial=0.5 计权，分母为该月截至今天的应打卡日之和', () => {
+    // t1 每日 1/1-1/4：done 1 天 + partial 1 天 → (1+0.5)/4 截至 today=1/4
+    const g = deriveGoalGantt({
+      goalId: 'g1',
+      tasks: [task({ id: 't1', endDate: '2026-01-04' })],
+      checkIns: [checkIn('2026-01-01', 'done'), checkIn('2026-01-02', 'partial')],
+      exemptions: [],
+      today: '2026-01-04',
+      weekStartsOn: 1,
+    });
+    expect(goalMonthlyRate(g, '2026-01', '2026-01-04')).toBe(38); // 1.5/4 = 37.5 → 38
+  });
+
+  it('未来日与非本月日不计入；无应打卡日返回 null', () => {
+    const g = deriveGoalGantt({
+      goalId: 'g1',
+      tasks: [task({ id: 't1', startDate: '2026-01-01', endDate: '2026-02-10' })],
+      checkIns: [checkIn('2026-01-01', 'done')],
+      exemptions: [],
+      today: '2026-01-02',
+      weekStartsOn: 1,
+    });
+    expect(goalMonthlyRate(g, '2026-01', '2026-01-02')).toBe(50); // 分母只有 1/1、1/2
+    expect(goalMonthlyRate(g, '2026-02', '2026-01-02')).toBeNull(); // 2 月还没到
   });
 });

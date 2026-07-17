@@ -8,7 +8,8 @@
 import { memo } from 'react';
 import type { GanttZoom } from '../types/domain';
 import type { HeaderCell, ShadeCol, Ticks } from './timeScale';
-import { HEADER_H, HEADER_LAYER_H, LEFT_W, TODAY_BADGE_D } from './constants';
+import { HeaderDayHighlight } from './HoverLayers';
+import { HEADER_H, HEADER_LAYER_H, TODAY_BADGE_D } from './constants';
 
 interface Props {
   width: number;
@@ -16,6 +17,10 @@ interface Props {
   ticks: Ticks;
   exemptionCols: (ShadeCol & { reason?: string })[];
   todayX: number | null;
+  /** 左栏当前宽（sticky 月份标签钉扎位置） */
+  leftW: number;
+  /** 十字定位的列高亮需要日宽 */
+  dayWidth: number;
 }
 
 /** 单元格几何取整：相邻单元格边缘共享同一像素，避免缝隙 */
@@ -69,6 +74,8 @@ export const TimelineHeader = memo(function TimelineHeader({
   ticks,
   exemptionCols,
   todayX,
+  leftW,
+  dayWidth,
 }: Props) {
   const isDayLevel = zoom === 'month' || zoom === 'week';
   return (
@@ -82,6 +89,9 @@ export const TimelineHeader = memo(function TimelineHeader({
         borderBottom: '1px solid var(--border-default)',
       }}
     >
+      {/* 十字定位：hover 日列在表头的高亮（先渲染，垫在单元格文字之下） */}
+      <HeaderDayHighlight dayWidth={dayWidth} />
+
       {/* 上层 */}
       {ticks.upperCells.map((c) => {
         const { left, width: w } = cellRect(c);
@@ -104,7 +114,7 @@ export const TimelineHeader = memo(function TimelineHeader({
               className="tnum inline-block whitespace-nowrap"
               style={{
                 position: 'sticky',
-                left: LEFT_W + 8,
+                left: leftW + 8,
                 marginLeft: 8,
                 fontSize: 'var(--font-12)',
                 fontWeight: 500,

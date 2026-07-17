@@ -7,6 +7,7 @@ import { memo } from 'react';
 import type { Task } from '../types/domain';
 import type { TaskGantt } from '../lib/derive';
 import { goalColor, goalColorAlpha } from '../lib/colors';
+import { useGanttUi } from './uiStore';
 import { barLabelWidth } from './lib/textWidth';
 import {
   BAR_H,
@@ -30,6 +31,9 @@ interface Props {
 }
 
 export const TaskBar = memo(function TaskBar({ task, rowTop, x, width, color, tg, onHover }: Props) {
+  // 左右联动：hover 左侧行或本行任意处 → bar 加目标色描边；定位跳转 → 闪烁动画
+  const linked = useGanttUi((s) => s.hoverRowId === task.id);
+  const flashing = useGanttUi((s) => s.flashTaskId === task.id);
   const solid = goalColor(color);
   const fill =
     task.status === 'done' ? `color-mix(in srgb, ${solid} 55%, var(--bg-panel))` : solid;
@@ -43,7 +47,7 @@ export const TaskBar = memo(function TaskBar({ task, rowTop, x, width, color, tg
     <>
       <div
         data-task-bar={task.id}
-        className="absolute overflow-hidden"
+        className={`absolute overflow-hidden${flashing ? ' bar-flash' : ''}`}
         style={{
           top: rowTop + BAR_TOP,
           left: x,
@@ -51,7 +55,9 @@ export const TaskBar = memo(function TaskBar({ task, rowTop, x, width, color, tg
           height: BAR_H,
           borderRadius: 'var(--radius-md)',
           background: goalColorAlpha(color, BAR_REMAINDER_ALPHA),
-          boxShadow: 'inset 0 0 0 1px var(--bar-inner-stroke)',
+          boxShadow: linked
+            ? `inset 0 0 0 1px var(--bar-inner-stroke), 0 0 0 2px ${solid}`
+            : 'inset 0 0 0 1px var(--bar-inner-stroke)',
           pointerEvents: 'auto',
         }}
         onPointerEnter={(e) => onHover(task.id, { clientX: e.clientX, clientY: e.clientY })}

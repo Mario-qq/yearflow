@@ -80,6 +80,25 @@ export function deriveTaskGantt(
   };
 }
 
+/**
+ * 目标某月完成率（0-100）：分子 done=1 / partial=0.5，
+ * 分母 = 各任务该月截至今天的应打卡日之和；无应打卡日返回 null（环形不渲染）。
+ */
+export function goalMonthlyRate(gg: GoalGantt, month: string, today: string): number | null {
+  let total = 0;
+  let score = 0;
+  for (const tg of gg.perTask.values()) {
+    for (const d of tg.scheduledDays) {
+      if (d > today || !d.startsWith(month)) continue;
+      total += 1;
+      const s = tg.statusByDate.get(d);
+      if (s === 'done') score += 1;
+      else if (s === 'partial') score += 0.5;
+    }
+  }
+  return total === 0 ? null : Math.round((score / total) * 100);
+}
+
 export function deriveGoalGantt(args: {
   goalId: string;
   tasks: Task[];

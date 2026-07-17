@@ -27,8 +27,12 @@ class SettingsRepo {
 
   async get(): Promise<AppSettings> {
     const row = await db.settings.get(SettingsRepo.KEY);
-    // 与默认值合并，老数据缺新字段时自动补齐
-    return { ...DEFAULT_SETTINGS, ...row?.value };
+    // 与默认值合并（ganttView 深合并一层），老数据缺新字段时自动补齐
+    return {
+      ...DEFAULT_SETTINGS,
+      ...row?.value,
+      ganttView: { ...DEFAULT_SETTINGS.ganttView, ...row?.value?.ganttView },
+    };
   }
 
   async put(value: AppSettings): Promise<void> {

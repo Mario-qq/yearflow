@@ -9,7 +9,7 @@ import type { TimeScale } from './timeScale';
 import { diffDays } from '../lib/date';
 import { goalColor } from '../lib/colors';
 import { prefersReducedMotion } from './lib/tween';
-import { LEFT_W, MINIMAP_H, MINIMAP_LINE_H, MINIMAP_PAD_Y } from './constants';
+import { MINIMAP_H, MINIMAP_LINE_H, MINIMAP_PAD_Y } from './constants';
 
 interface Props {
   scrollerRef: React.RefObject<HTMLDivElement | null>;
@@ -18,9 +18,11 @@ interface Props {
   tasks: Record<string, Task>;
   /** 今日在时间轴内的 x（timeline px），年外为 null */
   todayX: number | null;
+  /** 左栏当前宽（视口取景框换算） */
+  leftW: number;
 }
 
-export const MiniMap = memo(function MiniMap({ scrollerRef, scale, goals, tasks, todayX }: Props) {
+export const MiniMap = memo(function MiniMap({ scrollerRef, scale, goals, tasks, todayX, leftW }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const [mmW, setMmW] = useState(0);
@@ -62,7 +64,7 @@ export const MiniMap = memo(function MiniMap({ scrollerRef, scale, goals, tasks,
     let raf = 0;
     const sync = () => {
       raf = 0;
-      const viewW = Math.max(0, scroller.clientWidth - LEFT_W);
+      const viewW = Math.max(0, scroller.clientWidth - leftW);
       const left = (scroller.scrollLeft / scale.totalWidth) * mmW;
       const width = Math.min(mmW, (viewW / scale.totalWidth) * mmW);
       frame.style.left = `${Math.min(left, mmW - width)}px`;
@@ -77,7 +79,7 @@ export const MiniMap = memo(function MiniMap({ scrollerRef, scale, goals, tasks,
       scroller.removeEventListener('scroll', onScroll);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [scrollerRef, scale.totalWidth, mmW]);
+  }, [scrollerRef, scale.totalWidth, mmW, leftW]);
 
   // 点击跳转 + 拖动：按住取景框保持抓取偏移，其余位置以指针为中心
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -103,7 +105,7 @@ export const MiniMap = memo(function MiniMap({ scrollerRef, scale, goals, tasks,
     const apply = (clientX: number, smooth: boolean) => {
       const px = clientX - rect.left - grabOffset;
       const target = (px / mmW) * scale.totalWidth;
-      const max = scale.totalWidth + LEFT_W - scroller.clientWidth;
+      const max = scale.totalWidth + leftW - scroller.clientWidth;
       const left = Math.max(0, Math.min(max, target));
       if (smooth && !prefersReducedMotion()) scroller.scrollTo({ left, behavior: 'smooth' });
       else scroller.scrollLeft = left;

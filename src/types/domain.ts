@@ -99,6 +99,8 @@ export interface GanttViewState {
   collapsedGoalIds: string[];
   gridColumns: string[]; // 左侧网格显示哪些列
   gridWidth: number; // 左侧面板宽度 px
+  gridCollapsed: boolean; // 整体折叠左栏 = 纯图模式
+  gridColWidths: Record<string, number>; // 列宽覆盖（key = 列 key）
   showDependencies: boolean;
   showBaseline: boolean;
   filter: { status?: TaskStatus[]; goalIds?: string[] };

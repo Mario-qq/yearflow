@@ -13,6 +13,7 @@ export {
   timeProgressPct,
   deriveTaskGantt,
   deriveGoalGantt,
+  goalMonthlyRate,
   type TaskGantt,
   type GoalGantt,
 } from './gantt';

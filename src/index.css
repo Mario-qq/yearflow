@@ -45,6 +45,22 @@ button {
   color: inherit;
 }
 
+/* 定位闪烁（左栏点击定位 bar / 命令面板跳转）：outline 脉冲两次，不与 box-shadow 描边打架 */
+@keyframes bar-flash {
+  0%,
+  100% {
+    outline: 3px solid transparent;
+    outline-offset: 3px;
+  }
+  50% {
+    outline: 3px solid var(--accent);
+    outline-offset: 1px;
+  }
+}
+.bar-flash {
+  animation: bar-flash 0.45s var(--ease) 2;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
