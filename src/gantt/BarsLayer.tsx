@@ -11,11 +11,12 @@ import { dateToX, type TimeScale } from './timeScale';
 import { diffDays, fmtDay, toDay } from '../lib/date';
 import { stableGroupBy } from '../lib/stableSlices';
 import type { BarDragMode } from './hooks/useBarDrag';
+import type { DepHandleSide } from './hooks/useDepDrag';
 import { TaskBar } from './TaskBar';
 import { CheckinDots } from './CheckinDots';
 import { HeatStrip } from './HeatStrip';
 import { GoalSummary } from './GoalSummary';
-import { BAR_H, BAR_TOP, HEAT_MODE_THRESHOLD } from './constants';
+import { BAR_H, BAR_TOP, BASELINE_H, HEAT_MODE_THRESHOLD } from './constants';
 
 interface Props {
   layout: RowLayout;
@@ -31,8 +32,11 @@ interface Props {
   visEnd: number;
   today: string;
   collapsedGoalIds: string[];
+  /** 显示基线对比（bar 下 4px 灰色原计划条） */
+  showBaseline: boolean;
   onBarHover: (taskId: string | null, e?: { clientX: number; clientY: number }) => void;
   onBarDragStart: (e: React.PointerEvent, taskId: string, mode: BarDragMode) => void;
+  onDepDragStart: (e: React.PointerEvent, taskId: string, side: DepHandleSide) => void;
 }
 
 export const BarsLayer = memo(function BarsLayer({
@@ -48,8 +52,10 @@ export const BarsLayer = memo(function BarsLayer({
   visEnd,
   today,
   collapsedGoalIds,
+  showBaseline,
   onBarHover,
   onBarDragStart,
+  onDepDragStart,
 }: Props) {
   const prevMsRef = useRef<Map<string, Milestone[]>>(new Map());
   const milestonesByGoal = useMemo(() => {
@@ -107,7 +113,23 @@ export const BarsLayer = memo(function BarsLayer({
               tg={tg}
               onHover={onBarHover}
               onDragStart={onBarDragStart}
+              onDepDragStart={onDepDragStart}
             />
+            {showBaseline && task.baseline && (
+              <div
+                className="absolute"
+                title={`原计划 ${task.baseline.startDate} ~ ${task.baseline.endDate}`}
+                style={{
+                  top: r.top + BAR_TOP + BAR_H,
+                  left: dateToX(scale, task.baseline.startDate),
+                  width: (diffDays(task.baseline.endDate, task.baseline.startDate) + 1) * scale.dayWidth,
+                  height: BASELINE_H,
+                  borderRadius: BASELINE_H / 2,
+                  background: 'var(--border-strong)',
+                  opacity: 0.8,
+                }}
+              />
+            )}
             {heatMode ? (
               <HeatStrip
                 top={r.top + BAR_TOP + BAR_H}

@@ -189,6 +189,50 @@ export function splitTaskAt(id: string, date: string): string | null {
   return rest.id;
 }
 
+// ── 依赖与基线 ───────────────────────────────────────────────────────────
+
+/** 建立 FS 依赖：succ.dependsOn += pred（去重、防自依赖） */
+export function addDependency(predId: string, succId: string): void {
+  const s = useStore.getState();
+  const pred = s.tasks[predId];
+  const succ = s.tasks[succId];
+  if (!pred || !succ || predId === succId) return;
+  const deps = succ.dependsOn ?? [];
+  if (deps.includes(predId)) return;
+  patchTask(succId, { dependsOn: [...deps, predId] }, `添加依赖「${pred.name}」→「${succ.name}」`);
+}
+
+/** 删除依赖连线 */
+export function removeDependency(succId: string, predId: string): void {
+  const s = useStore.getState();
+  const succ = s.tasks[succId];
+  if (!succ?.dependsOn?.includes(predId)) return;
+  const predName = s.tasks[predId]?.name ?? '';
+  patchTask(
+    succId,
+    { dependsOn: succ.dependsOn.filter((id) => id !== predId) },
+    `删除依赖「${predName}」→「${succ.name}」`,
+  );
+}
+
+/** 顶栏「保存基线」：把当前全部活动任务的起止快照进 baseline（一条命令） */
+export function saveBaselineAll(): number {
+  const s = useStore.getState();
+  const stamp = nowIso();
+  const changes: Change[] = [];
+  for (const t of Object.values(s.tasks)) {
+    if (t.deletedAt) continue;
+    changes.push({
+      table: 'tasks',
+      type: 'put',
+      before: t,
+      after: { ...t, baseline: { startDate: t.startDate, endDate: t.endDate }, updatedAt: stamp },
+    });
+  }
+  s.execute(`保存基线（${changes.length} 个任务）`, changes);
+  return changes.length;
+}
+
 // ── 删除（软删除，级联进同一条命令） ─────────────────────────────────────
 
 /** 删除任务：级联软删指向该任务的打卡记录 */

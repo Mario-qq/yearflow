@@ -28,9 +28,12 @@ import { useSpacePan, startGrabPan } from './hooks/useSpacePan';
 import { useBarDrag } from './hooks/useBarDrag';
 import { useCreateDrag, idxToDate } from './hooks/useCreateDrag';
 import { useMarqueeSelect } from './hooks/useMarqueeSelect';
+import { useDepDrag } from './hooks/useDepDrag';
 import { CreateOverlay } from './CreateDrag';
 import { GanttContextMenu } from './ContextMenu';
 import { BulkBar } from './BulkBar';
+import { DependencyLayer } from './DependencyLayer';
+import { TaskDrawer } from './TaskDrawer';
 import { goalColorAlpha } from '../lib/colors';
 import { useGanttUi } from './uiStore';
 import { onGantt } from './bus';
@@ -58,6 +61,8 @@ export default function GanttView() {
   const weekStartsOn = useStore((s) => s.settings.weekStartsOn);
   const gridWidth = useStore((s) => s.settings.ganttView.gridWidth);
   const gridCollapsed = useStore((s) => s.settings.ganttView.gridCollapsed);
+  const showDependencies = useStore((s) => s.settings.ganttView.showDependencies);
+  const showBaseline = useStore((s) => s.settings.ganttView.showBaseline);
   const leftW = gridCollapsed ? GRID_RAIL_W : gridWidth;
 
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -83,6 +88,7 @@ export default function GanttView() {
   const { onBarDragStart, ghost } = useBarDrag({ scrollerRef, bodyRef, scaleRef, layoutRef, leftW });
   const { onBodyPointerDown: onCreateDown, preview, pending, clearPending } = useCreateDrag({ bodyRef, scaleRef, layoutRef });
   const { onMarqueeDown, marqueeRect } = useMarqueeSelect({ bodyRef, scaleRef, layoutRef });
+  const { onDepDragStart, depLine } = useDepDrag({ bodyRef, scaleRef, layoutRef });
 
   // body pointerdown 分流：任务/幽灵行空白 = 框选新建；目标行/行外空白 = 框选多选
   const onBodyPointerDown = useCallback(
@@ -312,9 +318,42 @@ export default function GanttView() {
                   visEnd={visEnd}
                   today={today}
                   collapsedGoalIds={collapsedGoalIds}
+                  showBaseline={showBaseline}
                   onBarHover={onBarHover}
                   onBarDragStart={onBarDragStart}
+                  onDepDragStart={onDepDragStart}
                 />
+                {/* 依赖连线（全局开关，SVG 命中区可点删）+ 拖出中的临时虚线 */}
+                {showDependencies && (
+                  <DependencyLayer
+                    layout={layout}
+                    scale={scale}
+                    tasks={tasks}
+                    goals={goals}
+                    width={scale.totalWidth}
+                    height={layout.totalHeight}
+                  />
+                )}
+                {depLine && (
+                  <svg
+                    className="pointer-events-none absolute inset-0"
+                    width={scale.totalWidth}
+                    height={layout.totalHeight}
+                    aria-hidden
+                    style={{ overflow: 'visible' }}
+                  >
+                    <line
+                      x1={depLine.x1}
+                      y1={depLine.y1}
+                      x2={depLine.x2}
+                      y2={depLine.y2}
+                      stroke="var(--accent)"
+                      strokeWidth={1.5}
+                      strokeDasharray={depLine.snapped ? undefined : '4 4'}
+                    />
+                    <circle cx={depLine.x2} cy={depLine.y2} r={3.5} fill="var(--accent)" />
+                  </svg>
+                )}
                 {/* Overlay：今日线 + 拖拽原位虚影（依赖连线也落此层） */}
                 <div className="pointer-events-none absolute inset-0">
                   {todayX != null && <TodayLine x={todayX} />}
@@ -377,6 +416,7 @@ export default function GanttView() {
       )}
       <GanttContextMenu />
       <BulkBar />
+      <TaskDrawer />
     </div>
   );
 }

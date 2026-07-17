@@ -42,6 +42,16 @@ export const PAUSED_STRIPE_W = 4; // paused 斜纹条纹宽
 export const DOT_FUTURE_ALPHA = 8; // 未来应打卡占位点
 export const HEAT_ALPHA_STEPS = [15, 36, 57, 78, 100]; // 周完成率五档
 
+/** 依赖连线（SPEC 4.4）：线宽 / 折线圆角 / 端点箭头边长 / 连接柄直径与外扩距离 */
+export const DEP_STROKE_W = 1.5;
+export const DEP_CORNER_R = 6;
+export const DEP_ARROW = 5;
+export const DEP_HANDLE_D = 9;
+export const DEP_HANDLE_GAP = 3;
+
+/** 基线对比：bar 下方 4px 灰色原计划条（填在 bar 与点阵的间隙） */
+export const BASELINE_H = 4;
+
 /** 目标行：汇总条与里程碑 */
 export const SUMMARY_BAR_H = 6;
 export const SUMMARY_HEAT_GAP = 2; // 折叠时聚合热度条与汇总条的间距

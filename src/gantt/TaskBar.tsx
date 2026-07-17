@@ -10,6 +10,7 @@ import type { TaskGantt } from '../lib/derive';
 import { goalColor, goalColorAlpha } from '../lib/colors';
 import { useGanttUi } from './uiStore';
 import type { BarDragMode } from './hooks/useBarDrag';
+import type { DepHandleSide } from './hooks/useDepDrag';
 import { barLabelWidth } from './lib/textWidth';
 import {
   BAR_H,
@@ -17,6 +18,8 @@ import {
   BAR_REMAINDER_ALPHA,
   BAR_TOP,
   BEHIND_BADGE,
+  DEP_HANDLE_D,
+  DEP_HANDLE_GAP,
   PAUSED_STRIPE_W,
   RESIZE_HANDLE_W,
 } from './constants';
@@ -32,9 +35,20 @@ interface Props {
   tg: TaskGantt;
   onHover: (taskId: string | null, e?: { clientX: number; clientY: number }) => void;
   onDragStart: (e: React.PointerEvent, taskId: string, mode: BarDragMode) => void;
+  onDepDragStart: (e: React.PointerEvent, taskId: string, side: DepHandleSide) => void;
 }
 
-export const TaskBar = memo(function TaskBar({ task, rowTop, x, width, color, tg, onHover, onDragStart }: Props) {
+export const TaskBar = memo(function TaskBar({
+  task,
+  rowTop,
+  x,
+  width,
+  color,
+  tg,
+  onHover,
+  onDragStart,
+  onDepDragStart,
+}: Props) {
   // 左右联动：hover 左侧行或本行任意处 → bar 加目标色描边；定位跳转 → 闪烁动画
   const linked = useGanttUi((s) => s.hoverRowId === task.id);
   const flashing = useGanttUi((s) => s.flashTaskId === task.id);
@@ -150,7 +164,7 @@ export const TaskBar = memo(function TaskBar({ task, rowTop, x, width, color, tg
           className="absolute whitespace-nowrap"
           style={{
             top: rowTop + BAR_TOP,
-            left: x + width + BAR_LABEL_PAD,
+            left: x + width + BAR_LABEL_PAD + (linked ? DEP_HANDLE_D + DEP_HANDLE_GAP : 0),
             lineHeight: `${BAR_H}px`,
             fontSize: 'var(--font-12)',
             color: 'var(--text-primary)',
@@ -158,6 +172,38 @@ export const TaskBar = memo(function TaskBar({ task, rowTop, x, width, color, tg
         >
           {label}
         </span>
+      )}
+      {/* 依赖连接柄：hover 本行时出现在 bar 两端外侧，拖到另一根 bar 建立 FS 依赖 */}
+      {linked && !dragging && (
+        <>
+          {(['left', 'right'] as const).map((side) => (
+            <div
+              key={side}
+              className="absolute"
+              style={{
+                top: rowTop + BAR_TOP + (BAR_H - DEP_HANDLE_D) / 2,
+                left:
+                  side === 'left'
+                    ? x - DEP_HANDLE_D - DEP_HANDLE_GAP
+                    : x + width + DEP_HANDLE_GAP,
+                width: DEP_HANDLE_D,
+                height: DEP_HANDLE_D,
+                borderRadius: '50%',
+                background: 'var(--bg-raised)',
+                border: `1.5px solid ${solid}`,
+                cursor: 'crosshair',
+                pointerEvents: 'auto',
+                touchAction: 'none',
+                zIndex: 5,
+              }}
+              title={side === 'right' ? '拖到另一任务建立依赖（本任务为前置）' : '拖到另一任务建立依赖（本任务为后继）'}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                onDepDragStart(e, task.id, side);
+              }}
+            />
+          ))}
+        </>
       )}
     </>
   );

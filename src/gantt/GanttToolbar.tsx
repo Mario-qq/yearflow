@@ -1,9 +1,12 @@
 /**
  * 甘特图工具组（渲染在全局 48px 顶栏中间，仅 /gantt 路由）：
- * 年份 ◀▶ / 四档缩放分段控件 / 「今天」。直接读写 Zustand，通过 bus 向 GanttView 发命令。
+ * 年份 ◀▶ / 四档缩放分段控件 / 「今天」/ 依赖连线与基线开关 / 保存基线。
+ * 直接读写 Zustand，通过 bus 向 GanttView 发命令。
  */
 import { useStore } from '../store/useStore';
 import type { GanttZoom } from '../types/domain';
+import { saveBaselineAll } from '../store/actions';
+import { showToast } from '../lib/toast';
 import { emitGantt } from './bus';
 
 const ZOOM_OPTIONS: { key: GanttZoom; label: string }[] = [
@@ -20,9 +23,35 @@ const ghostBtn: React.CSSProperties = {
   padding: '2px 6px',
 };
 
+/** 视图开关小按钮（依赖连线 / 基线） */
+function ToggleBtn({ on, label, title, onClick }: { on: boolean; label: string; title: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="cursor-pointer"
+      role="switch"
+      aria-checked={on}
+      title={title}
+      style={{
+        fontSize: 'var(--font-12)',
+        padding: '2px 8px',
+        borderRadius: 'var(--radius-sm)',
+        border: `1px solid ${on ? 'var(--accent)' : 'var(--border-default)'}`,
+        color: on ? 'var(--accent)' : 'var(--text-secondary)',
+        background: on ? 'var(--accent-soft)' : 'var(--bg-panel)',
+      }}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
+}
+
 export function GanttToolbar() {
   const year = useStore((s) => s.settings.yearInView);
   const zoom = useStore((s) => s.settings.ganttView.zoom);
+  const showDependencies = useStore((s) => s.settings.ganttView.showDependencies);
+  const showBaseline = useStore((s) => s.settings.ganttView.showBaseline);
   const updateSettings = useStore((s) => s.updateSettings);
   const updateGanttView = useStore((s) => s.updateGanttView);
 
@@ -98,6 +127,35 @@ export function GanttToolbar() {
       >
         今天
       </button>
+
+      <div className="flex items-center gap-1">
+        <ToggleBtn
+          on={showDependencies}
+          label="连线"
+          title="显示/隐藏依赖连线"
+          onClick={() => updateGanttView({ showDependencies: !showDependencies })}
+        />
+        <ToggleBtn
+          on={showBaseline}
+          label="基线"
+          title="显示/隐藏基线对比（快捷键 B）"
+          onClick={() => updateGanttView({ showBaseline: !showBaseline })}
+        />
+        <button
+          type="button"
+          className="cursor-pointer hover:bg-subtle"
+          style={ghostBtn}
+          title="把当前所有任务起止保存为基线"
+          onClick={() => {
+            if (!confirm('把当前所有任务的起止日期保存为基线？将覆盖已有基线。')) return;
+            const n = saveBaselineAll();
+            updateGanttView({ showBaseline: true });
+            showToast(`已保存基线（${n} 个任务）`);
+          }}
+        >
+          保存基线
+        </button>
+      </div>
     </div>
   );
 }
