@@ -38,6 +38,7 @@ import { useCreateDrag, idxToDate } from './hooks/useCreateDrag';
 import { useMarqueeSelect } from './hooks/useMarqueeSelect';
 import { useDepDrag } from './hooks/useDepDrag';
 import { CreateOverlay } from './CreateDrag';
+import { CheckinPopover } from './CheckinPopover';
 import { GanttContextMenu } from './ContextMenu';
 import { BulkBar } from './BulkBar';
 import { DependencyLayer } from './DependencyLayer';
@@ -140,7 +141,7 @@ export default function GanttView() {
     (e: React.PointerEvent) => {
       if (e.button !== 0) return;
       const target = e.target as HTMLElement;
-      if (target.closest('[data-task-bar],[data-milestone],[data-create-bubble]')) return;
+      if (target.closest('[data-task-bar],[data-milestone],[data-create-bubble],[data-checkin-dot]')) return;
       const body = bodyRef.current;
       if (!body) return;
       const row = rowAtY(layoutRef.current, e.clientY - body.getBoundingClientRect().top);
@@ -444,6 +445,20 @@ export default function GanttView() {
     useGanttUi.getState().setHoverCell(null, null);
   }, []);
 
+  // 点击打卡点 → 就地 popover（SPEC 4.4）
+  const onDotClick = useCallback((taskId: string, date: string, e: React.MouseEvent) => {
+    const task = useStore.getState().tasks[taskId];
+    if (!task) return;
+    e.stopPropagation();
+    useGanttUi.getState().setCheckinPopover({
+      goalId: task.goalId,
+      taskId,
+      date,
+      x: e.clientX,
+      y: e.clientY,
+    });
+  }, []);
+
   const hoverTask = anchor ? tasks[anchor.taskId] : undefined;
   const hoverGg = hoverTask ? derive.get(hoverTask.goalId) : undefined;
   const hoverTg = hoverTask ? hoverGg?.perTask.get(hoverTask.id) : undefined;
@@ -542,6 +557,7 @@ export default function GanttView() {
                   onBarHover={onBarHover}
                   onBarDragStart={onBarDragStart}
                   onDepDragStart={onDepDragStart}
+                  onDotClick={onDotClick}
                 />
                 {/* 依赖连线（全局开关，SVG 命中区可点删）+ 拖出中的临时虚线 */}
                 {showDependencies && (
@@ -637,6 +653,7 @@ export default function GanttView() {
       <GanttContextMenu />
       <BulkBar />
       <TaskDrawer />
+      <CheckinPopover />
     </div>
   );
 }

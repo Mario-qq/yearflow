@@ -40,6 +40,7 @@ interface Props {
   onBarHover: (taskId: string | null, e?: { clientX: number; clientY: number }) => void;
   onBarDragStart: (e: React.PointerEvent, taskId: string, mode: BarDragMode) => void;
   onDepDragStart: (e: React.PointerEvent, taskId: string, side: DepHandleSide) => void;
+  onDotClick: (taskId: string, date: string, e: React.MouseEvent) => void;
 }
 
 export const BarsLayer = memo(function BarsLayer({
@@ -61,6 +62,7 @@ export const BarsLayer = memo(function BarsLayer({
   onBarHover,
   onBarDragStart,
   onDepDragStart,
+  onDotClick,
 }: Props) {
   const prevMsRef = useRef<Map<string, Milestone[]>>(new Map());
   const milestonesByGoal = useMemo(() => {
@@ -163,6 +165,8 @@ export const BarsLayer = memo(function BarsLayer({
                 today={today}
                 visStartDate={visStartDate}
                 visEndDate={visEndDate}
+                taskId={r.id}
+                onDotClick={onDotClick}
               />
             )}
           </div>

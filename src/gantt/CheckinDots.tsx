@@ -21,6 +21,9 @@ interface Props {
   /** 可视日期范围（YYYY-MM-DD，闭区间），列虚拟化用 */
   visStartDate: string;
   visEndDate: string;
+  taskId: string;
+  /** 点击打卡点（≤今天）→ 就地 popover（SPEC 4.4）；未传则不可交互 */
+  onDotClick?: (taskId: string, date: string, e: React.MouseEvent) => void;
 }
 
 export const CheckinDots = memo(function CheckinDots({
@@ -33,11 +36,15 @@ export const CheckinDots = memo(function CheckinDots({
   today,
   visStartDate,
   visEndDate,
+  taskId,
+  onDotClick,
 }: Props) {
   const solid = goalColor(color);
   const r = DOT_D / 2;
   const cy = DOT_ROW_H / 2;
   const ringR = (DOT_ROW_H - 1) / 2;
+  // 命中区半径：随日宽放大但不超过半列（避免相邻列重叠）
+  const hitR = Math.max(r + 2, Math.min(scale.dayWidth / 2, 9));
 
   const dots = [];
   for (const d of tg.scheduledDays) {
@@ -72,6 +79,21 @@ export const CheckinDots = memo(function CheckinDots({
         <circle key={`${d}-ring`} cx={cx} cy={cy} r={ringR} fill="none" stroke="var(--accent)" strokeWidth={1} />,
       );
     }
+    // 透明命中区（≤今天可点开 popover 打卡/补卡）
+    if (onDotClick && d <= today) {
+      dots.push(
+        <circle
+          key={`${d}-hit`}
+          data-checkin-dot={d}
+          cx={cx}
+          cy={cy}
+          r={hitR}
+          fill="transparent"
+          style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+          onClick={(e) => onDotClick(taskId, d, e)}
+        />,
+      );
+    }
   }
   if (dots.length === 0) return null;
 
@@ -79,7 +101,7 @@ export const CheckinDots = memo(function CheckinDots({
     <svg
       className="absolute"
       aria-hidden
-      style={{ top: rowTop + BAR_TOP + BAR_H + BAR_DOT_GAP, left: x }}
+      style={{ top: rowTop + BAR_TOP + BAR_H + BAR_DOT_GAP, left: x, overflow: 'visible' }}
       width={Math.max(1, width)}
       height={DOT_ROW_H}
     >
