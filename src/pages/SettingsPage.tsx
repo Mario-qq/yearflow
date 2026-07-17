@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
+import { ExemptionManager } from '../checkin/ExemptionManager';
 import { buildBackupJSON, parseBackupJSON } from '../lib/backup';
 import { buildSeedBundle } from '../seed/seedData';
 import { todayStr } from '../lib/date';
@@ -181,6 +182,10 @@ export default function SettingsPage() {
             {message.text}
           </p>
         )}
+      </Section>
+
+      <Section title="免打卡区间">
+        <ExemptionManager />
       </Section>
 
       <Section title="云同步">

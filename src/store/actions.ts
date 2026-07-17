@@ -12,7 +12,8 @@ import type {
   Milestone,
   Task,
 } from '../types/domain';
-import { diffDays, fmtDay, toDay } from '../lib/date';
+import { diffDays, eachDay, fmtDay, toDay, todayStr } from '../lib/date';
+import { dayEntries } from '../lib/derive';
 import { useStore } from './useStore';
 import type { Change } from './types';
 
@@ -111,11 +112,33 @@ export function createMilestone(goalId: string, date: string, name = '新里程�
   return ms.id;
 }
 
-export function createExemption(startDate: string, endDate: string, reason?: string): string {
+export function createExemption(
+  startDate: string,
+  endDate: string,
+  reason?: string,
+  goalIds?: string[],
+): string {
   const s = useStore.getState();
-  const ex: ExemptionPeriod = { id: nanoid(), startDate, endDate, reason, updatedAt: nowIso() };
+  const ex: ExemptionPeriod = { id: nanoid(), startDate, endDate, reason, goalIds, updatedAt: nowIso() };
   s.execute('添加免打卡区间', [{ table: 'exemptions', type: 'put', after: ex }]);
   return ex.id;
+}
+
+export function updateExemption(id: string, patch: Partial<ExemptionPeriod>): void {
+  const s = useStore.getState();
+  const before = s.exemptions[id];
+  if (!before) return;
+  const after: ExemptionPeriod = { ...before, ...patch, updatedAt: nowIso() };
+  s.execute('更新免打卡区间', [{ table: 'exemptions', type: 'put', before, after }]);
+}
+
+export function deleteExemption(id: string): void {
+  const s = useStore.getState();
+  const ex = s.exemptions[id];
+  if (!ex) return;
+  s.execute(`删除免打卡区间${ex.reason ? `「${ex.reason}」` : ''}`, [
+    { table: 'exemptions', type: 'delete', before: ex },
+  ]);
 }
 
 // ── 打卡（Phase 4：今日面板 / 甘特 popover / 批量补卡共用） ──────────────
@@ -186,6 +209,56 @@ export function patchCheckIn(id: string, patch: Partial<CheckIn>, label: string)
   if (!before) return;
   const after: CheckIn = { ...before, ...patch, updatedAt: nowIso() };
   s.execute(label, [{ table: 'checkIns', type: 'put', before, after }]);
+}
+
+export interface BatchCheckInArgs {
+  startDate: string;
+  endDate: string;
+  goalIds: string[];
+  status: 'done' | 'skipped';
+}
+
+/**
+ * 批量补卡（SPEC 第六节）：日期范围 × 勾选目标 → 批量标 done/skipped。
+ * 只补"应打卡且尚无记录"的日子（免打卡区间与已有记录跳过），一条命令一次 undo。
+ * 返回补卡条数（调用方 toast 用）。dryRun 时只计数不写入（对话框实时预览）。
+ */
+export function batchCheckIn(args: BatchCheckInArgs, dryRun = false): number {
+  const s = useStore.getState();
+  const today = todayStr();
+  const end = args.endDate < today ? args.endDate : today;
+  if (end < args.startDate || args.goalIds.length === 0) return 0;
+
+  const goalList = Object.values(s.goals);
+  const taskList = Object.values(s.tasks);
+  const checkInList = Object.values(s.checkIns);
+  const exemptionList = Object.values(s.exemptions);
+  const wanted = new Set(args.goalIds);
+
+  const stamp = nowIso();
+  const changes: Change[] = [];
+  for (const date of eachDay(args.startDate, end)) {
+    for (const entry of dayEntries({ date, goals: goalList, tasks: taskList, checkIns: checkInList, exemptions: exemptionList })) {
+      if (!wanted.has(entry.goalId) || entry.exempt || entry.status) continue;
+      changes.push({
+        table: 'checkIns',
+        type: 'put',
+        after: {
+          id: nanoid(),
+          goalId: entry.goalId,
+          taskId: entry.dueTaskIds.length === 1 ? entry.dueTaskIds[0] : undefined,
+          date,
+          status: args.status,
+          createdAt: stamp,
+          updatedAt: stamp,
+        },
+      });
+    }
+  }
+  if (!dryRun && changes.length > 0) {
+    s.execute(`批量补卡 ${changes.length} 条（${args.status === 'done' ? '完成' : '跳过'}）`, changes);
+  }
+  return changes.length;
 }
 
 /** 删除打卡记录（软删除，回到"未打卡"） */

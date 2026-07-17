@@ -8,6 +8,7 @@ import type { CheckIn, CheckInStatus } from '../types/domain';
 import { useStore } from '../store/useStore';
 import { fmtDay, toDay, todayStr } from '../lib/date';
 import { calcStreak, dayCompletionRate, dayEntries } from '../lib/derive';
+import { BackfillDialog } from '../checkin/BackfillDialog';
 import { DayStrip, type StripDay } from '../checkin/DayStrip';
 import { GoalCheckCard } from '../checkin/GoalCheckCard';
 import { useFlip } from '../checkin/useFlip';
@@ -44,6 +45,7 @@ export default function CheckInPage() {
   const today = todayStr();
   const [selectedDate, setSelectedDate] = useState(today);
   const [expandedGoalId, setExpandedGoalId] = useState<string | null>(null);
+  const [backfillOpen, setBackfillOpen] = useState(false);
 
   const goalList = useMemo(() => Object.values(goals), [goals]);
   const taskList = useMemo(() => Object.values(tasks), [tasks]);
@@ -155,6 +157,20 @@ export default function CheckInPage() {
             回到今天
           </button>
         )}
+        <button
+          type="button"
+          onClick={() => setBackfillOpen(true)}
+          className="ml-auto cursor-pointer px-2.5 py-1"
+          style={{
+            fontSize: 'var(--font-12)',
+            color: 'var(--text-secondary)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 'var(--radius-sm)',
+            background: 'var(--bg-panel)',
+          }}
+        >
+          批量补卡
+        </button>
       </div>
       <p className="tnum mb-2" style={{ fontSize: 'var(--font-13)', color: 'var(--text-tertiary)' }}>
         {selectedDate} · {d.year()} 第 {dayOfYear} 天 · 年度进度 {yearPct.toFixed(1)}%
@@ -236,6 +252,8 @@ export default function CheckInPage() {
           <span aria-hidden>→</span>
         </button>
       )}
+
+      <BackfillDialog open={backfillOpen} onClose={() => setBackfillOpen(false)} />
     </div>
   );
 }

@@ -1,0 +1,243 @@
+/**
+ * 免打卡区间管理（SPEC 第六节，设置页）：出差/生病/假期一键豁免，
+ * 期间不判缺卡不断 streak，时间轴以斜纹区呈现。行内编辑即存进 undo。
+ */
+import { useMemo, useState } from 'react';
+import { useStore } from '../store/useStore';
+import { fmtDay, toDay, todayStr } from '../lib/date';
+import { goalColor } from '../lib/colors';
+import { createExemption, deleteExemption, updateExemption } from '../store/actions';
+
+const inputStyle: React.CSSProperties = {
+  fontSize: 'var(--font-12)',
+  border: '1px solid var(--border-default)',
+  borderRadius: 'var(--radius-sm)',
+  background: 'transparent',
+  color: 'var(--text-primary)',
+  padding: '3px 6px',
+};
+
+export function ExemptionManager() {
+  const exemptions = useStore((s) => s.exemptions);
+  const goals = useStore((s) => s.goals);
+  const [adding, setAdding] = useState(false);
+  const today = todayStr();
+
+  const goalList = useMemo(
+    () =>
+      Object.values(goals)
+        .filter((g) => !g.deletedAt && !g.archived)
+        .sort((a, b) => a.order - b.order),
+    [goals],
+  );
+  const list = useMemo(
+    () =>
+      Object.values(exemptions)
+        .filter((e) => !e.deletedAt)
+        .sort((a, b) => (a.startDate < b.startDate ? 1 : -1)),
+    [exemptions],
+  );
+
+  const toggleGoal = (id: string, exGoalIds: string[] | undefined, goalId: string) => {
+    // 空/缺省 = 全部目标；点选目标 chip 在"全部"与具体集合之间切换
+    const cur = new Set(exGoalIds && exGoalIds.length > 0 ? exGoalIds : goalList.map((g) => g.id));
+    if (cur.has(goalId)) cur.delete(goalId);
+    else cur.add(goalId);
+    const next = [...cur];
+    updateExemption(id, {
+      goalIds: next.length === goalList.length ? undefined : next,
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      {list.length === 0 && (
+        <p style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}>
+          还没有免打卡区间。出差、生病、假期时添加，期间不判缺卡、不断 streak。
+        </p>
+      )}
+      {list.map((ex) => {
+        const scoped = ex.goalIds && ex.goalIds.length > 0;
+        return (
+          <div
+            key={ex.id}
+            className="flex flex-col gap-2 border p-2.5"
+            style={{ borderColor: 'var(--border-subtle)', borderRadius: 'var(--radius-md)' }}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="date"
+                value={ex.startDate}
+                onChange={(e) => e.target.value && updateExemption(ex.id, { startDate: e.target.value })}
+                className="tnum"
+                style={inputStyle}
+                aria-label="开始日期"
+              />
+              <span style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}>至</span>
+              <input
+                type="date"
+                value={ex.endDate}
+                min={ex.startDate}
+                onChange={(e) => e.target.value && updateExemption(ex.id, { endDate: e.target.value })}
+                className="tnum"
+                style={inputStyle}
+                aria-label="结束日期"
+              />
+              <input
+                defaultValue={ex.reason ?? ''}
+                key={`${ex.id}-${ex.reason ?? ''}`}
+                placeholder="原因（如 出差）"
+                onBlur={(e) => {
+                  const reason = e.target.value.trim() || undefined;
+                  if (reason !== ex.reason) updateExemption(ex.id, { reason });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
+                }}
+                className="min-w-24 flex-1 outline-none"
+                style={inputStyle}
+              />
+              {today >= ex.startDate && today <= ex.endDate && (
+                <span
+                  className="px-1.5 py-0.5"
+                  style={{
+                    fontSize: 'var(--font-11)',
+                    color: 'var(--accent)',
+                    background: 'var(--accent-soft)',
+                    borderRadius: 'var(--radius-sm)',
+                  }}
+                >
+                  进行中
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => deleteExemption(ex.id)}
+                className="cursor-pointer px-1.5"
+                style={{ fontSize: 'var(--font-12)', color: 'var(--danger)' }}
+              >
+                删除
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span style={{ fontSize: 'var(--font-11)', color: 'var(--text-tertiary)' }}>
+                {scoped ? '仅限' : '全部目标'}
+              </span>
+              {goalList.map((g) => {
+                const active = !scoped || ex.goalIds!.includes(g.id);
+                return (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => toggleGoal(ex.id, ex.goalIds, g.id)}
+                    className="cursor-pointer px-1.5 py-0.5 transition-colors"
+                    style={{
+                      fontSize: 'var(--font-11)',
+                      border: `1px solid ${active ? goalColor(g.color) : 'var(--border-default)'}`,
+                      borderRadius: 999,
+                      background: active
+                        ? `color-mix(in srgb, ${goalColor(g.color)} 12%, transparent)`
+                        : 'transparent',
+                      color: active ? 'var(--text-primary)' : 'var(--text-disabled)',
+                    }}
+                  >
+                    {g.icon} {g.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+      {adding ? (
+        <AddRow
+          onDone={(start, end, reason) => {
+            createExemption(start, end, reason);
+            setAdding(false);
+          }}
+          onCancel={() => setAdding(false)}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="self-start cursor-pointer px-3 py-1"
+          style={{
+            fontSize: 'var(--font-13)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 'var(--radius-sm)',
+            background: 'var(--bg-panel)',
+            color: 'var(--text-secondary)',
+          }}
+        >
+          + 添加免打卡区间
+        </button>
+      )}
+    </div>
+  );
+}
+
+function AddRow({
+  onDone,
+  onCancel,
+}: {
+  onDone: (start: string, end: string, reason?: string) => void;
+  onCancel: () => void;
+}) {
+  const today = todayStr();
+  const [start, setStart] = useState(today);
+  const [end, setEnd] = useState(fmtDay(toDay(today).add(2, 'day')));
+  const [reason, setReason] = useState('');
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <input
+        type="date"
+        value={start}
+        onChange={(e) => e.target.value && setStart(e.target.value)}
+        className="tnum"
+        style={inputStyle}
+        aria-label="开始日期"
+      />
+      <span style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}>至</span>
+      <input
+        type="date"
+        value={end}
+        min={start}
+        onChange={(e) => e.target.value && setEnd(e.target.value)}
+        className="tnum"
+        style={inputStyle}
+        aria-label="结束日期"
+      />
+      <input
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder="原因（可选）"
+        className="min-w-24 flex-1 outline-none"
+        style={inputStyle}
+      />
+      <button
+        type="button"
+        onClick={() => onDone(start, end < start ? start : end, reason.trim() || undefined)}
+        className="cursor-pointer px-3 py-1"
+        style={{
+          fontSize: 'var(--font-12)',
+          border: '1px solid var(--accent)',
+          borderRadius: 'var(--radius-sm)',
+          background: 'var(--accent)',
+          color: 'var(--text-on-accent)',
+        }}
+      >
+        添加
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="cursor-pointer px-2 py-1"
+        style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}
+      >
+        取消
+      </button>
+    </div>
+  );
+}
