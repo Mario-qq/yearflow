@@ -26,8 +26,11 @@ import { useGanttDerive } from './hooks/useGanttDerive';
 import { useBarTooltip } from './hooks/useBarTooltip';
 import { useSpacePan, startGrabPan } from './hooks/useSpacePan';
 import { useBarDrag } from './hooks/useBarDrag';
-import { useCreateDrag } from './hooks/useCreateDrag';
+import { useCreateDrag, idxToDate } from './hooks/useCreateDrag';
+import { useMarqueeSelect } from './hooks/useMarqueeSelect';
 import { CreateOverlay } from './CreateDrag';
+import { GanttContextMenu } from './ContextMenu';
+import { BulkBar } from './BulkBar';
 import { goalColorAlpha } from '../lib/colors';
 import { useGanttUi } from './uiStore';
 import { onGantt } from './bus';
@@ -78,7 +81,65 @@ export default function GanttView() {
   const derive = useGanttDerive(goals, tasks, checkIns, exemptions, today, weekStartsOn);
   const { anchor, onBarHover } = useBarTooltip();
   const { onBarDragStart, ghost } = useBarDrag({ scrollerRef, bodyRef, scaleRef, layoutRef, leftW });
-  const { onBodyPointerDown, preview, pending, clearPending } = useCreateDrag({ bodyRef, scaleRef, layoutRef });
+  const { onBodyPointerDown: onCreateDown, preview, pending, clearPending } = useCreateDrag({ bodyRef, scaleRef, layoutRef });
+  const { onMarqueeDown, marqueeRect } = useMarqueeSelect({ bodyRef, scaleRef, layoutRef });
+
+  // body pointerdown 分流：任务/幽灵行空白 = 框选新建；目标行/行外空白 = 框选多选
+  const onBodyPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.button !== 0) return;
+      const target = e.target as HTMLElement;
+      if (target.closest('[data-task-bar],[data-milestone],[data-create-bubble]')) return;
+      const body = bodyRef.current;
+      if (!body) return;
+      const row = rowAtY(layoutRef.current, e.clientY - body.getBoundingClientRect().top);
+      if (row && (row.kind === 'task' || row.kind === 'ghost')) onCreateDown(e);
+      else onMarqueeDown(e);
+    },
+    [onCreateDown, onMarqueeDown],
+  );
+
+  // 右键菜单：bar → 任务菜单（记录右键日期供「从此日拆分」）；空白 → 时间轴菜单
+  const onBodyContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const body = bodyRef.current;
+    if (!body) return;
+    const s = scaleRef.current;
+    const rect = body.getBoundingClientRect();
+    const idx = clampDayIndex(s, Math.floor((e.clientX - rect.left) / s.dayWidth));
+    const date = idxToDate(s, idx);
+    const barEl = (e.target as HTMLElement).closest('[data-task-bar]');
+    if (barEl) {
+      useGanttUi.getState().setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        kind: 'bar',
+        taskId: barEl.getAttribute('data-task-bar') ?? undefined,
+        date,
+      });
+    } else {
+      const row = rowAtY(layoutRef.current, e.clientY - rect.top);
+      useGanttUi.getState().setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        kind: 'canvas',
+        goalId: row?.goalId,
+        date,
+      });
+    }
+  }, []);
+
+  // Esc 清除多选（右键菜单/输入框各自处理自己的 Esc）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const t = e.target as HTMLElement;
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return;
+      useGanttUi.getState().clearSelection();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const [visStart, visEnd] = visibleDayRange(scale, win.xStart, win.xEnd);
   const [rowStart, rowEnd] = visibleRowRange(layout, win.yStart, win.yEnd);
   const ticks = useMemo(
@@ -226,6 +287,7 @@ export default function GanttView() {
                 onPointerMove={onBodyPointerMove}
                 onPointerLeave={onBodyPointerLeave}
                 onPointerDown={onBodyPointerDown}
+                onContextMenu={onBodyContextMenu}
               >
                 <GridBackground
                   width={scale.totalWidth}
@@ -273,6 +335,21 @@ export default function GanttView() {
                 </div>
                 {/* 框选新建：预览条 + 名称气泡 */}
                 <CreateOverlay preview={preview} pending={pending} dayWidth={scale.dayWidth} onDone={clearPending} />
+                {/* 框选多选矩形 */}
+                {marqueeRect && (
+                  <div
+                    className="pointer-events-none absolute"
+                    style={{
+                      left: marqueeRect.x,
+                      top: marqueeRect.y,
+                      width: marqueeRect.w,
+                      height: marqueeRect.h,
+                      background: 'var(--accent-soft)',
+                      border: '1px solid var(--accent)',
+                      borderRadius: 'var(--radius-sm)',
+                    }}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -298,6 +375,8 @@ export default function GanttView() {
       {anchor && hoverTask && hoverTg && hoverGg && (
         <BarTooltip anchor={anchor} task={hoverTask} tg={hoverTg} streak={hoverGg.streak} />
       )}
+      <GanttContextMenu />
+      <BulkBar />
     </div>
   );
 }

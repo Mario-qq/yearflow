@@ -39,6 +39,7 @@ export const TaskBar = memo(function TaskBar({ task, rowTop, x, width, color, tg
   const linked = useGanttUi((s) => s.hoverRowId === task.id);
   const flashing = useGanttUi((s) => s.flashTaskId === task.id);
   const dragging = useGanttUi((s) => s.dragTaskId === task.id);
+  const selected = useGanttUi((s) => s.selectedTaskIds.includes(task.id));
   const solid = goalColor(color);
   const fill =
     task.status === 'done' ? `color-mix(in srgb, ${solid} 55%, var(--bg-panel))` : solid;
@@ -63,9 +64,11 @@ export const TaskBar = memo(function TaskBar({ task, rowTop, x, width, color, tg
           background: goalColorAlpha(color, BAR_REMAINDER_ALPHA),
           boxShadow: dragging
             ? 'inset 0 0 0 1px var(--bar-inner-stroke), var(--shadow-lg)'
-            : linked
-              ? `inset 0 0 0 1px var(--bar-inner-stroke), 0 0 0 2px ${solid}`
-              : 'inset 0 0 0 1px var(--bar-inner-stroke)',
+            : selected
+              ? 'inset 0 0 0 1px var(--bar-inner-stroke), 0 0 0 2px var(--accent), 0 0 0 4px var(--accent-soft)'
+              : linked
+                ? `inset 0 0 0 1px var(--bar-inner-stroke), 0 0 0 2px ${solid}`
+                : 'inset 0 0 0 1px var(--bar-inner-stroke)',
           zIndex: dragging ? 10 : undefined,
           pointerEvents: 'auto',
           touchAction: 'none',
@@ -79,6 +82,7 @@ export const TaskBar = memo(function TaskBar({ task, rowTop, x, width, color, tg
           onHover(null);
           onDragStart(e, task.id, 'move');
         }}
+        onDoubleClick={() => useGanttUi.getState().setDrawerTask(task.id)}
       >
         <div
           className="absolute bottom-0 left-0 top-0"

@@ -56,6 +56,8 @@ export function useBarDrag(args: {
       if (!task || !scroller || !body || !barEl || !originRow) return;
 
       const goalOf = (id: string) => useStore.getState().goals[id];
+      // 单击（未越阈值）时的选择语义要用按下瞬间的修饰键
+      const mods = { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey };
       const totalDays = diffDays(task.endDate, task.startDate) + 1;
       const x0 = dateToX(scale, task.startDate);
       const w0 = totalDays * scale.dayWidth;
@@ -164,7 +166,30 @@ export function useBarDrag(args: {
           applyVisual();
         },
         onEnd: (s, committed) => {
-          if (!s.started) return; // 单击：交给 hover/tooltip，不动数据
+          if (!s.started) {
+            // 单击 = 选择（SPEC 4.5 多选）：Ctrl 增减、Shift 按行序连续、普通点选独占
+            const ui = useGanttUi.getState();
+            if (mods.shift && ui.selectionAnchor) {
+              const rows = layout.rows.filter((r) => r.kind === 'task');
+              const i0 = rows.findIndex((r) => r.id === ui.selectionAnchor);
+              const i1 = rows.findIndex((r) => r.id === taskId);
+              if (i0 >= 0 && i1 >= 0) {
+                const [lo, hi] = i0 < i1 ? [i0, i1] : [i1, i0];
+                ui.setSelection(rows.slice(lo, hi + 1).map((r) => r.id));
+              } else {
+                ui.setSelection([taskId], taskId);
+              }
+            } else if (mods.ctrl) {
+              const has = ui.selectedTaskIds.includes(taskId);
+              ui.setSelection(
+                has ? ui.selectedTaskIds.filter((i) => i !== taskId) : [...ui.selectedTaskIds, taskId],
+                taskId,
+              );
+            } else {
+              ui.setSelection([taskId], taskId);
+            }
+            return;
+          }
           const crossGoal = targetGoalId !== task.goalId;
           const noChange = deltaDays === 0 && !crossGoal;
 

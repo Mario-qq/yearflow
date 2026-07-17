@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { useStore } from './store/useStore';
 import { applyTheme, subscribeSystemTheme } from './lib/theme';
+import { showToast } from './lib/toast';
+import { Toasts } from './components/Toasts';
 import { GanttToolbar } from './gantt/GanttToolbar';
 import GanttPage from './pages/GanttPage';
 import CheckInPage from './pages/CheckInPage';
@@ -46,6 +48,27 @@ export default function App() {
     applyTheme(theme);
     return subscribeSystemTheme(theme);
   }, [theme, hydrated]);
+
+  // 全局撤销/重做（SPEC 4.7 / 第六节）：Ctrl+Z / Ctrl+Shift+Z（或 Ctrl+Y），toast 显示摘要
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const t = e.target as HTMLElement;
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
+      const key = e.key.toLowerCase();
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        const label = useStore.getState().undo();
+        showToast(label ? `已撤销：${label}` : '没有可撤销的操作');
+      } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+        e.preventDefault();
+        const label = useStore.getState().redo();
+        showToast(label ? `已重做：${label}` : '没有可重做的操作');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   if (!hydrated) {
     return <div className="flex h-full items-center justify-center text-tertiary">载入中…</div>;
@@ -109,6 +132,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
+        <Toasts />
       </div>
     </BrowserRouter>
   );

@@ -4,6 +4,7 @@
  * 目标行与行外空白不触发（留给多选框选）。
  */
 import { useCallback, useState } from 'react';
+import { useGanttUi } from '../uiStore';
 import { rowAtY, type RowLayout } from '../rowLayout';
 import { clampDayIndex, type TimeScale } from '../timeScale';
 import { fmtDay, toDay } from '../../lib/date';
@@ -72,7 +73,11 @@ export function useCreateDrag(args: {
         onEnd: (s, committed) => {
           hideDragHint();
           setPreview(null);
-          if (!s.started || !committed || !cur) return;
+          if (!s.started) {
+            useGanttUi.getState().clearSelection(); // 空白单击 = 清除选择
+            return;
+          }
+          if (!committed || !cur) return;
           setPending({
             ...cur,
             startDate: idxToDate(scale, cur.startIdx),

@@ -5,6 +5,7 @@
  */
 import { nanoid } from 'nanoid';
 import type { ExemptionPeriod, Goal, Milestone, Task } from '../types/domain';
+import { diffDays, fmtDay, toDay } from '../lib/date';
 import { useStore } from './useStore';
 import type { Change } from './types';
 
@@ -108,6 +109,84 @@ export function createExemption(startDate: string, endDate: string, reason?: str
   const ex: ExemptionPeriod = { id: nanoid(), startDate, endDate, reason, updatedAt: nowIso() };
   s.execute('添加免打卡区间', [{ table: 'exemptions', type: 'put', after: ex }]);
   return ex.id;
+}
+
+// ── 复合操作（右键菜单/批量操作条） ──────────────────────────────────────
+
+const shiftDate = (date: string, days: number): string => fmtDay(toDay(date).add(days, 'day'));
+
+/** 批量整体平移 N 天（多选操作条） */
+export function shiftTasks(ids: string[], days: number): void {
+  const s = useStore.getState();
+  const stamp = nowIso();
+  const changes: Change[] = [];
+  for (const id of ids) {
+    const before = s.tasks[id];
+    if (!before) continue;
+    changes.push({
+      table: 'tasks',
+      type: 'put',
+      before,
+      after: {
+        ...before,
+        startDate: shiftDate(before.startDate, days),
+        endDate: shiftDate(before.endDate, days),
+        updatedAt: stamp,
+      },
+    });
+  }
+  s.execute(`平移 ${ids.length} 个任务 ${days > 0 ? '+' : ''}${days}天`, changes);
+}
+
+/** 复制并顺延：生成紧接原任务之后的同长任务（SPEC 第六节） */
+export function duplicateTaskAfter(id: string): string | null {
+  const s = useStore.getState();
+  const src = s.tasks[id];
+  if (!src) return null;
+  const duration = diffDays(src.endDate, src.startDate);
+  const start = shiftDate(src.endDate, 1);
+  const siblings = Object.values(s.tasks).filter((t) => !t.deletedAt && t.goalId === src.goalId);
+  const copy: Task = {
+    ...src,
+    id: nanoid(),
+    name: `${src.name}（续）`,
+    startDate: start,
+    endDate: shiftDate(start, duration),
+    progress: 0,
+    status: 'planned',
+    baseline: undefined,
+    dependsOn: [src.id], // 顺延任务默认 FS 依赖原任务
+    order: siblings.reduce((m, t) => Math.max(m, t.order), -1) + 1,
+    updatedAt: nowIso(),
+  };
+  s.execute(`复制并顺延「${src.name}」`, [{ table: 'tasks', type: 'put', after: copy }]);
+  return copy.id;
+}
+
+/** 从某日拆分：原任务截止到 date 前一天，新任务接管 date..原结束（一条命令） */
+export function splitTaskAt(id: string, date: string): string | null {
+  const s = useStore.getState();
+  const src = s.tasks[id];
+  if (!src || date <= src.startDate || date > src.endDate) return null;
+  const stamp = nowIso();
+  const shortened: Task = { ...src, endDate: shiftDate(date, -1), updatedAt: stamp };
+  const siblings = Object.values(s.tasks).filter((t) => !t.deletedAt && t.goalId === src.goalId);
+  const rest: Task = {
+    ...src,
+    id: nanoid(),
+    name: `${src.name}（后段）`,
+    startDate: date,
+    progress: 0,
+    baseline: undefined,
+    dependsOn: [src.id],
+    order: siblings.reduce((m, t) => Math.max(m, t.order), -1) + 1,
+    updatedAt: stamp,
+  };
+  s.execute(`拆分任务「${src.name}」`, [
+    { table: 'tasks', type: 'put', before: src, after: shortened },
+    { table: 'tasks', type: 'put', after: rest },
+  ]);
+  return rest.id;
 }
 
 // ── 删除（软删除，级联进同一条命令） ─────────────────────────────────────
