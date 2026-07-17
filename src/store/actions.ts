@@ -4,7 +4,14 @@
  * 铁律：只构造受影响实体的新对象，未动实体保持引用（per-goal 派生缓存依赖此约定）。
  */
 import { nanoid } from 'nanoid';
-import type { ExemptionPeriod, Goal, Milestone, Task } from '../types/domain';
+import type {
+  CheckIn,
+  CheckInStatus,
+  ExemptionPeriod,
+  Goal,
+  Milestone,
+  Task,
+} from '../types/domain';
 import { diffDays, fmtDay, toDay } from '../lib/date';
 import { useStore } from './useStore';
 import type { Change } from './types';
@@ -109,6 +116,87 @@ export function createExemption(startDate: string, endDate: string, reason?: str
   const ex: ExemptionPeriod = { id: nanoid(), startDate, endDate, reason, updatedAt: nowIso() };
   s.execute('添加免打卡区间', [{ table: 'exemptions', type: 'put', after: ex }]);
   return ex.id;
+}
+
+// ── 打卡（Phase 4：今日面板 / 甘特 popover / 批量补卡共用） ──────────────
+
+const CHECKIN_TEXT: Record<CheckInStatus, string> = {
+  done: '完成',
+  partial: '做了一点',
+  skipped: '跳过',
+};
+
+/** 某目标某日的现有打卡记录（同日多条取"最强"，与派生口径一致） */
+export function findCheckIn(goalId: string, date: string): CheckIn | undefined {
+  const rank: Record<CheckInStatus, number> = { done: 3, partial: 2, skipped: 1 };
+  let best: CheckIn | undefined;
+  for (const c of Object.values(useStore.getState().checkIns)) {
+    if (c.deletedAt || c.goalId !== goalId || c.date !== date) continue;
+    if (!best || rank[c.status] > rank[best.status]) best = c;
+  }
+  return best;
+}
+
+export interface SetCheckInArgs {
+  goalId: string;
+  date: string;
+  status: CheckInStatus;
+  taskId?: string;
+  minutes?: number;
+  note?: string;
+}
+
+/** 打卡 upsert：同目标同日已有记录则原位更新（保 id/createdAt），否则新建；一条命令 */
+export function setCheckIn(args: SetCheckInArgs): string {
+  const s = useStore.getState();
+  const goalName = s.goals[args.goalId]?.name ?? '';
+  const existing = findCheckIn(args.goalId, args.date);
+  const label = `打卡「${goalName}」${CHECKIN_TEXT[args.status]}`;
+  if (existing) {
+    const after: CheckIn = {
+      ...existing,
+      status: args.status,
+      taskId: args.taskId ?? existing.taskId,
+      minutes: args.minutes ?? existing.minutes,
+      note: args.note ?? existing.note,
+      updatedAt: nowIso(),
+    };
+    s.execute(label, [{ table: 'checkIns', type: 'put', before: existing, after }]);
+    return existing.id;
+  }
+  const record: CheckIn = {
+    id: nanoid(),
+    goalId: args.goalId,
+    taskId: args.taskId,
+    date: args.date,
+    status: args.status,
+    minutes: args.minutes,
+    note: args.note,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+  s.execute(label, [{ table: 'checkIns', type: 'put', after: record }]);
+  return record.id;
+}
+
+/** 更新打卡附加信息（分钟/备注），不改状态 */
+export function patchCheckIn(id: string, patch: Partial<CheckIn>, label: string): void {
+  const s = useStore.getState();
+  const before = s.checkIns[id];
+  if (!before) return;
+  const after: CheckIn = { ...before, ...patch, updatedAt: nowIso() };
+  s.execute(label, [{ table: 'checkIns', type: 'put', before, after }]);
+}
+
+/** 删除打卡记录（软删除，回到"未打卡"） */
+export function removeCheckIn(id: string): void {
+  const s = useStore.getState();
+  const record = s.checkIns[id];
+  if (!record) return;
+  const goalName = s.goals[record.goalId]?.name ?? '';
+  s.execute(`删除「${goalName}」${record.date} 的打卡记录`, [
+    { table: 'checkIns', type: 'delete', before: record },
+  ]);
 }
 
 // ── 复合操作（右键菜单/批量操作条） ──────────────────────────────────────

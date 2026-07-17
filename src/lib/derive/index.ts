@@ -9,6 +9,7 @@ export {
 export { calcStreak, bestStatusByDate, statusByDateFor, type StreakResult } from './streak';
 export { weeklyHeat, type WeekHeat } from './heat';
 export { baselineDrift, type BaselineDrift } from './baseline';
+export { dayEntries, dayCompletionRate, type DayGoalEntry } from './dayPanel';
 export {
   timeProgressPct,
   deriveTaskGantt,
