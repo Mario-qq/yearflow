@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { ExemptionManager } from '../checkin/ExemptionManager';
+import { SyncSection } from '../components/SyncSection';
 import { buildBackupJSON, parseBackupJSON } from '../lib/backup';
 import { buildSeedBundle } from '../seed/seedData';
 import { todayStr } from '../lib/date';
@@ -189,9 +190,7 @@ export default function SettingsPage() {
       </Section>
 
       <Section title="云同步">
-        <p style={{ fontSize: 'var(--font-13)', color: 'var(--text-tertiary)' }}>
-          Supabase 云同步将在 Phase 5 接入（本地优先，未登录时纯本地使用）。
-        </p>
+        <SyncSection />
       </Section>
     </div>
   );

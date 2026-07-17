@@ -11,8 +11,9 @@ import {
 import type { BaseRepo } from '../db/repos/baseRepo';
 import type { Change, TableName } from './types';
 import type { SyncableEntity } from '../types/domain';
+import { emitLocalWrite } from '../db/sync/signal';
 
-const repoByTable: Record<TableName, BaseRepo<SyncableEntity>> = {
+export const repoByTable: Record<TableName, BaseRepo<SyncableEntity>> = {
   goals: goalRepo as BaseRepo<SyncableEntity>,
   tasks: taskRepo as BaseRepo<SyncableEntity>,
   milestones: milestoneRepo as BaseRepo<SyncableEntity>,
@@ -49,6 +50,7 @@ async function flush(): Promise<void> {
     ...[...puts.entries()].map(([table, entities]) => repoByTable[table].bulkPut(entities)),
     ...deletes.map(({ table, id }) => repoByTable[table].softDelete(id)),
   ]);
+  if (batch.size > 0) emitLocalWrite(); // 云同步引擎订阅：落库完成后防抖 3 秒触发推送
 }
 
 function schedule(): void {

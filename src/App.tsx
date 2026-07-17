@@ -4,6 +4,8 @@ import { useStore } from './store/useStore';
 import { applyTheme, subscribeSystemTheme } from './lib/theme';
 import { showToast } from './lib/toast';
 import { Toasts } from './components/Toasts';
+import { SyncIndicator } from './components/SyncIndicator';
+import { initSync } from './db/sync/syncApi';
 import { CommandPalette } from './components/CommandPalette';
 import { ShortcutHelp } from './components/ShortcutHelp';
 import { GanttToolbar } from './gantt/GanttToolbar';
@@ -85,6 +87,11 @@ export default function App() {
     return subscribeSystemTheme(theme);
   }, [theme, hydrated]);
 
+  // 云同步引擎：hydrate 完成后启动（幂等；未配置 Supabase 时内部直接返回）
+  useEffect(() => {
+    if (hydrated) void initSync();
+  }, [hydrated]);
+
   // 全局撤销/重做（SPEC 4.7 / 第六节）：Ctrl+Z / Ctrl+Shift+Z（或 Ctrl+Y），toast 显示摘要
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -164,6 +171,7 @@ export default function App() {
             <GanttToolbarSlot />
           </div>
           <div className="flex items-center gap-2">
+            <SyncIndicator />
             <button
               type="button"
               onClick={() => setHelpOpen(true)}

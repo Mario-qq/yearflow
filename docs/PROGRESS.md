@@ -171,4 +171,29 @@
 - vite dev server 读 PORT 环境变量（预览代理需要）；launch.json autoPort: true
 - 移动端判定用 useIsMobile（matchMedia 767px + useSyncExternalStore）；强制月档只在进入时一次，双指缩放后不反复覆盖
 
-## Phase 5 — 云同步与部署 【未开始，等 Supabase 凭据】
+## Phase 5 — 云同步与部署 【已完成 2026-07-18】
+
+- [x] SQL migration（supabase/migrations/0001_init.sql，用户已在 SQL Editor 执行）：6 表（id+user_id 复合主键、data jsonb 存完整实体、updated_at/deleted_at 冗余列）+ RLS（user_id = auth.uid() 全操作）+ server_updated_at 触发器（clock_timestamp）+ upsert_rows RPC（条件 upsert：excluded.updated_at > 现值才覆盖）
+- [x] supabase-js 客户端（src/db/sync/client.ts）：未配 .env.local 时为 null，纯本地模式，同步 UI 整体隐藏
+- [x] 同步引擎（src/db/sync/engine.ts）：先拉后推增量双向；拉取游标=server_updated_at（服务端触发器盖章，防客户端时钟偏差），推送游标=本地 updatedAt；游标按用户存 localStorage（丢失只导致一次幂等全量重同步）；单飞防重入，同步中再触发结束后补跑
+- [x] LWW 归并纯函数（merge.ts + 10 单测，合计 93 全绿）：远端严格更新才赢、回声跳过、墓碑传播、分页重复取最新
+- [x] 触发链全套：登录/启动（INITIAL_SESSION）、窗口 focus/visibilitychange、online 恢复、本地写入防抖 3s（persist flush 后经 signal.ts 事件通道，斩断循环导入）、每 5 分钟、手动
+- [x] 邮箱认证：设置页登录/注册/退出（注册默认需邮箱确认，UI 已提示）；首次登录无游标=本地全量上传合并；退出保留本地数据与游标
+- [x] 顶栏同步状态点（SyncIndicator）：✓/⟳/○/⚠ 四态+未登录，点击弹详情（帐号/上次同步/错误/立即同步/去登录）
+- [x] 软删除传播：replaceAllData 改墓碑式清库（清空/导入产生的删除也能传播）；同步后 30 天墓碑真删（本地+云端，每会话清理一次）
+- [x] 全链路浏览器实测（真实 Supabase 项目）：种子 158 实体全量上传行数逐表核对一致 → 本地打卡 3s 后推送可查 → RPC 模拟设备 B 改写经 focus 拉回应用 → 异地删除墓碑拉回（内存移除/Dexie 留墓碑）→ 旧 updated_at 推送被服务端 where 拒绝 → 本地删除上行 → undo 恢复上行 → offline/online 事件路径 → 刷新会话恢复自动同步数据完整
+- [x] 部署文档：README 重写（Supabase 建表步骤/Vercel 部署/PWA 安装/备份兜底）+ vercel.json SPA 回落 + .env.example
+- [x] 性能：syncApi.ts 懒加载门面，supabase-js + engine 切进 208KB 异步分包，主包 538KB（167KB gzip）与 Phase 4 持平，首屏关键路径零增量
+- [x] 截图门槛：scripts/capture-phase5.mjs → docs/screenshots/phase5/（设置页登录区 + 状态点 popover × 深浅 4 张，含未登录态断言）
+
+### 关键决策
+- **双保险 LWW**：拉取侧客户端裁决必须对照 Dexie 原始行（含本地墓碑）——只看内存会把「本地已删、远端旧版」错误复活（单测锁定）；推送侧 upsert_rows 的 where 兜底，离线设备迟到的旧改动推不倒服务器新版本；顺序固定先拉后推
+- **同步引擎直接读写 Dexie 原始表**（不经 repo）：repo 会重盖 updatedAt，拉取行必须保留远端时间戳；引擎属数据层，不违反「UI 不碰 Dexie」
+- **applyRemote 不进 undo 栈不触发落库**，只拷贝受影响表、未动实体保持引用（per-goal 派生缓存约定不破坏）
+- **settings 不同步**（ganttView/主题是设备本地偏好，SPEC 六表之外）
+- 同步开始必先 flushNow()：把 500ms 防抖中的本地写入落库后再基于 Dexie 推拉，否则漏推
+- onAuthStateChange 回调内不得同步调 supabase API（官方告诫，setTimeout 出让）；token 刷新事件同 uid 不重复触发同步
+- 推送 t0 游标在读脏行前采集：推送期间新写入 updatedAt ≥ t0 留给下一轮，幂等不丢
+- **UI 只从 syncApi.ts 导入同步功能**（懒加载门面）：直接 import engine/client 会把 supabase-js 拖回主包；isSyncConfigured 只读 env 不触发加载
+- 实测辅助：dev 暴露 window.__syncStore；RPC + REST（带 access_token）可从页面模拟第二设备
+- 本机 PowerShell 工具跑 node 脚本会静默挂起（零输出超时），Playwright/node 脚本一律用 Bash 工具跑

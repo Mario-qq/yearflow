@@ -8,9 +8,9 @@ import {
   reviewRepo,
   settingsRepo,
   taskRepo,
-  clearAllData,
 } from '../db/repos';
-import { queuePersist, queuePersistSettings } from './persist';
+import { queuePersist, queuePersistSettings, repoByTable } from './persist';
+import { emitLocalWrite } from '../db/sync/signal';
 import { DEFAULT_SETTINGS } from './defaults';
 import {
   invertChange,
@@ -19,7 +19,13 @@ import {
   type Command,
   type DataBundle,
   type EntityMaps,
+  type TableName,
 } from './types';
+
+/** 云同步拉取的应用载荷：每表一批 put（存活实体）+ delete（远端已删的 id） */
+export type RemoteOps = Partial<
+  Record<TableName, { puts: SyncableEntity[]; deletes: string[] }>
+>;
 
 const HISTORY_LIMIT = 100; // SPEC 要求 ≥50 步
 
@@ -64,6 +70,8 @@ export interface StoreState extends EntityMaps {
   replaceAllData: (bundle: DataBundle) => Promise<void>;
   /** 内存全量数据打包（JSON 导出用） */
   exportBundle: () => DataBundle;
+  /** 云同步拉取结果并入内存：不进 undo 栈、不触发落库（Dexie 由同步引擎自行写入） */
+  applyRemote: (ops: RemoteOps) => void;
 }
 
 export const useStore = create<StoreState>()((set, get) => ({
@@ -144,15 +152,20 @@ export const useStore = create<StoreState>()((set, get) => ({
   },
 
   replaceAllData: async (bundle) => {
-    await clearAllData();
-    await Promise.all([
-      goalRepo.bulkPut(bundle.goals),
-      taskRepo.bulkPut(bundle.tasks),
-      milestoneRepo.bulkPut(bundle.milestones),
-      checkInRepo.bulkPut(bundle.checkIns),
-      exemptionRepo.bulkPut(bundle.exemptions),
-      reviewRepo.bulkPut(bundle.reviews),
-    ]);
+    // 墓碑式清库：被替换掉的行打 deletedAt 保留而非物理清空，
+    // 云同步才能把「清空/导入」造成的删除传播到其它设备（30 天后由同步引擎真删）
+    const state = get();
+    const deletedAt = new Date().toISOString();
+    await Promise.all(
+      TABLE_NAMES.map((t) => {
+        const keep = new Set(bundle[t].map((e) => e.id));
+        const tombstones = (Object.values(state[t]) as SyncableEntity[])
+          .filter((e) => !keep.has(e.id))
+          .map((e) => ({ ...e, deletedAt }));
+        return repoByTable[t].bulkPut([...tombstones, ...(bundle[t] as SyncableEntity[])]);
+      }),
+    );
+    emitLocalWrite();
     set({
       goals: toMap(bundle.goals),
       tasks: toMap(bundle.tasks),
@@ -172,6 +185,22 @@ export const useStore = create<StoreState>()((set, get) => ({
       bundle[table] = Object.values(state[table]);
     }
     return bundle as unknown as DataBundle;
+  },
+
+  applyRemote: (ops) => {
+    set((state) => {
+      // 只拷贝受影响的表，未动实体保持引用（per-goal 派生缓存约定）
+      const updated: Partial<Record<TableName, Record<string, SyncableEntity>>> = {};
+      for (const t of TABLE_NAMES) {
+        const op = ops[t];
+        if (!op || (op.puts.length === 0 && op.deletes.length === 0)) continue;
+        const map = { ...(state[t] as Record<string, SyncableEntity>) };
+        for (const e of op.puts) map[e.id] = e;
+        for (const id of op.deletes) delete map[id];
+        updated[t] = map;
+      }
+      return updated as Partial<EntityMaps>;
+    });
   },
 }));
 
