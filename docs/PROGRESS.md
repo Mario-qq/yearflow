@@ -127,5 +127,48 @@
 - **筛选 hideOthers 的过滤 map 必须 useMemo 保引用**，否则 useGanttDerive 顶层引用比较失效导致全量重算；淡出用 wrapper div opacity（不动 layout）
 - 种子数据里 status=done 但 progressMode=auto 的任务 effectiveProgress 按打卡计算（可能为 0）——bar 以降饱和+✓ 标识 done，进度列如实显示 auto 值（口径与 Phase 2 一致）
 
-## Phase 4 — 打卡与复盘 【未开始】
+## Phase 4 — 打卡与复盘 【已完成 2026-07-17】
+
+分五个子批次实现（每批 tsc/oxlint/vitest 全绿 + 浏览器实测后提交）：
+
+### ① 打卡域 actions + 今日打卡面板完全体
+- [x] actions：setCheckIn（同目标同日 upsert 原位更新，保 id/createdAt）/patchCheckIn/removeCheckIn/findCheckIn
+- [x] 派生 derive/dayPanel.ts：dayEntries（当日应打卡条目，免打卡区间保留标 exempt+reason）+ dayCompletionRate（skipped/休息中不入分母），10 个新单测
+- [x] 打卡页：日期+第N天+年度进度细条、最近 7 天完成率小环日历（点击切日补卡 + 回到今天）、按目标三大按钮点击即存（spring 微缩放 + FLIP 滑向已完成分组）、展开分钟 chips(15/30/60/90/自定义)+一句话备注、昨日缺卡入口、休息中徽标、全部完成 🎉+streak 汇总+按日轮换鼓励语
+- [x] 实测：打卡/改状态/再点同状态取消、分钟与备注即存、undo 单命令还原、分组 FLIP 动效
+
+### ② 甘特图打卡点就地 popover
+- [x] 点阵透明命中区（≤今天，半径随日宽自适应不超半列，svg overflow:visible 保命中）
+- [x] CheckinPopover：状态按钮+分钟 chips+备注+删除记录，点外部/Esc 即关（capture 拦截不误清多选），portal 定位 clamp 视口
+- [x] body pointerdown 对 [data-checkin-dot] 放行（不误触框选）；dev 暴露 window.__ganttUi
+
+### ③ 批量补卡 + 免打卡区间管理
+- [x] batchCheckIn：日期范围×目标，只补「应打卡且无记录」（免打卡/已有记录跳过），dryRun 实时预览，一条命令一次 undo（实测 140→144→undo→redo 往返）
+- [x] BackfillDialog（打卡页入口）：日期范围 + 目标 chips + done/skipped + 将补 N 条预览
+- [x] ExemptionManager（设置页）：行内编辑即存（起止/原因/目标范围 chips，全选=缺省全部）、进行中徽标、添加/删除；createExemption 增 goalIds、updateExemption/deleteExemption
+
+### ④ 月度复盘页 + 年度总览
+- [x] 派生 derive/review.ts：monthlyGoalStats（月并集应打卡/score/rate/minutes/缺卡）、dailyActivityScores（热力图日分值，同目标同日取最强）、minutesByGoalByMonth，5 个新单测（合计 83 全绿）
+- [x] saveReview 按月 upsert（内容/星评无变化不产生命令）；笔记+1-5 星防抖 800ms 自动保存
+- [x] 月度复盘：完成率横条（+时长/缺卡列）、本月甘特只读缩略（任务 span+逐日热度格+周末纹+今日线）、GitHub 年度热力图（四档 alpha 按年最大值归一，全部/单目标切换）、streak 榜、上/下月切换
+- [x] 年度总览：recharts 堆叠面积图（目标令牌色、主题化 tooltip、图例）、任务完成数、里程碑时间线（达成实心✓、标签交错）、基线偏移排行
+- [x] recharts 仅进 ReviewPage 懒加载分包（主包 532KB / review 分包 366KB）；色板过 dataviz 六项验证（浅色全过；深色 CVD/对比度过，lightness band 为风格项不动令牌）
+
+### ⑤ 移动端适配 + PWA + 截图门槛
+- [x] 底部 tab 导航（<768px，icon+label，≥44px 触达，safe-area），顶栏 nav/工具栏/? 移动端隐藏；默认路由落打卡页
+- [x] 甘特移动端只读月视图：进入强制 month 档（一次性）、左栏收 24px rail、禁 bar 拖拽/框选/右键长按，保留横滚+点打卡点 popover
+- [x] 触摸双指缩放进 useZoomAnimation：两指间距比例→dayWidth、锚定两指中点、松手吸附档位；scroller touch-action: pan-x pan-y
+- [x] PWA：vite-plugin-pwa（autoUpdate）+ manifest（standalone/主题色/192/512/maskable）+ apple-touch-icon；scripts/gen-icons.mjs 由 icon.svg 生成 PNG；scripts/check-pwa.mjs 实测 manifest 可达 + SW activated
+- [x] 截图门槛：scripts/capture-phase4.mjs → docs/screenshots/phase4/（打卡/复盘月度/复盘年度 × 深浅 6 张 + popover/补卡/免打卡特写 3 张 + 移动端 2 张，含移动端断言）
+
+### 关键决策（Phase 5 需知）
+- **打卡口径**：目标级一天一条有效记录（同日多条取最强 done>partial>skipped）；upsert 原位更新保 id/createdAt；再点同状态=删除记录（toggle-off）
+- **面板与甘特 popover 共用 actions**（setCheckIn/patchCheckIn/removeCheckIn），无记录时选分钟/写备注自动生成 done 记录
+- 批量补卡的 dryRun 与写入同一函数（batchCheckIn 第二参），预览与提交零口径漂移
+- 复盘笔记走 execute 进 undo（防抖 800ms 合并击键）；无变化早退不污染 undo 栈
+- **浏览器面板同步读 DOM 会读到 React 提交前的旧渲染**（面板下 scheduler 时序），验证一律「一次调用做操作、下一次调用读结果」，或直接读 zustand 状态
+- settings 落库防抖 500ms：截图脚本切主题后必须等 ~700ms 再整页跳转，否则回读旧主题
+- vite dev server 读 PORT 环境变量（预览代理需要）；launch.json autoPort: true
+- 移动端判定用 useIsMobile（matchMedia 767px + useSyncExternalStore）；强制月档只在进入时一次，双指缩放后不反复覆盖
+
 ## Phase 5 — 云同步与部署 【未开始，等 Supabase 凭据】

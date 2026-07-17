@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
+import { useIsMobile } from '../lib/useIsMobile';
 import type { Goal, Task } from '../types/domain';
 import { createMilestone, createTask, deleteTasks } from '../store/actions';
 import { showToast } from '../lib/toast';
@@ -73,8 +74,20 @@ export default function GanttView() {
   const showDependencies = useStore((s) => s.settings.ganttView.showDependencies);
   const showBaseline = useStore((s) => s.settings.ganttView.showBaseline);
   const filter = useStore((s) => s.settings.ganttView.filter);
-  const leftW = gridCollapsed ? GRID_RAIL_W : gridWidth;
+  // 移动端（SPEC 第五节）：只读月视图——左栏收成 rail、禁拖拽编辑，保留横滚/双指缩放/点打卡点
+  const isMobile = useIsMobile();
+  const effCollapsed = gridCollapsed || isMobile;
+  const leftW = effCollapsed ? GRID_RAIL_W : gridWidth;
   const navigate = useNavigate();
+
+  // 移动端进入时落月视图（双指缩放后可自行调整，不反复强制）
+  const mobileZoomInit = useRef(false);
+  useEffect(() => {
+    if (!isMobile || mobileZoomInit.current) return;
+    mobileZoomInit.current = true;
+    const { settings, updateGanttView } = useStore.getState();
+    if (settings.ganttView.zoom !== 'month') updateGanttView({ zoom: 'month' });
+  }, [isMobile]);
 
   // 筛选（SPEC 4.6）：缺省淡出不匹配行；hideOthers 才真正从布局收起
   const filterActive = (filter.status?.length ?? 0) > 0 || (filter.goalIds?.length ?? 0) > 0;
@@ -125,6 +138,8 @@ export default function GanttView() {
   // 十字定位/定位跳转的事件回调经 ref 读最新 scale/layout（不随高频 hover 重建）
   const scaleRef = useRef(scale);
   scaleRef.current = scale;
+  const isMobileRef = useRef(isMobile);
+  isMobileRef.current = isMobile;
   const layoutRef = useRef<RowLayout>(layout);
   layoutRef.current = layout;
 
@@ -139,6 +154,7 @@ export default function GanttView() {
   // body pointerdown 分流：任务/幽灵行空白 = 框选新建；目标行/行外空白 = 框选多选
   const onBodyPointerDown = useCallback(
     (e: React.PointerEvent) => {
+      if (isMobile) return; // 移动端只读：不框选新建/多选
       if (e.button !== 0) return;
       const target = e.target as HTMLElement;
       if (target.closest('[data-task-bar],[data-milestone],[data-create-bubble],[data-checkin-dot]')) return;
@@ -148,12 +164,13 @@ export default function GanttView() {
       if (row && (row.kind === 'task' || row.kind === 'ghost')) onCreateDown(e);
       else onMarqueeDown(e);
     },
-    [onCreateDown, onMarqueeDown],
+    [onCreateDown, onMarqueeDown, isMobile],
   );
 
   // 右键菜单：bar → 任务菜单（记录右键日期供「从此日拆分」）；空白 → 时间轴菜单
   const onBodyContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
+    if (isMobileRef.current) return; // 移动端只读：长按不出编辑菜单
     const body = bodyRef.current;
     if (!body) return;
     const s = scaleRef.current;
@@ -459,6 +476,9 @@ export default function GanttView() {
     });
   }, []);
 
+  // 移动端只读：拖拽入口换成空操作（bar 移动/resize/连接柄）
+  const noopDrag = useCallback(() => {}, []);
+
   const hoverTask = anchor ? tasks[anchor.taskId] : undefined;
   const hoverGg = hoverTask ? derive.get(hoverTask.goalId) : undefined;
   const hoverTg = hoverTask ? hoverGg?.perTask.get(hoverTask.id) : undefined;
@@ -469,7 +489,12 @@ export default function GanttView() {
         <div
           ref={scrollerRef}
           className="h-full overflow-auto"
-          style={{ background: 'var(--bg-base)', overscrollBehavior: 'contain' }}
+          style={{
+            background: 'var(--bg-base)',
+            overscrollBehavior: 'contain',
+            // 双指捏合走 pointer events（不触发浏览器页面缩放），单指仍可平移滚动
+            touchAction: 'pan-x pan-y',
+          }}
         >
           <div style={{ width: leftW + scale.totalWidth }}>
             {/* 表头行 */}
@@ -484,7 +509,7 @@ export default function GanttView() {
                   borderBottom: '1px solid var(--border-default)',
                 }}
               >
-                <GridHeader collapsed={gridCollapsed} />
+                <GridHeader collapsed={effCollapsed} />
               </div>
               <TimelineHeader
                 width={scale.totalWidth}
@@ -508,7 +533,7 @@ export default function GanttView() {
                 derive={derive}
                 today={today}
                 leftW={leftW}
-                collapsed={gridCollapsed}
+                collapsed={effCollapsed}
                 dimTaskIds={dimTaskIds}
                 dimGoalIds={dimGoalIds}
                 onLocateTask={locateTask}
@@ -555,8 +580,8 @@ export default function GanttView() {
                   dimTaskIds={dimTaskIds}
                   dimGoalIds={dimGoalIds}
                   onBarHover={onBarHover}
-                  onBarDragStart={onBarDragStart}
-                  onDepDragStart={onDepDragStart}
+                  onBarDragStart={isMobile ? noopDrag : onBarDragStart}
+                  onDepDragStart={isMobile ? noopDrag : onDepDragStart}
                   onDotClick={onDotClick}
                 />
                 {/* 依赖连线（全局开关，SVG 命中区可点删）+ 拖出中的临时虚线 */}

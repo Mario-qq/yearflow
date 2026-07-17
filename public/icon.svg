@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- YearFlow PWA 图标：深底 + 三根目标色甘特 bar + 今日线 -->
+  <rect width="512" height="512" rx="96" fill="#17171c"/>
+  <rect x="88" y="128" width="212" height="56" rx="20" fill="#5b93ea"/>
+  <rect x="152" y="228" width="272" height="56" rx="20" fill="#eb9440"/>
+  <rect x="112" y="328" width="168" height="56" rx="20" fill="#2fbc8c"/>
+  <rect x="332" y="96" width="10" height="320" rx="5" fill="#e05d52"/>
+</svg>

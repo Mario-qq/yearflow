@@ -15,11 +15,41 @@ import SettingsPage from './pages/SettingsPage';
 const ReviewPage = lazy(() => import('./pages/ReviewPage'));
 
 const NAV = [
-  { to: '/gantt', label: '甘特图' },
-  { to: '/checkin', label: '打卡' },
-  { to: '/review', label: '复盘' },
-  { to: '/settings', label: '设置' },
+  { to: '/gantt', label: '甘特图', icon: '📊' },
+  { to: '/checkin', label: '打卡', icon: '✓' },
+  { to: '/review', label: '复盘', icon: '📈' },
+  { to: '/settings', label: '设置', icon: '⚙' },
 ];
+
+/** 移动端底部 tab 导航（SPEC 第五节）：打卡 / 甘特图 / 复盘 / 设置，≥44px 触达 */
+function MobileTabBar() {
+  return (
+    <nav
+      className="flex shrink-0 border-t md:hidden"
+      style={{
+        borderColor: 'var(--border-default)',
+        background: 'var(--bg-panel)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
+    >
+      {NAV.map((item) => (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          className="flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5"
+          style={({ isActive }) => ({
+            color: isActive ? 'var(--accent)' : 'var(--text-tertiary)',
+          })}
+        >
+          <span aria-hidden style={{ fontSize: 'var(--font-16)', lineHeight: 1 }}>
+            {item.icon}
+          </span>
+          <span style={{ fontSize: 'var(--font-11)' }}>{item.label}</span>
+        </NavLink>
+      ))}
+    </nav>
+  );
+}
 
 const THEME_LABEL = { light: '浅色', dark: '深色', system: '跟随系统' } as const;
 const THEME_NEXT = { light: 'dark', dark: 'system', system: 'light' } as const;
@@ -113,7 +143,7 @@ export default function App() {
           <span className="font-semibold" style={{ fontSize: 'var(--font-16)' }}>
             YearFlow
           </span>
-          <nav className="flex items-center gap-1">
+          <nav className="flex items-center gap-1 max-md:hidden">
             {NAV.map((item) => (
               <NavLink
                 key={item.to}
@@ -130,14 +160,14 @@ export default function App() {
               </NavLink>
             ))}
           </nav>
-          <div className="flex flex-1 justify-center">
+          <div className="flex flex-1 justify-center max-md:hidden">
             <GanttToolbarSlot />
           </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setHelpOpen(true)}
-              className="cursor-pointer px-2 py-1"
+              className="cursor-pointer px-2 py-1 max-md:hidden"
               style={{
                 fontSize: 'var(--font-12)',
                 color: 'var(--text-secondary)',
@@ -183,6 +213,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
+        <MobileTabBar />
         <Toasts />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} />

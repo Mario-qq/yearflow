@@ -152,6 +152,78 @@ export function useZoomAnimation(
     };
   }, [scrollerRef, runTween]);
 
+  // 触摸双指缩放（SPEC 第五节移动端）：两指间距比例 → dayWidth，锚定两指中点，松手吸附档位
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const touches = new Map<number, { x: number; y: number }>();
+    let pinch: { startDist: number; startW: number } | null = null;
+
+    const dist = () => {
+      const [a, b] = [...touches.values()];
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    };
+    const snapToNearest = () => {
+      const w = dayWidthRef.current;
+      const nearest = nearestZoom(w);
+      const { settings, updateGanttView } = useStore.getState();
+      if (settings.ganttView.zoom !== nearest) {
+        updateGanttView({ zoom: nearest });
+      } else if (w !== ZOOM_DAY_WIDTH[nearest]) {
+        anchorRef.current = wheelAnchorRef.current;
+        wheelAnchorRef.current = null;
+        runTween(w, ZOOM_DAY_WIDTH[nearest]);
+      }
+    };
+
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size === 2) {
+        cancelRef.current?.();
+        cancelRef.current = null;
+        pinch = { startDist: dist(), startW: dayWidthRef.current };
+      }
+    };
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch' || !touches.has(e.pointerId)) return;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (!pinch || touches.size !== 2) return;
+      e.preventDefault();
+      const from = dayWidthRef.current;
+      const next = Math.max(MIN_W, Math.min(MAX_W, pinch.startW * (dist() / pinch.startDist)));
+      if (next === from) return;
+      const [a, b] = [...touches.values()];
+      const rect = el.getBoundingClientRect();
+      const midTlX = Math.max(0, (a.x + b.x) / 2 - rect.left - leftWRef.current);
+      const anchorX = el.scrollLeft + midTlX;
+      const anchor = { dayFloat: anchorX / from, screenX: midTlX };
+      anchorRef.current = anchor;
+      wheelAnchorRef.current = anchor;
+      setDayWidth(next);
+      dayWidthRef.current = next;
+    };
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
+      touches.delete(e.pointerId);
+      if (pinch && touches.size < 2) {
+        pinch = null;
+        snapToNearest();
+      }
+    };
+
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
+    };
+  }, [scrollerRef, runTween]);
+
   useLayoutEffect(() => {
     const a = anchorRef.current;
     const el = scrollerRef.current;
