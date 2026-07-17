@@ -71,6 +71,61 @@
 - bar 标签测宽用离屏 canvas（`gantt/lib/textWidth.ts` 按字符串缓存）；done 降饱和 = color-mix 55% 向 --bg-panel
 - mini-map 在 scroller 之外（flex column 底部），取景框同步不走 React state；dev 全局 `window.__store` 供控制台/Playwright 脚本操作 store（生产剔除）
 - setPointerCapture 一律 try/catch（合成事件/指针已释放会抛 NotFoundError）
-## Phase 3 — 交互与编辑 【未开始】
+## Phase 3 — 交互与编辑 【已完成 2026-07-17】
+
+分五个子批次实现（每批 tsc/oxlint/vitest 全绿 + 浏览器 JS 度量实测后提交）：
+
+### ① 交互地基 + 左侧任务网格完全体
+- [x] Ctrl+滚轮以鼠标为锚连续缩放（[年,周] 区间 log 插值），静默 180ms 吸附最近档位；空格抓手平移
+- [x] hover 十字定位：表头日期高亮 + 行/列淡背景横贯两侧（uiStore 细粒度订阅，pointermove 零整树重渲）
+- [x] 左栏多列（名称/起止/进度/状态 + 可选打卡率/偏移），列宽拖调、⚙/右键列显隐菜单，全部持久化
+- [x] 行内编辑即存进 undo：改名 / 进度（auto 任务输入即转 manual）/ 状态点循环切换
+- [x] 目标行：折叠箭头 + 本月完成率迷你环形（新增 goalMonthlyRate 派生 + 单测）+ 🔥streak + 任务数
+- [x] 左右联动：行 hover ↔ bar 目标色描边；点击左行空白定位 bar（水平+垂直带入视口）并闪烁
+- [x] 分组末尾幽灵行「+ 添加任务」（hover 分组浮现）、底部常驻「+ 新建目标」、分隔条拖宽（双击复位）、纯图模式（24px 轨）
+- [x] store/actions.ts：Phase 3 起所有 UI 写入唯一入口（含级联软删除/批量单命令）
+
+### ② bar 拖拽 / resize / 跨泳道 / 框选新建 / 里程碑
+- [x] 拖拽内核 dragCore（3px 阈值 / pointer capture / Esc 取消）+ dragHint 浮动日期气泡（直写 DOM 单例）
+- [x] bar 移动：原位 30% 虚影、transform 连续跟手、提交吸附到天、拖近边缘匀速自动滚动（rAF 循环补偿 scrollLeft 位移）、120ms 落位动画
+- [x] 左右缘 8px resize 热区（col-resize，最短 1 天，窄 bar 自动隐藏热区）；跨泳道垂直拖拽改 goalId（目标行高亮，提示追加目标名，order 排末尾）
+- [x] 框选新建：任务/幽灵行空白水平拖 → 虚线预览条 → 迷你名称气泡回车创建（Esc/失焦取消）
+- [x] 里程碑拖动吸附改日期、单击切换 achieved；实测浏览器全链路（+7 天移动/Esc 复原/undo label）
+
+### ③ 多选 / 批量操作条 / 右键菜单 / undo toast
+- [x] 多选：点选独占、Ctrl 增减、Shift 按行序连续、目标行/行外空白框选矩形实时命中；accent 双层描边；Esc/空白单击清除
+- [x] 批量操作条（底部浮动）：数量、±N 天平移、改状态、改目标、删除——均一条命令一次 undo
+- [x] bar 右键：编辑详情/标记完成/暂停恢复/复制并顺延（FS 依赖+「续」名）/从此日拆分（一条命令双 change）/保存为基线/删除；右键落在多选集内自动批量语义
+- [x] 空白右键：在此日新建任务（命中行目标）/新建里程碑/添加免打卡区间
+- [x] 全局 Ctrl+Z / Ctrl+Shift+Z(Y)，左下角 toast 显示被撤销命令摘要
+
+### ④ 依赖连线 / 基线 / 任务详情抽屉
+- [x] DependencyLayer：FS 圆角折线（正向走中线，回绕走行间通道）+ 箭头；灰→hover 相关任务变目标色→冲突（后继开始<前置结束）红色；透明加粗命中区点击删除
+- [x] 连接柄：hover bar 两端圆点拖出虚线（吸附目标 bar 变实线）建立依赖；右柄=作为前置，左柄=作为后继
+- [x] 基线：顶栏「保存基线」全量快照（一条命令）+ 连线/基线开关；bar 下 4px 灰色原计划条
+- [x] 任务详情抽屉 380px 滑出（200ms）：全字段编辑即存（名称/目标/起止/状态/进度模式/打卡规则含自定义星期/依赖管理/基线/备注/删除）
+- [x] 实测：冲突红线、点击删线、柄拖建依赖、抽屉开关与字段全绿
+
+### ⑤ 命令面板 / 快捷键 / 聚焦 / 筛选 / PNG 导出
+- [x] 命令面板（/ 或 Ctrl+K）：模糊搜任务/目标/命令（切月/缩放/导出/基线/导航），回车跳转+闪烁定位（跨页 navigate 后延时 emit）
+- [x] 快捷键全套：T/+−/←→(Shift=月)/B/D/N/M/Del/Esc + 顶栏 ? 速查表（Shift+/）
+- [x] 聚焦模式：双击目标行 → 其余折叠为汇总条 + 自动选档滚到该目标时间范围；再双击完整恢复折叠与缩放
+- [x] 筛选：状态/目标多选；缺省两侧淡出（保持空间感），「仅显示匹配项」才收起；mini-map/依赖线同步过滤
+- [x] PNG 导出（含左侧网格）：离屏克隆 + sticky transform 补偿，仅光栅化视口大小画布；Playwright 真实 Chrome 验证下载成功
+- [x] 性能抽查（10 目标×8 任务×180 天打卡=1890 实体）：注入+重渲 389ms、缩放切换 35ms（<150ms 门槛）
+- [x] 截图门槛：`scripts/capture-phase3.mjs` 四档×深浅 8 张 + 特写 5 张 → docs/screenshots/phase3/
+
+### 关键决策（Phase 4/5 需知）
+- **uiStore（gantt/uiStore.ts）与数据 store 分离**：hover/选择/行内编辑/拖拽/右键菜单/抽屉全是瞬态 zustand，细粒度 selector 订阅；不持久化不进 undo
+- **写入路径铁律**：UI 一律走 `store/actions.ts`（组装 Change[] → execute）；只构造受影响实体新对象，未动实体保持引用（per-goal 派生缓存依赖此约定）
+- **拖拽 60fps 实现**：拖拽中只直写被拖元素 style（move=transform、resize=left/width），React 仅在开始/结束渲染虚影；提示气泡是直写 DOM 单例（lib/dragHint）
+- **幽灵行进 rowLayout**（kind:'ghost'，24px 常驻空间、内容 hover 才显示）：跨泳道/框选命中都靠 rowAtY 二分
+- **左栏宽是动态 leftW**（gridWidth/gridCollapsed）贯穿 useViewport/useZoomAnimation/MiniMap/TimelineHeader，LEFT_W 常量已删除
+- **Ctrl+滚轮缩放**：setDayWidth 后必须同帧镜像 dayWidthRef（同帧多 wheel 事件才能叠加）；吸附经 wheelAnchorRef 把鼠标锚点交给档位切换 effect
+- **PNG 导出不能对整棵 content toCanvas**（周档 20440px×2 超 canvas 单边上限挂死）：离屏克隆 + 三个 sticky 元素 transform 补偿，只光栅化视口
+- **本机浏览器面板验证盲区**：html-to-image 的 resolve 包在 rAF 里 → 面板（document.hidden）下导出永挂，必须用 Playwright 真实 Chrome 验证
+- **筛选 hideOthers 的过滤 map 必须 useMemo 保引用**，否则 useGanttDerive 顶层引用比较失效导致全量重算；淡出用 wrapper div opacity（不动 layout）
+- 种子数据里 status=done 但 progressMode=auto 的任务 effectiveProgress 按打卡计算（可能为 0）——bar 以降饱和+✓ 标识 done，进度列如实显示 auto 值（口径与 Phase 2 一致）
+
 ## Phase 4 — 打卡与复盘 【未开始】
 ## Phase 5 — 云同步与部署 【未开始，等 Supabase 凭据】
