@@ -1,13 +1,15 @@
 /**
- * 任务 bar（SPEC 4.4）：左侧实色 = 进度，右侧 25% 透明 = 剩余；
+ * 任务 bar（SPEC 4.4 / 4.5）：左侧实色 = 进度，右侧 25% 透明 = 剩余；
  * done 降饱和 + ✓，paused 45° 斜纹，active 落后 → 右上角警示角标。
- * bar 是 timeline body 内叶子元素（Phase 3 拖拽 transform 直接落在此元素）。
+ * 交互：整体 pointerdown 拖拽移动；左右缘 8px 热区 resize；拖拽中提升 z 并抑制 tooltip。
+ * bar 是 timeline body 内叶子元素（拖拽 transform 直接落在此元素，不违反 sticky 铁律）。
  */
 import { memo } from 'react';
 import type { Task } from '../types/domain';
 import type { TaskGantt } from '../lib/derive';
 import { goalColor, goalColorAlpha } from '../lib/colors';
 import { useGanttUi } from './uiStore';
+import type { BarDragMode } from './hooks/useBarDrag';
 import { barLabelWidth } from './lib/textWidth';
 import {
   BAR_H,
@@ -16,6 +18,7 @@ import {
   BAR_TOP,
   BEHIND_BADGE,
   PAUSED_STRIPE_W,
+  RESIZE_HANDLE_W,
 } from './constants';
 
 interface Props {
@@ -28,12 +31,14 @@ interface Props {
   color: string;
   tg: TaskGantt;
   onHover: (taskId: string | null, e?: { clientX: number; clientY: number }) => void;
+  onDragStart: (e: React.PointerEvent, taskId: string, mode: BarDragMode) => void;
 }
 
-export const TaskBar = memo(function TaskBar({ task, rowTop, x, width, color, tg, onHover }: Props) {
+export const TaskBar = memo(function TaskBar({ task, rowTop, x, width, color, tg, onHover, onDragStart }: Props) {
   // 左右联动：hover 左侧行或本行任意处 → bar 加目标色描边；定位跳转 → 闪烁动画
   const linked = useGanttUi((s) => s.hoverRowId === task.id);
   const flashing = useGanttUi((s) => s.flashTaskId === task.id);
+  const dragging = useGanttUi((s) => s.dragTaskId === task.id);
   const solid = goalColor(color);
   const fill =
     task.status === 'done' ? `color-mix(in srgb, ${solid} 55%, var(--bg-panel))` : solid;
@@ -42,6 +47,7 @@ export const TaskBar = memo(function TaskBar({ task, rowTop, x, width, color, tg
   const inside = labelW + BAR_LABEL_PAD * 2 <= width;
   const fillW = (width * tg.effectiveProgress) / 100;
   const labelOnFill = inside && fillW >= labelW + BAR_LABEL_PAD * 2;
+  const showHandles = width >= RESIZE_HANDLE_W * 3;
 
   return (
     <>
@@ -55,13 +61,24 @@ export const TaskBar = memo(function TaskBar({ task, rowTop, x, width, color, tg
           height: BAR_H,
           borderRadius: 'var(--radius-md)',
           background: goalColorAlpha(color, BAR_REMAINDER_ALPHA),
-          boxShadow: linked
-            ? `inset 0 0 0 1px var(--bar-inner-stroke), 0 0 0 2px ${solid}`
-            : 'inset 0 0 0 1px var(--bar-inner-stroke)',
+          boxShadow: dragging
+            ? 'inset 0 0 0 1px var(--bar-inner-stroke), var(--shadow-lg)'
+            : linked
+              ? `inset 0 0 0 1px var(--bar-inner-stroke), 0 0 0 2px ${solid}`
+              : 'inset 0 0 0 1px var(--bar-inner-stroke)',
+          zIndex: dragging ? 10 : undefined,
           pointerEvents: 'auto',
+          touchAction: 'none',
         }}
-        onPointerEnter={(e) => onHover(task.id, { clientX: e.clientX, clientY: e.clientY })}
+        onPointerEnter={(e) => {
+          if (useGanttUi.getState().dragTaskId) return;
+          onHover(task.id, { clientX: e.clientX, clientY: e.clientY });
+        }}
         onPointerLeave={() => onHover(null)}
+        onPointerDown={(e) => {
+          onHover(null);
+          onDragStart(e, task.id, 'move');
+        }}
       >
         <div
           className="absolute bottom-0 left-0 top-0"
@@ -99,6 +116,29 @@ export const TaskBar = memo(function TaskBar({ task, rowTop, x, width, color, tg
               borderLeft: `${BEHIND_BADGE}px solid transparent`,
             }}
           />
+        )}
+        {/* 左右缘 resize 热区（8px，col-resize；窄 bar 不渲染避免吃掉移动热区） */}
+        {showHandles && (
+          <>
+            <div
+              className="absolute bottom-0 left-0 top-0"
+              style={{ width: RESIZE_HANDLE_W, cursor: 'col-resize' }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                onHover(null);
+                onDragStart(e, task.id, 'resize-l');
+              }}
+            />
+            <div
+              className="absolute bottom-0 right-0 top-0"
+              style={{ width: RESIZE_HANDLE_W, cursor: 'col-resize' }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                onHover(null);
+                onDragStart(e, task.id, 'resize-r');
+              }}
+            />
+          </>
         )}
       </div>
       {!inside && (

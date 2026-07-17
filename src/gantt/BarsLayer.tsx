@@ -10,6 +10,7 @@ import type { RowLayout } from './rowLayout';
 import { dateToX, type TimeScale } from './timeScale';
 import { diffDays, fmtDay, toDay } from '../lib/date';
 import { stableGroupBy } from '../lib/stableSlices';
+import type { BarDragMode } from './hooks/useBarDrag';
 import { TaskBar } from './TaskBar';
 import { CheckinDots } from './CheckinDots';
 import { HeatStrip } from './HeatStrip';
@@ -31,6 +32,7 @@ interface Props {
   today: string;
   collapsedGoalIds: string[];
   onBarHover: (taskId: string | null, e?: { clientX: number; clientY: number }) => void;
+  onBarDragStart: (e: React.PointerEvent, taskId: string, mode: BarDragMode) => void;
 }
 
 export const BarsLayer = memo(function BarsLayer({
@@ -47,6 +49,7 @@ export const BarsLayer = memo(function BarsLayer({
   today,
   collapsedGoalIds,
   onBarHover,
+  onBarDragStart,
 }: Props) {
   const prevMsRef = useRef<Map<string, Milestone[]>>(new Map());
   const milestonesByGoal = useMemo(() => {
@@ -103,6 +106,7 @@ export const BarsLayer = memo(function BarsLayer({
               color={goal.color}
               tg={tg}
               onHover={onBarHover}
+              onDragStart={onBarDragStart}
             />
             {heatMode ? (
               <HeatStrip

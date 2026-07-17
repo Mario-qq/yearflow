@@ -72,6 +72,16 @@ export const WHEEL_ZOOM_SNAP_MS = 180;
 /** 定位闪烁时长（左栏点击定位 bar / 命令面板跳转共用） */
 export const FLASH_MS = 1100;
 
+/** 拖拽（SPEC 4.5）：进入拖拽的位移阈值 / bar 左右缘 resize 热区宽 / 原位虚影透明度 */
+export const DRAG_THRESHOLD = 3;
+export const RESIZE_HANDLE_W = 8;
+export const GHOST_OPACITY = 0.3;
+/** 拖近视口边缘自动滚动：触发区宽与每帧最大速度 */
+export const EDGE_SCROLL_ZONE = 40;
+export const EDGE_SCROLL_MAX_SPEED = 14;
+/** 松手落位/Esc 归位动画时长（= tokens --dur-drop） */
+export const DUR_DROP_MS = 120;
+
 /** 今日线 */
 export const TODAY_LINE_W = 2;
 /** 表头今天日期的主色圆底直径 */

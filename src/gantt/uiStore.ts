@@ -17,11 +17,14 @@ interface GanttUiState {
   editing: { id: string; field: EditingField } | null;
   /** 定位闪烁的任务（点击左行 / 命令面板跳转），FLASH_MS 后自动清除 */
   flashTaskId: string | null;
+  /** 拖拽中的任务（bar 提升 z、抑制 tooltip、渲染原位虚影） */
+  dragTaskId: string | null;
 
   setHoverRow: (id: string | null) => void;
   setHoverCell: (rowId: string | null, dayIdx: number | null) => void;
   setEditing: (e: GanttUiState['editing']) => void;
   flashTask: (id: string) => void;
+  setDragTask: (id: string | null) => void;
 }
 
 let flashTimer: ReturnType<typeof setTimeout> | undefined;
@@ -31,6 +34,7 @@ export const useGanttUi = create<GanttUiState>()((set, get) => ({
   hoverDayIdx: null,
   editing: null,
   flashTaskId: null,
+  dragTaskId: null,
 
   setHoverRow: (id) => {
     if (get().hoverRowId !== id) set({ hoverRowId: id });
@@ -47,4 +51,5 @@ export const useGanttUi = create<GanttUiState>()((set, get) => ({
     set({ flashTaskId: id });
     flashTimer = setTimeout(() => set({ flashTaskId: null }), FLASH_MS);
   },
+  setDragTask: (dragTaskId) => set({ dragTaskId }),
 }));

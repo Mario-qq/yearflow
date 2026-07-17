@@ -2,16 +2,21 @@
  * 目标行时间轴侧（SPEC 4.3 / 4.4）：
  * - 汇总条：6px 细条覆盖子任务总时间范围，目标色 40% 透明度
  * - 折叠时：汇总条下方渲染聚合热度条（信息不丢失）
- * - 里程碑：14px 菱形 + 右侧 11px 名称；achieved 实心 + 勾
+ * - 里程碑：14px 菱形 + 右侧 11px 名称；achieved 实心 + 勾；
+ *   水平拖动改日期（吸附天 + 浮动日期提示），单击切换 achieved
  */
 import { memo } from 'react';
 import type { Goal, Milestone } from '../types/domain';
 import type { GoalGantt } from '../lib/derive';
 import { goalColor, goalColorAlpha } from '../lib/colors';
 import { dateToX, dayIndexOf, type TimeScale } from './timeScale';
-import { diffDays } from '../lib/date';
+import { diffDays, fmtDay, toDay } from '../lib/date';
+import { patchMilestone } from '../store/actions';
+import { startPointerDrag } from './lib/dragCore';
+import { showDragHint, hideDragHint, fmtDayHint } from './lib/dragHint';
 import { HeatStrip } from './HeatStrip';
 import {
+  DUR_DROP_MS,
   MILESTONE_D,
   MILESTONE_LABEL_GAP,
   ROW_H_GOAL,
@@ -73,8 +78,63 @@ export const GoalSummary = memo(function GoalSummary({
         const cx = (idx + 0.5) * scale.dayWidth;
         const cy = rowTop + ROW_H_GOAL / 2;
         const d = MILESTONE_D;
+
+        /** 拖动改日期（吸附天）；未越阈值的单击切换 achieved */
+        const onPointerDown = (e: React.PointerEvent) => {
+          if (e.button !== 0) return;
+          const el = e.currentTarget as HTMLElement;
+          let deltaDays = 0;
+          startPointerDrag(e, {
+            onMove: (s) => {
+              const dx = s.clientX - s.startClientX;
+              deltaDays = Math.round(dx / scale.dayWidth);
+              el.style.transform = `translateX(${dx}px)`;
+              showDragHint(s.clientX, s.clientY, fmtDayHint(fmtDay(toDay(m.date).add(deltaDays, 'day'))));
+            },
+            onEnd: (s, committed) => {
+              hideDragHint();
+              if (!s.started) {
+                // 单击：切换达成状态
+                patchMilestone(
+                  m.id,
+                  { achieved: !m.achieved },
+                  `里程碑「${m.name}」${m.achieved ? '取消达成' : '标记达成'}`,
+                );
+                return;
+              }
+              if (!committed || deltaDays === 0) {
+                el.style.transition = `transform ${DUR_DROP_MS}ms var(--ease)`;
+                el.style.transform = 'translateX(0px)';
+                setTimeout(() => {
+                  el.style.transition = '';
+                }, DUR_DROP_MS);
+                return;
+              }
+              // 吸附落位动画 → 提交
+              el.style.transition = `transform ${DUR_DROP_MS}ms var(--ease)`;
+              el.style.transform = `translateX(${deltaDays * scale.dayWidth}px)`;
+              setTimeout(() => {
+                el.style.transition = '';
+                el.style.transform = '';
+                patchMilestone(
+                  m.id,
+                  { date: fmtDay(toDay(m.date).add(deltaDays, 'day')) },
+                  `移动里程碑「${m.name}」`,
+                );
+              }, DUR_DROP_MS);
+            },
+          });
+        };
+
         return (
-          <div key={m.id} className="absolute" style={{ top: cy - d / 2, left: cx - d / 2 }}>
+          <div
+            key={m.id}
+            data-milestone={m.id}
+            className="absolute cursor-pointer"
+            style={{ top: cy - d / 2, left: cx - d / 2, pointerEvents: 'auto', touchAction: 'none' }}
+            title={`${m.name} · ${m.date}${m.achieved ? ' ✓' : ''}（拖动改期，单击切换达成）`}
+            onPointerDown={onPointerDown}
+          >
             <svg width={d} height={d} aria-hidden>
               <polygon
                 points={`${d / 2},0.75 ${d - 0.75},${d / 2} ${d / 2},${d - 0.75} 0.75,${d / 2}`}

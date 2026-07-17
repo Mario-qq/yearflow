@@ -25,6 +25,10 @@ import { useZoomAnimation } from './hooks/useZoomAnimation';
 import { useGanttDerive } from './hooks/useGanttDerive';
 import { useBarTooltip } from './hooks/useBarTooltip';
 import { useSpacePan, startGrabPan } from './hooks/useSpacePan';
+import { useBarDrag } from './hooks/useBarDrag';
+import { useCreateDrag } from './hooks/useCreateDrag';
+import { CreateOverlay } from './CreateDrag';
+import { goalColorAlpha } from '../lib/colors';
 import { useGanttUi } from './uiStore';
 import { onGantt } from './bus';
 import { GridBackground } from './GridBackground';
@@ -37,7 +41,7 @@ import { GridHeader } from './grid/GridHeader';
 import { BarTooltip } from './BarTooltip';
 import { MiniMap } from './MiniMap';
 import { RowHoverOverlay, ColumnHoverOverlay } from './HoverLayers';
-import { GRID_RAIL_W, HEADER_H } from './constants';
+import { BAR_H, BAR_TOP, GHOST_OPACITY, GRID_RAIL_W, HEADER_H } from './constants';
 
 export default function GanttView() {
   const goals = useStore((s) => s.goals);
@@ -73,6 +77,8 @@ export default function GanttView() {
   const today = todayStr();
   const derive = useGanttDerive(goals, tasks, checkIns, exemptions, today, weekStartsOn);
   const { anchor, onBarHover } = useBarTooltip();
+  const { onBarDragStart, ghost } = useBarDrag({ scrollerRef, bodyRef, scaleRef, layoutRef, leftW });
+  const { onBodyPointerDown, preview, pending, clearPending } = useCreateDrag({ bodyRef, scaleRef, layoutRef });
   const [visStart, visEnd] = visibleDayRange(scale, win.xStart, win.xEnd);
   const [rowStart, rowEnd] = visibleRowRange(layout, win.yStart, win.yEnd);
   const ticks = useMemo(
@@ -219,6 +225,7 @@ export default function GanttView() {
                 }}
                 onPointerMove={onBodyPointerMove}
                 onPointerLeave={onBodyPointerLeave}
+                onPointerDown={onBodyPointerDown}
               >
                 <GridBackground
                   width={scale.totalWidth}
@@ -244,11 +251,28 @@ export default function GanttView() {
                   today={today}
                   collapsedGoalIds={collapsedGoalIds}
                   onBarHover={onBarHover}
+                  onBarDragStart={onBarDragStart}
                 />
-                {/* Overlay：今日线（拖拽虚影、依赖连线也落此层） */}
+                {/* Overlay：今日线 + 拖拽原位虚影（依赖连线也落此层） */}
                 <div className="pointer-events-none absolute inset-0">
                   {todayX != null && <TodayLine x={todayX} />}
+                  {ghost && (
+                    <div
+                      className="absolute"
+                      style={{
+                        top: ghost.rowTop + BAR_TOP,
+                        left: ghost.x,
+                        width: ghost.width,
+                        height: BAR_H,
+                        borderRadius: 'var(--radius-md)',
+                        background: goalColorAlpha(ghost.color, 100),
+                        opacity: GHOST_OPACITY,
+                      }}
+                    />
+                  )}
                 </div>
+                {/* 框选新建：预览条 + 名称气泡 */}
+                <CreateOverlay preview={preview} pending={pending} dayWidth={scale.dayWidth} onDone={clearPending} />
               </div>
             </div>
           </div>
