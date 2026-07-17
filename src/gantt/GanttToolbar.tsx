@@ -8,6 +8,7 @@ import type { GanttZoom } from '../types/domain';
 import { saveBaselineAll } from '../store/actions';
 import { showToast } from '../lib/toast';
 import { emitGantt } from './bus';
+import { FilterMenu } from './FilterMenu';
 
 const ZOOM_OPTIONS: { key: GanttZoom; label: string }[] = [
   { key: 'year', label: '年' },
@@ -128,6 +129,8 @@ export function GanttToolbar() {
         今天
       </button>
 
+      <FilterMenu />
+
       <div className="flex items-center gap-1">
         <ToggleBtn
           on={showDependencies}
@@ -154,6 +157,15 @@ export function GanttToolbar() {
           }}
         >
           保存基线
+        </button>
+        <button
+          type="button"
+          className="cursor-pointer hover:bg-subtle"
+          style={ghostBtn}
+          title="导出当前视图 PNG（含左侧网格）"
+          onClick={() => emitGantt('export-png')}
+        >
+          导出
         </button>
       </div>
     </div>

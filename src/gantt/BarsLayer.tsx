@@ -3,7 +3,7 @@
  * 点阵/热度模式由连续 dayWidth 判定（缩放动画中自然切换）。
  * 容器 pointer-events-none，仅 bar 自身可交互（tooltip / Phase 3 拖拽）。
  */
-import { Fragment, memo, useMemo, useRef } from 'react';
+import { memo, useMemo, useRef } from 'react';
 import type { Goal, Milestone, Task } from '../types/domain';
 import type { GoalGantt } from '../lib/derive';
 import type { RowLayout } from './rowLayout';
@@ -34,6 +34,9 @@ interface Props {
   collapsedGoalIds: string[];
   /** 显示基线对比（bar 下 4px 灰色原计划条） */
   showBaseline: boolean;
+  /** 筛选淡出集合（hideOthers 时为空集） */
+  dimTaskIds: Set<string>;
+  dimGoalIds: Set<string>;
   onBarHover: (taskId: string | null, e?: { clientX: number; clientY: number }) => void;
   onBarDragStart: (e: React.PointerEvent, taskId: string, mode: BarDragMode) => void;
   onDepDragStart: (e: React.PointerEvent, taskId: string, side: DepHandleSide) => void;
@@ -53,6 +56,8 @@ export const BarsLayer = memo(function BarsLayer({
   today,
   collapsedGoalIds,
   showBaseline,
+  dimTaskIds,
+  dimGoalIds,
   onBarHover,
   onBarDragStart,
   onDepDragStart,
@@ -84,7 +89,7 @@ export const BarsLayer = memo(function BarsLayer({
           const goal = goals[r.id];
           const gg = derive.get(r.id);
           if (!goal || !gg) return null;
-          return (
+          const summary = (
             <GoalSummary
               key={r.id}
               goal={goal}
@@ -95,6 +100,13 @@ export const BarsLayer = memo(function BarsLayer({
               scale={scale}
             />
           );
+          return dimGoalIds.has(r.id) ? (
+            <div key={r.id} style={{ opacity: 0.3 }}>
+              {summary}
+            </div>
+          ) : (
+            summary
+          );
         }
         const task = tasks[r.id];
         const goal = goals[r.goalId];
@@ -102,8 +114,9 @@ export const BarsLayer = memo(function BarsLayer({
         if (!task || !goal || !tg) return null;
         const x = dateToX(scale, task.startDate);
         const width = (diffDays(task.endDate, task.startDate) + 1) * scale.dayWidth;
+        const dim = dimTaskIds.has(r.id) || dimGoalIds.has(r.goalId);
         return (
-          <Fragment key={r.id}>
+          <div key={r.id} style={{ opacity: dim ? 0.3 : 1, transition: 'opacity var(--dur-zoom) var(--ease)' }}>
             <TaskBar
               task={task}
               rowTop={r.top}
@@ -152,7 +165,7 @@ export const BarsLayer = memo(function BarsLayer({
                 visEndDate={visEndDate}
               />
             )}
-          </Fragment>
+          </div>
         );
       })}
     </div>

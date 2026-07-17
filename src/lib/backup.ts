@@ -101,6 +101,7 @@ const ganttViewSchema = z.object({
   filter: z.object({
     status: z.array(z.enum(['planned', 'active', 'done', 'paused'])).optional(),
     goalIds: z.array(z.string()).optional(),
+    hideOthers: z.boolean().optional(),
   }),
 });
 

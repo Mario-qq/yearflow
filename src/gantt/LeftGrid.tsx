@@ -63,9 +63,13 @@ interface GoalRowProps {
   taskCount: number;
   gg?: GoalGantt;
   today: string;
+  /** 筛选淡出 */
+  dim: boolean;
+  /** 双击 → 聚焦模式 */
+  onFocus: (goalId: string) => void;
 }
 
-const GoalRow = memo(function GoalRow({ goal, top, height, collapsed, taskCount, gg, today }: GoalRowProps) {
+const GoalRow = memo(function GoalRow({ goal, top, height, collapsed, taskCount, gg, today, dim, onFocus }: GoalRowProps) {
   const editing = useGanttUi((s) => s.editing?.id === goal.id && s.editing.field === 'goalName');
   const setEditing = useGanttUi((s) => s.setEditing);
   const setHoverCell = useGanttUi((s) => s.setHoverCell);
@@ -91,9 +95,13 @@ const GoalRow = memo(function GoalRow({ goal, top, height, collapsed, taskCount,
         background: 'var(--bg-subtle)',
         borderBottom: '1px solid var(--border-subtle)',
         borderLeft: `3px solid ${solid}`,
+        opacity: dim ? 0.35 : 1,
+        transition: 'opacity var(--dur-zoom) var(--ease)',
       }}
       onPointerEnter={() => setHoverCell(goal.id, null)}
       onClick={toggleCollapse}
+      onDoubleClick={() => onFocus(goal.id)}
+      title="单击折叠/展开，双击聚焦"
     >
       <span
         aria-hidden
@@ -159,10 +167,11 @@ interface TaskRowProps {
   cols: GridColumnDef[];
   colWidths: Record<string, number>;
   tg?: TaskGantt;
+  dim: boolean;
   onLocate: (taskId: string) => void;
 }
 
-const TaskRow = memo(function TaskRow({ task, top, height, cols, colWidths, tg, onLocate }: TaskRowProps) {
+const TaskRow = memo(function TaskRow({ task, top, height, cols, colWidths, tg, dim, onLocate }: TaskRowProps) {
   const editing = useGanttUi((s) => (s.editing?.id === task.id ? s.editing.field : null));
   const setEditing = useGanttUi((s) => s.setEditing);
   const setHoverCell = useGanttUi((s) => s.setHoverCell);
@@ -290,7 +299,13 @@ const TaskRow = memo(function TaskRow({ task, top, height, cols, colWidths, tg, 
   return (
     <div
       className="absolute left-0 right-0 flex cursor-pointer items-center"
-      style={{ top, height, borderBottom: '1px solid var(--border-subtle)' }}
+      style={{
+        top,
+        height,
+        borderBottom: '1px solid var(--border-subtle)',
+        opacity: dim ? 0.35 : 1,
+        transition: 'opacity var(--dur-zoom) var(--ease)',
+      }}
       onPointerEnter={() => setHoverCell(task.id, null)}
       onClick={() => onLocate(task.id)}
     >
@@ -378,7 +393,11 @@ interface Props {
   today: string;
   leftW: number;
   collapsed: boolean;
+  /** 筛选淡出集合（hideOthers 时为空集） */
+  dimTaskIds: Set<string>;
+  dimGoalIds: Set<string>;
   onLocateTask: (taskId: string) => void;
+  onFocusGoal: (goalId: string) => void;
 }
 
 export const LeftGrid = memo(function LeftGrid({
@@ -391,7 +410,10 @@ export const LeftGrid = memo(function LeftGrid({
   today,
   leftW,
   collapsed,
+  dimTaskIds,
+  dimGoalIds,
   onLocateTask,
+  onFocusGoal,
 }: Props) {
   const gridColumns = useStore((s) => s.settings.ganttView.gridColumns);
   const gridColWidths = useStore((s) => s.settings.ganttView.gridColWidths);
@@ -459,6 +481,8 @@ export const LeftGrid = memo(function LeftGrid({
                   taskCount={layout.taskRowsByGoal[r.id]?.length ?? 0}
                   gg={derive.get(r.id)}
                   today={today}
+                  dim={dimGoalIds.has(r.id)}
+                  onFocus={onFocusGoal}
                 />
               );
             }
@@ -478,6 +502,7 @@ export const LeftGrid = memo(function LeftGrid({
                 cols={cols}
                 colWidths={gridColWidths}
                 tg={derive.get(r.goalId)?.perTask.get(r.id)}
+                dim={dimTaskIds.has(r.id) || dimGoalIds.has(r.goalId)}
                 onLocate={onLocateTask}
               />
             );

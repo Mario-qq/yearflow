@@ -103,7 +103,8 @@ export interface GanttViewState {
   gridColWidths: Record<string, number>; // 列宽覆盖（key = 列 key）
   showDependencies: boolean;
   showBaseline: boolean;
-  filter: { status?: TaskStatus[]; goalIds?: string[] };
+  /** 筛选：缺省淡出不匹配行（保持空间感），hideOthers=true 才真正收起 */
+  filter: { status?: TaskStatus[]; goalIds?: string[]; hideOthers?: boolean };
 }
 
 export interface AppSettings {

@@ -9,16 +9,24 @@
  * └─ MiniMap（28px，scroller 之外）
  */
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
-import { todayStr } from '../lib/date';
+import type { Goal, Task } from '../types/domain';
+import { createMilestone, createTask, deleteTasks } from '../store/actions';
+import { showToast } from '../lib/toast';
+import { fmtDay, toDay, todayStr } from '../lib/date';
 import {
   buildExemptionCols,
   buildTicks,
   createTimeScale,
   clampDayIndex,
   dateToX,
+  xToDate,
   visibleDayRange,
 } from './timeScale';
+import { exportGanttPng } from './lib/exportPng';
+import { ZOOM_DAY_WIDTH } from './constants';
+import type { GanttZoom } from '../types/domain';
 import { buildRowLayout, rowAtY, visibleRowRange, type RowLayout } from './rowLayout';
 import { useViewport } from './hooks/useViewport';
 import { useZoomAnimation } from './hooks/useZoomAnimation';
@@ -63,15 +71,52 @@ export default function GanttView() {
   const gridCollapsed = useStore((s) => s.settings.ganttView.gridCollapsed);
   const showDependencies = useStore((s) => s.settings.ganttView.showDependencies);
   const showBaseline = useStore((s) => s.settings.ganttView.showBaseline);
+  const filter = useStore((s) => s.settings.ganttView.filter);
   const leftW = gridCollapsed ? GRID_RAIL_W : gridWidth;
+  const navigate = useNavigate();
+
+  // 筛选（SPEC 4.6）：缺省淡出不匹配行；hideOthers 才真正从布局收起
+  const filterActive = (filter.status?.length ?? 0) > 0 || (filter.goalIds?.length ?? 0) > 0;
+  const taskMatches = useCallback(
+    (t: Task) =>
+      (!filter.status?.length || filter.status.includes(t.status)) &&
+      (!filter.goalIds?.length || filter.goalIds.includes(t.goalId)),
+    [filter],
+  );
+  const layoutTasks = useMemo(() => {
+    if (!filterActive || !filter.hideOthers) return tasks;
+    const out: Record<string, Task> = {};
+    for (const t of Object.values(tasks)) if (taskMatches(t)) out[t.id] = t;
+    return out;
+  }, [tasks, filterActive, filter.hideOthers, taskMatches]);
+  const layoutGoals = useMemo(() => {
+    if (!filterActive || !filter.hideOthers || !filter.goalIds?.length) return goals;
+    const out: Record<string, Goal> = {};
+    for (const g of Object.values(goals)) if (filter.goalIds.includes(g.id)) out[g.id] = g;
+    return out;
+  }, [goals, filterActive, filter.hideOthers, filter.goalIds]);
+  const dimTaskIds = useMemo(() => {
+    const s = new Set<string>();
+    if (!filterActive || filter.hideOthers) return s;
+    for (const t of Object.values(tasks)) if (!t.deletedAt && !taskMatches(t)) s.add(t.id);
+    return s;
+  }, [tasks, filterActive, filter.hideOthers, taskMatches]);
+  const dimGoalIds = useMemo(() => {
+    const s = new Set<string>();
+    if (!filterActive || filter.hideOthers || !filter.goalIds?.length) return s;
+    for (const g of Object.values(goals)) {
+      if (!g.deletedAt && !g.archived && !filter.goalIds.includes(g.id)) s.add(g.id);
+    }
+    return s;
+  }, [goals, filterActive, filter.hideOthers, filter.goalIds]);
 
   const scrollerRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const dayWidth = useZoomAnimation(scrollerRef, zoom, year, leftW);
   const scale = useMemo(() => createTimeScale(year, dayWidth), [year, dayWidth]);
   const layout = useMemo(
-    () => buildRowLayout(goals, tasks, collapsedGoalIds),
-    [goals, tasks, collapsedGoalIds],
+    () => buildRowLayout(layoutGoals, layoutTasks, collapsedGoalIds),
+    [layoutGoals, layoutTasks, collapsedGoalIds],
   );
   const { win, scrollToDate } = useViewport(scrollerRef, scale, leftW);
   const spaceHeld = useSpacePan(scrollerRef);
@@ -195,7 +240,7 @@ export default function GanttView() {
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
-  // 左栏点击定位：bar 不在视口内则平滑滚入（左缘 1/5 处），并闪烁一次
+  // 左栏点击/命令面板定位：bar 不在视口内则平滑滚入（左缘 1/5 处 + 垂直带入），并闪烁一次
   const locateTask = useCallback(
     (taskId: string) => {
       const task = useStore.getState().tasks[taskId];
@@ -209,10 +254,180 @@ export default function GanttView() {
       if (x0 < viewL || x1 > viewR) {
         scrollToDate(task.startDate, { smooth: true, anchorRatio: 1 / 5 });
       }
+      const row = layoutRef.current.rowById[taskId];
+      if (row) {
+        const bodyViewH = el.clientHeight - HEADER_H;
+        if (row.top < el.scrollTop || row.top + row.height > el.scrollTop + bodyViewH) {
+          el.scrollTo({ top: Math.max(0, row.top - bodyViewH / 3), behavior: 'smooth' });
+        }
+      }
       useGanttUi.getState().flashTask(taskId);
     },
     [scrollToDate, leftW],
   );
+
+  // bus 命令：定位任务（先展开折叠的目标）/ 切到某月 / 导出 PNG
+  useEffect(
+    () =>
+      onGantt('locate-task', ({ taskId }) => {
+        const { tasks: all, settings, updateGanttView } = useStore.getState();
+        const task = all[taskId];
+        if (!task) return;
+        if (settings.ganttView.collapsedGoalIds.includes(task.goalId)) {
+          updateGanttView({
+            collapsedGoalIds: settings.ganttView.collapsedGoalIds.filter((id) => id !== task.goalId),
+          });
+          setTimeout(() => locateTask(taskId), 80); // 等布局重算
+        } else {
+          locateTask(taskId);
+        }
+      }),
+    [locateTask],
+  );
+  useEffect(
+    () => onGantt('scroll-to-date', ({ date }) => scrollToDate(date, { smooth: true, anchorRatio: 1 / 5 })),
+    [scrollToDate],
+  );
+  useEffect(
+    () =>
+      onGantt('export-png', () => {
+        const el = scrollerRef.current;
+        if (!el) return;
+        showToast('正在生成 PNG…');
+        void exportGanttPng(el)
+          .then(() => showToast('已导出当前视图 PNG'))
+          .catch(() => showToast('导出失败，请重试'));
+      }),
+    [],
+  );
+
+  // 聚焦模式（SPEC 4.6）：双击目标行 → 只展开该目标并放大到其时间范围；再双击退出
+  const focusRef = useRef<{ goalId: string; prevCollapsed: string[]; prevZoom: GanttZoom } | null>(null);
+  const onFocusGoal = useCallback(
+    (goalId: string) => {
+      const { settings, updateGanttView, goals: allGoals, tasks: allTasks } = useStore.getState();
+      const cur = focusRef.current;
+      if (cur?.goalId === goalId) {
+        // 退出聚焦：恢复进入前的折叠与缩放
+        updateGanttView({ collapsedGoalIds: cur.prevCollapsed, zoom: cur.prevZoom });
+        focusRef.current = null;
+        return;
+      }
+      focusRef.current = {
+        goalId,
+        prevCollapsed: cur?.prevCollapsed ?? settings.ganttView.collapsedGoalIds,
+        prevZoom: cur?.prevZoom ?? settings.ganttView.zoom,
+      };
+      const others = Object.values(allGoals)
+        .filter((g) => !g.deletedAt && !g.archived && g.id !== goalId)
+        .map((g) => g.id);
+      updateGanttView({ collapsedGoalIds: others });
+      // 放大到该目标时间范围：选使 span 占视口 ~85% 的最近档位，再滚到范围起点
+      const goalTasks = Object.values(allTasks).filter((t) => !t.deletedAt && t.goalId === goalId);
+      if (goalTasks.length === 0) return;
+      const minStart = goalTasks.reduce((m, t) => (t.startDate < m ? t.startDate : m), goalTasks[0].startDate);
+      const maxEnd = goalTasks.reduce((m, t) => (t.endDate > m ? t.endDate : m), goalTasks[0].endDate);
+      const spanDays = Math.max(1, toDay(maxEnd).diff(toDay(minStart), 'day') + 1);
+      const el = scrollerRef.current;
+      const tlW = el ? Math.max(200, el.clientWidth - leftW) : 800;
+      const idealW = (tlW * 0.85) / spanDays;
+      let best: GanttZoom = 'year';
+      let bestDist = Infinity;
+      for (const [z, w] of Object.entries(ZOOM_DAY_WIDTH) as [GanttZoom, number][]) {
+        const d = Math.abs(Math.log(w) - Math.log(idealW));
+        if (d < bestDist) {
+          bestDist = d;
+          best = z;
+        }
+      }
+      if (best !== settings.ganttView.zoom) updateGanttView({ zoom: best });
+      setTimeout(() => scrollToDate(minStart, { smooth: true, anchorRatio: 0.06 }), 220);
+    },
+    [scrollToDate, leftW],
+  );
+
+  // 甘特页快捷键（SPEC 4.7；全局 Ctrl+Z 与命令面板在 App 层）
+  useEffect(() => {
+    const ZOOM_STEPS: GanttZoom[] = ['year', 'quarter', 'month', 'week'];
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement;
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
+      const el = scrollerRef.current;
+      const { settings, updateGanttView } = useStore.getState();
+      switch (e.key) {
+        case 't':
+        case 'T':
+          scrollToDate(todayStr(), { smooth: true, anchorRatio: 1 / 3 });
+          break;
+        case '+':
+        case '=': {
+          const i = ZOOM_STEPS.indexOf(settings.ganttView.zoom);
+          if (i < ZOOM_STEPS.length - 1) updateGanttView({ zoom: ZOOM_STEPS[i + 1] });
+          break;
+        }
+        case '-': {
+          const i = ZOOM_STEPS.indexOf(settings.ganttView.zoom);
+          if (i > 0) updateGanttView({ zoom: ZOOM_STEPS[i - 1] });
+          break;
+        }
+        case 'ArrowLeft':
+        case 'ArrowRight': {
+          e.preventDefault();
+          const days = e.shiftKey ? 30 : 7;
+          el?.scrollBy({
+            left: (e.key === 'ArrowRight' ? 1 : -1) * days * scaleRef.current.dayWidth,
+            behavior: 'smooth',
+          });
+          break;
+        }
+        case 'b':
+        case 'B':
+          updateGanttView({ showBaseline: !settings.ganttView.showBaseline });
+          break;
+        case 'd':
+        case 'D':
+          navigate('/checkin');
+          break;
+        case 'n':
+        case 'N':
+        case 'm':
+        case 'M': {
+          // 在视口中心日期创建（目标 = hover 行所在目标，否则第一个目标）
+          if (!el) break;
+          const s = scaleRef.current;
+          const centerX = el.scrollLeft + Math.max(0, el.clientWidth - leftW) / 2;
+          const date = xToDate(s, centerX);
+          const ui = useGanttUi.getState();
+          const hoverGoalId = ui.hoverRowId ? layoutRef.current.rowById[ui.hoverRowId]?.goalId : undefined;
+          const goalList = Object.values(useStore.getState().goals)
+            .filter((g) => !g.deletedAt && !g.archived)
+            .sort((a, b) => a.order - b.order);
+          const goalId = hoverGoalId ?? goalList[0]?.id;
+          if (!goalId) break;
+          if (e.key === 'n' || e.key === 'N') {
+            const id = createTask({ goalId, startDate: date, endDate: fmtDay(toDay(date).add(13, 'day')) });
+            ui.flashTask(id);
+            ui.setEditing({ id, field: 'name' });
+          } else {
+            createMilestone(goalId, date);
+            showToast(`已在 ${toDay(date).format('M月D日')} 创建里程碑`);
+          }
+          break;
+        }
+        case 'Delete': {
+          const ids = useGanttUi.getState().selectedTaskIds;
+          if (ids.length === 0) break;
+          if (!confirm(`删除选中的 ${ids.length} 个任务？其打卡记录将一并删除。`)) break;
+          deleteTasks(ids);
+          useGanttUi.getState().clearSelection();
+          break;
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [scrollToDate, navigate, leftW]);
 
   // hover 十字定位：body pointermove → 行 + 日列（setHoverCell 内部去重，无变化不 setState）
   const onBodyPointerMove = useCallback((e: React.PointerEvent) => {
@@ -279,7 +494,10 @@ export default function GanttView() {
                 today={today}
                 leftW={leftW}
                 collapsed={gridCollapsed}
+                dimTaskIds={dimTaskIds}
+                dimGoalIds={dimGoalIds}
                 onLocateTask={locateTask}
+                onFocusGoal={onFocusGoal}
               />
               <div
                 ref={bodyRef}
@@ -319,6 +537,8 @@ export default function GanttView() {
                   today={today}
                   collapsedGoalIds={collapsedGoalIds}
                   showBaseline={showBaseline}
+                  dimTaskIds={dimTaskIds}
+                  dimGoalIds={dimGoalIds}
                   onBarHover={onBarHover}
                   onBarDragStart={onBarDragStart}
                   onDepDragStart={onDepDragStart}
@@ -328,7 +548,7 @@ export default function GanttView() {
                   <DependencyLayer
                     layout={layout}
                     scale={scale}
-                    tasks={tasks}
+                    tasks={layoutTasks}
                     goals={goals}
                     width={scale.totalWidth}
                     height={layout.totalHeight}
@@ -406,8 +626,8 @@ export default function GanttView() {
       <MiniMap
         scrollerRef={scrollerRef}
         scale={scale}
-        goals={goals}
-        tasks={tasks}
+        goals={layoutGoals}
+        tasks={layoutTasks}
         todayX={todayX}
         leftW={leftW}
       />

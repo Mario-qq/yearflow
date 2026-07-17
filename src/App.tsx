@@ -1,9 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { useStore } from './store/useStore';
 import { applyTheme, subscribeSystemTheme } from './lib/theme';
 import { showToast } from './lib/toast';
 import { Toasts } from './components/Toasts';
+import { CommandPalette } from './components/CommandPalette';
+import { ShortcutHelp } from './components/ShortcutHelp';
 import { GanttToolbar } from './gantt/GanttToolbar';
 import GanttPage from './pages/GanttPage';
 import CheckInPage from './pages/CheckInPage';
@@ -38,6 +40,8 @@ export default function App() {
   const theme = useStore((s) => s.settings.theme);
   const hydrate = useStore((s) => s.hydrate);
   const updateSettings = useStore((s) => s.updateSettings);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
     void hydrate();
@@ -64,6 +68,29 @@ export default function App() {
         e.preventDefault();
         const label = useStore.getState().redo();
         showToast(label ? `已重做：${label}` : '没有可重做的操作');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // 命令面板（/ 或 Ctrl+K）与快捷键速查表（?）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      const typing = t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+        return;
+      }
+      if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === '/') {
+        e.preventDefault();
+        setPaletteOpen(true);
+      } else if (e.key === '?') {
+        e.preventDefault();
+        setHelpOpen((v) => !v);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -107,6 +134,21 @@ export default function App() {
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={() => setHelpOpen(true)}
+              className="cursor-pointer px-2 py-1"
+              style={{
+                fontSize: 'var(--font-12)',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--border-default)',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--bg-panel)',
+              }}
+              title="快捷键速查表（?）"
+            >
+              ?
+            </button>
+            <button
+              type="button"
               onClick={() => updateSettings({ theme: THEME_NEXT[theme] })}
               className="cursor-pointer px-2.5 py-1"
               style={{
@@ -133,6 +175,8 @@ export default function App() {
           </Routes>
         </main>
         <Toasts />
+        <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+        <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       </div>
     </BrowserRouter>
   );
