@@ -8,13 +8,17 @@ import { FLASH_MS } from './constants';
 
 export type EditingField = 'name' | 'progress' | 'goalName';
 
-/** 右键菜单锚点：bar = 任务菜单；canvas = 时间轴空白菜单（携带命中行与日期） */
+/**
+ * 右键菜单锚点：bar = 任务菜单；canvas = 时间轴空白菜单（携带命中行与日期）；
+ * goal = 左栏目标行菜单（重命名/删除）；milestone = 菱形菜单（达成/删除）
+ */
 export interface ContextMenuState {
   x: number;
   y: number;
-  kind: 'bar' | 'canvas';
+  kind: 'bar' | 'canvas' | 'goal' | 'milestone';
   taskId?: string;
   goalId?: string;
+  milestoneId?: string;
   date?: string;
 }
 

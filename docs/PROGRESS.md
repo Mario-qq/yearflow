@@ -171,6 +171,16 @@
 - vite dev server 读 PORT 环境变量（预览代理需要）；launch.json autoPort: true
 - 移动端判定用 useIsMobile（matchMedia 767px + useSyncExternalStore）；强制月档只在进入时一次，双指缩放后不反复覆盖
 
+## 后续修补
+
+### 2026-07-18 补齐目标/里程碑删除入口
+- deleteGoal/deleteMilestone action 早已实现但无 UI 触发点（功能缺口）
+- 左栏目标行右键菜单：重命名 / 新建任务 / 删除目标…（confirm 列出级联数量：N 个任务、M 个里程碑、K 条打卡记录）
+- 里程碑菱形右键菜单：标记达成⇄取消 / 删除里程碑（无级联，直删 + toast 提示可撤销）
+- ContextMenuState.kind 扩展 'goal' | 'milestone'；时间轴右键分流顺序：里程碑 → bar → 空白
+- Playwright 真实 Chrome 实测：真实右键全链路（菜单项/confirm 文案/级联软删/undo 完整还原）全绿
+- 注：浏览器面板里 dispatchEvent 合成 contextmenu 不触发 React 委托处理器（element.click() 可以），右键类验证必须走 Playwright
+
 ## Phase 5 — 云同步与部署 【已完成 2026-07-18】
 
 - [x] SQL migration（supabase/migrations/0001_init.sql，用户已在 SQL Editor 执行）：6 表（id+user_id 复合主键、data jsonb 存完整实体、updated_at/deleted_at 冗余列）+ RLS（user_id = auth.uid() 全操作）+ server_updated_at 触发器（clock_timestamp）+ upsert_rows RPC（条件 upsert：excluded.updated_at > 现值才覆盖）

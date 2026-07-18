@@ -101,7 +101,11 @@ const GoalRow = memo(function GoalRow({ goal, top, height, collapsed, taskCount,
       onPointerEnter={() => setHoverCell(goal.id, null)}
       onClick={toggleCollapse}
       onDoubleClick={() => onFocus(goal.id)}
-      title="单击折叠/展开，双击聚焦"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        useGanttUi.getState().setContextMenu({ x: e.clientX, y: e.clientY, kind: 'goal', goalId: goal.id });
+      }}
+      title="单击折叠/展开，双击聚焦，右键更多操作"
     >
       <span
         aria-hidden

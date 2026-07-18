@@ -167,7 +167,7 @@ export default function GanttView() {
     [onCreateDown, onMarqueeDown, isMobile],
   );
 
-  // 右键菜单：bar → 任务菜单（记录右键日期供「从此日拆分」）；空白 → 时间轴菜单
+  // 右键菜单：里程碑 → 达成/删除；bar → 任务菜单（记录右键日期供「从此日拆分」）；空白 → 时间轴菜单
   const onBodyContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     if (isMobileRef.current) return; // 移动端只读：长按不出编辑菜单
@@ -177,6 +177,16 @@ export default function GanttView() {
     const rect = body.getBoundingClientRect();
     const idx = clampDayIndex(s, Math.floor((e.clientX - rect.left) / s.dayWidth));
     const date = idxToDate(s, idx);
+    const msEl = (e.target as HTMLElement).closest('[data-milestone]');
+    if (msEl) {
+      useGanttUi.getState().setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        kind: 'milestone',
+        milestoneId: msEl.getAttribute('data-milestone') ?? undefined,
+      });
+      return;
+    }
     const barEl = (e.target as HTMLElement).closest('[data-task-bar]');
     if (barEl) {
       useGanttUi.getState().setContextMenu({

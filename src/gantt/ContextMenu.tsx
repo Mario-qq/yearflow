@@ -3,6 +3,8 @@
  * bar：编辑详情 / 标记完成 / 暂停⇄恢复 / 复制并顺延 / 从此日拆分 / 保存为基线 / 删除
  *（右键目标在多选集内时，改状态/删除作用于全部选中任务）
  * 时间轴空白：在此日新建任务 / 新建里程碑 / 添加免打卡区间
+ * 目标行（左栏）：重命名 / 新建任务 / 删除目标（级联确认）
+ * 里程碑：标记达成⇄取消 / 删除
  */
 import { useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
@@ -10,15 +12,18 @@ import {
   createExemption,
   createMilestone,
   createTask,
+  deleteGoal,
+  deleteMilestone,
   deleteTask,
   deleteTasks,
   duplicateTaskAfter,
+  patchMilestone,
   patchTask,
   patchTasks,
   splitTaskAt,
 } from '../store/actions';
 import { showToast } from '../lib/toast';
-import { fmtDay, toDay } from '../lib/date';
+import { fmtDay, toDay, todayStr } from '../lib/date';
 import { useGanttUi, type ContextMenuState } from './uiStore';
 
 interface Item {
@@ -104,6 +109,77 @@ function buildItems(menu: ContextMenuState): Entry[] {
           if (multi) deleteTasks(selected);
           else deleteTask(task.id);
           ui.clearSelection();
+        },
+      },
+    ];
+  }
+
+  // 左栏目标行
+  if (menu.kind === 'goal' && menu.goalId) {
+    const goal = store.goals[menu.goalId];
+    if (!goal) return [];
+    return [
+      {
+        label: '重命名',
+        onClick: () => ui.setEditing({ id: goal.id, field: 'goalName' }),
+      },
+      {
+        label: '新建任务',
+        onClick: () => {
+          const start = todayStr();
+          const id = createTask({
+            goalId: goal.id,
+            startDate: start,
+            endDate: fmtDay(toDay(start).add(13, 'day')),
+          });
+          ui.flashTask(id);
+          ui.setEditing({ id, field: 'name' });
+        },
+      },
+      'divider',
+      {
+        label: '删除目标…',
+        danger: true,
+        onClick: () => {
+          const taskN = Object.values(store.tasks).filter((t) => !t.deletedAt && t.goalId === goal.id).length;
+          const msN = Object.values(store.milestones).filter((m) => !m.deletedAt && m.goalId === goal.id).length;
+          const ckN = Object.values(store.checkIns).filter((c) => !c.deletedAt && c.goalId === goal.id).length;
+          const parts = [
+            taskN > 0 && `${taskN} 个任务`,
+            msN > 0 && `${msN} 个里程碑`,
+            ckN > 0 && `${ckN} 条打卡记录`,
+          ].filter(Boolean);
+          const detail = parts.length > 0 ? `其 ${parts.join('、')} 将一并删除。` : '';
+          if (!confirm(`删除目标「${goal.name}」？${detail}`)) return;
+          deleteGoal(goal.id);
+          ui.clearSelection();
+          showToast(`已删除目标「${goal.name}」，可 Ctrl+Z 撤销`);
+        },
+      },
+    ];
+  }
+
+  // 里程碑菱形
+  if (menu.kind === 'milestone' && menu.milestoneId) {
+    const ms = store.milestones[menu.milestoneId];
+    if (!ms) return [];
+    return [
+      {
+        label: ms.achieved ? '取消达成' : '标记达成',
+        onClick: () =>
+          patchMilestone(
+            ms.id,
+            { achieved: !ms.achieved },
+            `里程碑「${ms.name}」${ms.achieved ? '取消达成' : '标记达成'}`,
+          ),
+      },
+      'divider',
+      {
+        label: '删除里程碑',
+        danger: true,
+        onClick: () => {
+          deleteMilestone(ms.id);
+          showToast(`已删除里程碑「${ms.name}」，可 Ctrl+Z 撤销`);
         },
       },
     ];
