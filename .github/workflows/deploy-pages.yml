@@ -1,0 +1,53 @@
+name: Deploy to GitHub Pages
+
+# 部署到 GitHub Pages（国内默认 DNS 可直连，绕开 vercel.app 的 DNS 污染）。
+# 站点地址：https://<用户名>.github.io/yearflow/
+# Supabase 凭据从仓库 Variables 注入（publishable key 本就是公开安全的，且构建后本会打进前端包）。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # 允许在 Actions 页手动触发
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 只保留最新一次部署，排队中的旧任务取消
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Build
+        env:
+          GH_PAGES: '1'
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+        run: npm run build
+      # SPA 兜底：GitHub Pages 对未知路径返回 404.html，复制成 index 内容即可支持
+      # /yearflow/gantt 这类深链接与刷新（React Router basename 会接管路由）
+      - run: cp dist/index.html dist/404.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

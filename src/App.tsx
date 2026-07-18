@@ -141,7 +141,7 @@ export default function App() {
   }
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
       <div className="flex h-full flex-col">
         <header
           className="flex h-12 shrink-0 items-center gap-4 border-b px-4"

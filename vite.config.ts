@@ -4,8 +4,12 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// GitHub Pages 部署在 /yearflow/ 子路径（GH_PAGES=1 时）；Vercel / 本地 dev 仍走根路径 '/'
+const base = process.env.GH_PAGES ? '/yearflow/' : '/'
+
 // https://vite.dev/config/
 export default defineConfig({
+  base,
   plugins: [
     react(),
     tailwindcss(),
@@ -21,7 +25,8 @@ export default defineConfig({
         theme_color: '#17171c',
         background_color: '#101014',
         display: 'standalone',
-        start_url: '/',
+        start_url: base, // 子路径部署时需指向 /yearflow/，否则装 PWA 打开会 404
+        scope: base,
         icons: [
           { src: 'pwa-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512.png', sizes: '512x512', type: 'image/png' },
