@@ -7,16 +7,17 @@
  * - 右缘分隔条拖宽（双击复位），折叠为纯图模式时退化为窄轨
  * 行几何与时间轴共用 rowLayout，保证两侧严格对齐。
  */
-import { memo } from 'react';
+import { memo, useMemo, useRef, useState } from 'react';
 import type { Goal, Task } from '../types/domain';
 import type { GoalGantt, TaskGantt } from '../lib/derive';
 import { baselineDrift, goalMonthlyRate } from '../lib/derive';
 import type { RowLayout } from './rowLayout';
 import { useStore } from '../store/useStore';
-import { createGoal, createTask, patchGoal, patchTask } from '../store/actions';
+import { createGoal, createTask, patchGoal, patchTask, reorderGoals } from '../store/actions';
 import { useGanttUi } from './uiStore';
 import { goalColor } from '../lib/colors';
 import { toDay, fmtDay } from '../lib/date';
+import { startPointerDrag } from './lib/dragCore';
 import { visibleColumns, columnWidth, type GridColumnDef } from './grid/columns';
 import { InlineInput } from './grid/InlineInput';
 import { RowHoverOverlay } from './HoverLayers';
@@ -65,19 +66,31 @@ interface GoalRowProps {
   today: string;
   /** 筛选淡出 */
   dim: boolean;
+  /** 正在被拖动重排 */
+  dragging: boolean;
   /** 双击 → 聚焦模式 */
   onFocus: (goalId: string) => void;
+  /** 泳道重排拖拽回调（几何/落点由 LeftGrid 统一持有） */
+  onDragStart: (goalId: string) => void;
+  onDragMove: (clientY: number) => void;
+  onDragEnd: (committed: boolean) => void;
 }
 
-const GoalRow = memo(function GoalRow({ goal, top, height, collapsed, taskCount, gg, today, dim, onFocus }: GoalRowProps) {
+const GoalRow = memo(function GoalRow({ goal, top, height, collapsed, taskCount, gg, today, dim, dragging, onFocus, onDragStart, onDragMove, onDragEnd }: GoalRowProps) {
   const editing = useGanttUi((s) => s.editing?.id === goal.id && s.editing.field === 'goalName');
   const setEditing = useGanttUi((s) => s.setEditing);
   const setHoverCell = useGanttUi((s) => s.setHoverCell);
   const solid = goalColor(goal.color);
   const monthRate = gg ? goalMonthlyRate(gg, today.slice(0, 7), today) : null;
   const streak = gg?.streak.current ?? 0;
+  /** 拖拽后浏览器仍会补发一次 click：置位则吞掉，避免误触发折叠 */
+  const suppressClick = useRef(false);
 
   const toggleCollapse = () => {
+    if (suppressClick.current) {
+      suppressClick.current = false;
+      return;
+    }
     const { settings, updateGanttView } = useStore.getState();
     const ids = settings.ganttView.collapsedGoalIds;
     updateGanttView({
@@ -85,9 +98,24 @@ const GoalRow = memo(function GoalRow({ goal, top, height, collapsed, taskCount,
     });
   };
 
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return; // 右键交给 onContextMenu
+    suppressClick.current = false;
+    startPointerDrag(e, {
+      onStart: () => {
+        suppressClick.current = true;
+        onDragStart(goal.id);
+      },
+      onMove: (s) => onDragMove(s.clientY),
+      onEnd: (s, committed) => {
+        if (s.started) onDragEnd(committed);
+      },
+    });
+  };
+
   return (
     <div
-      className="absolute left-0 right-0 flex cursor-pointer items-center gap-2"
+      className="absolute left-0 right-0 flex items-center gap-2"
       style={{
         top,
         height,
@@ -95,17 +123,22 @@ const GoalRow = memo(function GoalRow({ goal, top, height, collapsed, taskCount,
         background: 'var(--bg-subtle)',
         borderBottom: '1px solid var(--border-subtle)',
         borderLeft: `3px solid ${solid}`,
-        opacity: dim ? 0.35 : 1,
-        transition: 'opacity var(--dur-zoom) var(--ease)',
+        opacity: dim ? 0.35 : dragging ? 0.5 : 1,
+        boxShadow: dragging ? 'var(--shadow-sm)' : undefined,
+        cursor: dragging ? 'grabbing' : 'grab',
+        transition: dragging ? undefined : 'opacity var(--dur-zoom) var(--ease)',
+        touchAction: 'none',
+        zIndex: dragging ? 3 : undefined,
       }}
       onPointerEnter={() => setHoverCell(goal.id, null)}
+      onPointerDown={handlePointerDown}
       onClick={toggleCollapse}
       onDoubleClick={() => onFocus(goal.id)}
       onContextMenu={(e) => {
         e.preventDefault();
         useGanttUi.getState().setContextMenu({ x: e.clientX, y: e.clientY, kind: 'goal', goalId: goal.id });
       }}
-      title="单击折叠/展开，双击聚焦，右键更多操作"
+      title="拖动可调整顺序，单击折叠/展开，双击聚焦，右键更多操作"
     >
       <span
         aria-hidden
@@ -426,6 +459,51 @@ export const LeftGrid = memo(function LeftGrid({
   const setHoverCell = useGanttUi((s) => s.setHoverCell);
   const cols = visibleColumns(gridColumns);
 
+  // ── 目标泳道纵向拖拽重排 ────────────────────────────────────────────────
+  const rootRef = useRef<HTMLDivElement>(null);
+  /** 拖拽中：被拖目标 id + 插入位下标（原顺序空位，0..n） + 落点指示线 y */
+  const [goalDrag, setGoalDrag] = useState<{ id: string; index: number; indicatorY: number } | null>(null);
+  /** 按 top 升序的目标行（rowLayout 已按 order 排好） */
+  const goalRows = useMemo(() => layout.rows.filter((r) => r.kind === 'goal'), [layout.rows]);
+
+  /** 光标 layout-y → 插入下标 + 指示线 y（落在目标块中线之上则插到该块前） */
+  const resolveDrop = (layoutY: number): { index: number; indicatorY: number } => {
+    for (let i = 0; i < goalRows.length; i++) {
+      const blockTop = goalRows[i].top;
+      const blockBottom = i + 1 < goalRows.length ? goalRows[i + 1].top : layout.totalHeight;
+      if (layoutY < (blockTop + blockBottom) / 2) return { index: i, indicatorY: blockTop };
+    }
+    return { index: goalRows.length, indicatorY: layout.totalHeight };
+  };
+
+  const handleGoalDragStart = (goalId: string) => {
+    const from = goalRows.findIndex((r) => r.id === goalId);
+    setGoalDrag({ id: goalId, index: from, indicatorY: goalRows[from]?.top ?? 0 });
+  };
+
+  const handleGoalDragMove = (clientY: number) => {
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const { index, indicatorY } = resolveDrop(clientY - rect.top);
+    setGoalDrag((prev) => (prev && (prev.index !== index || prev.indicatorY !== indicatorY) ? { ...prev, index, indicatorY } : prev));
+  };
+
+  const handleGoalDragEnd = (committed: boolean) => {
+    setGoalDrag((prev) => {
+      if (prev && committed) {
+        const ids = goalRows.map((r) => r.id);
+        const from = ids.indexOf(prev.id);
+        const insertAt = prev.index > from ? prev.index - 1 : prev.index;
+        if (from !== -1 && insertAt !== from) {
+          const without = ids.filter((id) => id !== prev.id);
+          without.splice(insertAt, 0, prev.id);
+          reorderGoals(without);
+        }
+      }
+      return null;
+    });
+  };
+
   /** 分隔条拖宽（rAF 直写 settings，persist 防抖）；双击复位默认宽 */
   const startDividerDrag = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -459,6 +537,7 @@ export const LeftGrid = memo(function LeftGrid({
 
   return (
     <div
+      ref={rootRef}
       className="sticky left-0 z-20"
       style={{
         width: leftW,
@@ -486,7 +565,11 @@ export const LeftGrid = memo(function LeftGrid({
                   gg={derive.get(r.id)}
                   today={today}
                   dim={dimGoalIds.has(r.id)}
+                  dragging={goalDrag?.id === r.id}
                   onFocus={onFocusGoal}
+                  onDragStart={handleGoalDragStart}
+                  onDragMove={handleGoalDragMove}
+                  onDragEnd={handleGoalDragEnd}
                 />
               );
             }
@@ -513,6 +596,31 @@ export const LeftGrid = memo(function LeftGrid({
           })}
 
           <RowHoverOverlay layout={layout} />
+
+          {/* 泳道重排落点指示线 */}
+          {goalDrag && (
+            <div
+              className="pointer-events-none absolute left-0 right-0"
+              style={{
+                top: goalDrag.indicatorY - 1,
+                height: 2,
+                background: 'var(--accent)',
+                zIndex: 4,
+              }}
+            >
+              <span
+                className="absolute"
+                style={{
+                  left: 2,
+                  top: -3,
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: 'var(--accent)',
+                }}
+              />
+            </div>
+          )}
 
           {/* 底部常驻「+ 新建目标」 */}
           <button
