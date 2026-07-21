@@ -4,7 +4,7 @@
  *（右键目标在多选集内时，改状态/删除作用于全部选中任务）
  * 时间轴空白：在此日新建任务 / 新建里程碑 / 添加免打卡区间
  * 目标行（左栏）：重命名 / 新建任务 / 删除目标（级联确认）
- * 里程碑：标记达成⇄取消 / 删除
+ * 里程碑：重命名 / 标记达成⇄取消 / 删除
  */
 import { useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
@@ -182,6 +182,10 @@ function buildItems(menu: ContextMenuState): Entry[] {
     const ms = store.milestones[menu.milestoneId];
     if (!ms) return [];
     return [
+      {
+        label: '重命名',
+        onClick: () => ui.setEditing({ id: ms.id, field: 'milestoneName' }),
+      },
       {
         label: ms.achieved ? '取消达成' : '标记达成',
         onClick: () =>

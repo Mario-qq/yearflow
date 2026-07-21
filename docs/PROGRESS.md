@@ -193,6 +193,12 @@
 - 总时长直接从 checkIns 按目标累加分钟再换算（不累加已四舍五入的月值，避免误差累积）；沿用「任务完成数」卡的横条视觉与令牌
 - 浏览器实测：注入 4 目标 22 条打卡，横条降序与数字全部核对一致（SAP 6.8 / 健身 4.8 / 英语 3.3 / 篮球 1.2 = 合计 16.1），无控制台报错；测试数据已清理，截图接口本机超时改读页面文本核对
 
+### 2026-07-21 修复里程碑无法重命名 + 依赖连线拖不动
+- **里程碑重命名（功能缺口）**：里程碑创建后固定名「新里程碑」，右键菜单/双击/内联编辑处处无改名入口。修复：里程碑右键菜单加「重命名」→ 走 uiStore.editing（新增 field 'milestoneName'）→ GoalSummary 在 SVG 菱形旁复用 InlineInput 行内改名（Enter/blur 提交进 undo、Esc 取消）；单击切换达成/拖动改期不受影响
+- **依赖连线拖不动（bug）**：连接柄只在 hover 本行（linked=hoverRowId===task.id）时渲染，而 useDepDrag 拖动中会把 hoverRow 改成命中目标行 → 源任务 linked 立即变 false → 柄 DOM 卸载 → pointer capture 随之丢失 → 拖拽被 pointercancel 中止（表现为「一按就弹回、连不上线」）
+- 修复：uiStore 增瞬态 depDragTaskId，useDepDrag 起手 setDepDragTask(源)、结束清空；TaskBar 渲染条件改 `(linked || depDragging) && !dragging`，拖动全程保持源柄挂载，capture 不丢
+- 浏览器面板实测（合成 PointerEvent 全链路）：里程碑右键→重命名→输入→提交名称落地；拖 sap-3 右柄至 sap-4（已存边，addDependency 去重 6→6，证明命中目标）、再拖至 en-1（新边 6→7）；两次拖动中 `document.contains(源柄)` 均为 true（回归锁定）
+
 ## Phase 5 — 云同步与部署 【已完成 2026-07-18】
 
 - [x] SQL migration（supabase/migrations/0001_init.sql，用户已在 SQL Editor 执行）：6 表（id+user_id 复合主键、data jsonb 存完整实体、updated_at/deleted_at 冗余列）+ RLS（user_id = auth.uid() 全操作）+ server_updated_at 触发器（clock_timestamp）+ upsert_rows RPC（条件 upsert：excluded.updated_at > 现值才覆盖）

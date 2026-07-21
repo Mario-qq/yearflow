@@ -3,7 +3,7 @@
  * - 汇总条：6px 细条覆盖子任务总时间范围，目标色 40% 透明度
  * - 折叠时：汇总条下方渲染聚合热度条（信息不丢失）
  * - 里程碑：14px 菱形 + 右侧 11px 名称；achieved 实心 + 勾；
- *   水平拖动改日期（吸附天 + 浮动日期提示），单击切换 achieved
+ *   水平拖动改日期（吸附天 + 浮动日期提示），单击切换 achieved，右键「重命名」行内改名
  */
 import { memo } from 'react';
 import type { Goal, Milestone } from '../types/domain';
@@ -15,6 +15,8 @@ import { patchMilestone } from '../store/actions';
 import { startPointerDrag } from './lib/dragCore';
 import { showDragHint, hideDragHint, fmtDayHint } from './lib/dragHint';
 import { HeatStrip } from './HeatStrip';
+import { InlineInput } from './grid/InlineInput';
+import { useGanttUi } from './uiStore';
 import {
   DUR_DROP_MS,
   MILESTONE_D,
@@ -41,6 +43,8 @@ export const GoalSummary = memo(function GoalSummary({
   milestones,
   scale,
 }: Props) {
+  const editing = useGanttUi((s) => s.editing);
+  const setEditing = useGanttUi((s) => s.setEditing);
   const solid = goalColor(goal.color);
   const barTop = rowTop + (ROW_H_GOAL - SUMMARY_BAR_H) / 2;
   const span = gg.summarySpan;
@@ -78,6 +82,7 @@ export const GoalSummary = memo(function GoalSummary({
         const cx = (idx + 0.5) * scale.dayWidth;
         const cy = rowTop + ROW_H_GOAL / 2;
         const d = MILESTONE_D;
+        const isEditing = editing?.id === m.id && editing.field === 'milestoneName';
 
         /** 拖动改日期（吸附天）；未越阈值的单击切换 achieved */
         const onPointerDown = (e: React.PointerEvent) => {
@@ -130,10 +135,10 @@ export const GoalSummary = memo(function GoalSummary({
           <div
             key={m.id}
             data-milestone={m.id}
-            className="absolute cursor-pointer"
+            className={isEditing ? 'absolute' : 'absolute cursor-pointer'}
             style={{ top: cy - d / 2, left: cx - d / 2, pointerEvents: 'auto', touchAction: 'none' }}
-            title={`${m.name} · ${m.date}${m.achieved ? ' ✓' : ''}（拖动改期，单击切换达成）`}
-            onPointerDown={onPointerDown}
+            title={isEditing ? undefined : `${m.name} · ${m.date}${m.achieved ? ' ✓' : ''}（拖动改期，单击切换达成，右键重命名）`}
+            onPointerDown={isEditing ? undefined : onPointerDown}
           >
             <svg width={d} height={d} aria-hidden>
               <polygon
@@ -153,18 +158,37 @@ export const GoalSummary = memo(function GoalSummary({
                 />
               )}
             </svg>
-            <span
-              className="absolute whitespace-nowrap"
-              style={{
-                left: d + MILESTONE_LABEL_GAP,
-                top: 0,
-                lineHeight: `${d}px`,
-                fontSize: 'var(--font-11)',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              {m.name}
-            </span>
+            {isEditing ? (
+              <div
+                className="absolute"
+                style={{ left: d + MILESTONE_LABEL_GAP, top: (d - 20) / 2, width: 120 }}
+              >
+                <InlineInput
+                  defaultValue={m.name}
+                  onCommit={(value) => {
+                    const name = value.trim();
+                    if (name && name !== m.name) {
+                      patchMilestone(m.id, { name }, `重命名里程碑「${m.name}」→「${name}」`);
+                    }
+                    setEditing(null);
+                  }}
+                  onCancel={() => setEditing(null)}
+                />
+              </div>
+            ) : (
+              <span
+                className="absolute whitespace-nowrap"
+                style={{
+                  left: d + MILESTONE_LABEL_GAP,
+                  top: 0,
+                  lineHeight: `${d}px`,
+                  fontSize: 'var(--font-11)',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                {m.name}
+              </span>
+            )}
           </div>
         );
       })}

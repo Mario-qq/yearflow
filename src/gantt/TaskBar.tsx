@@ -53,6 +53,8 @@ export const TaskBar = memo(function TaskBar({
   const linked = useGanttUi((s) => s.hoverRowId === task.id);
   const flashing = useGanttUi((s) => s.flashTaskId === task.id);
   const dragging = useGanttUi((s) => s.dragTaskId === task.id);
+  // 依赖拖拽进行中，源任务的柄要一直挂载（哪怕 hover 已移到目标行），否则 capture 丢失
+  const depDragging = useGanttUi((s) => s.depDragTaskId === task.id);
   const selected = useGanttUi((s) => s.selectedTaskIds.includes(task.id));
   const solid = goalColor(color);
   const fill =
@@ -174,7 +176,7 @@ export const TaskBar = memo(function TaskBar({
         </span>
       )}
       {/* 依赖连接柄：hover 本行时出现在 bar 两端外侧，拖到另一根 bar 建立 FS 依赖 */}
-      {linked && !dragging && (
+      {(linked || depDragging) && !dragging && (
         <>
           {(['left', 'right'] as const).map((side) => (
             <div

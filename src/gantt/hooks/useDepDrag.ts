@@ -49,6 +49,9 @@ export function useDepDrag(args: {
           : dateToX(scale, task.startDate);
       const y0 = row.top + BAR_TOP + BAR_H / 2;
       let hitId: string | null = null;
+      // 拖动期间保持源任务连接柄挂载：否则 hoverRow 一变，柄随 linked=false 卸载，
+      // pointer capture 丢失，拖拽被 pointercancel 中断（表现为「拖不动」）。
+      useGanttUi.getState().setDepDragTask(taskId);
 
       startPointerDrag(e, {
         onMove: (s) => {
@@ -70,6 +73,7 @@ export function useDepDrag(args: {
         onEnd: (s, committed) => {
           setDepLine(null);
           useGanttUi.getState().setHoverRow(null);
+          useGanttUi.getState().setDepDragTask(null);
           if (!s.started || !committed || !hitId) return;
           if (side === 'right') addDependency(taskId, hitId);
           else addDependency(hitId, taskId);

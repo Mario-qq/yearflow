@@ -6,7 +6,7 @@
 import { create } from 'zustand';
 import { FLASH_MS } from './constants';
 
-export type EditingField = 'name' | 'progress' | 'goalName';
+export type EditingField = 'name' | 'progress' | 'goalName' | 'milestoneName';
 
 /**
  * 右键菜单锚点：bar = 任务菜单；canvas = 时间轴空白菜单（携带命中行与日期）；
@@ -49,6 +49,8 @@ interface GanttUiState {
   flashTaskId: string | null;
   /** 拖拽中的任务（bar 提升 z、抑制 tooltip、渲染原位虚影） */
   dragTaskId: string | null;
+  /** 正在拖出依赖连线的源任务——拖动期间保持其连接柄挂载，避免柄卸载导致 pointer capture 丢失 */
+  depDragTaskId: string | null;
   /** 多选集（保插入序）与 Shift 连续选择的锚点 */
   selectedTaskIds: string[];
   selectionAnchor: string | null;
@@ -65,6 +67,7 @@ interface GanttUiState {
   setEditing: (e: GanttUiState['editing']) => void;
   flashTask: (id: string) => void;
   setDragTask: (id: string | null) => void;
+  setDepDragTask: (id: string | null) => void;
   setSelection: (ids: string[], anchor?: string | null) => void;
   clearSelection: () => void;
   setContextMenu: (m: ContextMenuState | null) => void;
@@ -81,6 +84,7 @@ export const useGanttUi = create<GanttUiState>()((set, get) => ({
   editing: null,
   flashTaskId: null,
   dragTaskId: null,
+  depDragTaskId: null,
   selectedTaskIds: [],
   selectionAnchor: null,
   contextMenu: null,
@@ -104,6 +108,7 @@ export const useGanttUi = create<GanttUiState>()((set, get) => ({
     flashTimer = setTimeout(() => set({ flashTaskId: null }), FLASH_MS);
   },
   setDragTask: (dragTaskId) => set({ dragTaskId }),
+  setDepDragTask: (depDragTaskId) => set({ depDragTaskId }),
   setSelection: (ids, anchor) =>
     set((s) => ({ selectedTaskIds: ids, selectionAnchor: anchor === undefined ? s.selectionAnchor : anchor })),
   clearSelection: () => {
