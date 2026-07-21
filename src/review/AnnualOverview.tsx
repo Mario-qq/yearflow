@@ -112,6 +112,23 @@ export const AnnualOverview = memo(function AnnualOverview({
     [hoursData, goals],
   );
 
+  // 全年投入总时长：按目标汇总分钟（直接从 checkIns 累加，避免累加已四舍五入的月值）
+  const totals = useMemo(() => {
+    const prefix = `${year}-`;
+    const byGoal = new Map<string, number>();
+    for (const c of checkIns) {
+      if (c.deletedAt || !c.minutes || !c.date.startsWith(prefix)) continue;
+      byGoal.set(c.goalId, (byGoal.get(c.goalId) ?? 0) + c.minutes);
+    }
+    const rows = goals
+      .map((g) => ({ goal: g, hours: Math.round(((byGoal.get(g.id) ?? 0) / 60) * 10) / 10 }))
+      .filter((r) => r.hours > 0)
+      .sort((a, b) => b.hours - a.hours);
+    const grand = Math.round((rows.reduce((s, r) => s + r.hours, 0)) * 10) / 10;
+    const max = Math.max(1, ...rows.map((r) => r.hours));
+    return { rows, grand, max };
+  }, [checkIns, year, goals]);
+
   // 各目标任务完成数
   const doneCounts = useMemo(
     () =>
@@ -199,6 +216,53 @@ export const AnnualOverview = memo(function AnnualOverview({
           <p style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}>
             还没有记录时长。打卡时展开条目选择分钟数，这里会按月累计。
           </p>
+        )}
+      </Card>
+
+      <Card title="投入总时长（小时 / 年，按目标）">
+        {totals.rows.length === 0 ? (
+          <p style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}>
+            还没有记录时长。打卡时展开条目选择分钟数，这里会全年累计。
+          </p>
+        ) : (
+          <>
+            <div className="mb-3 flex items-baseline gap-2">
+              <span className="tnum font-medium" style={{ fontSize: 'var(--font-20)' }}>
+                {totals.grand}
+              </span>
+              <span style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}>
+                小时 · 全年合计
+              </span>
+            </div>
+            <div className="flex flex-col gap-2">
+              {totals.rows.map(({ goal, hours }) => (
+                <div key={goal.id} className="flex items-center gap-2">
+                  <span className="w-28 truncate" style={{ fontSize: 'var(--font-12)' }}>
+                    {goal.icon} {goal.name}
+                  </span>
+                  <div
+                    className="relative h-3 flex-1 overflow-hidden"
+                    style={{ background: 'var(--bg-subtle)', borderRadius: 999 }}
+                  >
+                    <div
+                      className="absolute inset-y-0 left-0"
+                      style={{
+                        width: `${(hours / totals.max) * 100}%`,
+                        background: goalColor(goal.color),
+                        borderRadius: 999,
+                      }}
+                    />
+                  </div>
+                  <span
+                    className="tnum w-16 text-right"
+                    style={{ fontSize: 'var(--font-12)', color: 'var(--text-secondary)' }}
+                  >
+                    {hours} 小时
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </Card>
 
