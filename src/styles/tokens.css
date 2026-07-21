@@ -27,22 +27,37 @@
   --bar-inner-stroke: transparent;             /* bar 内描边：深色主题下防止与背景糊在一起 */
   --missed-dot: color-mix(in srgb, var(--danger) 45%, transparent); /* 缺卡点/全缺周淡红（自动跟随深色 --danger） */
 
-  /* ── 5 个目标预设色（Okabe-Ito 衍生，色弱可辨，深浅主题均清晰） ── */
+  /* ── 10 个目标预设色（Okabe-Ito 衍生 + 补色，色相尽量拉开，色弱可辨，深浅主题均清晰） ── */
   --goal-1: #2f6fd0; /* 蓝 */
   --goal-2: #d97a16; /* 橙 */
   --goal-3: #0f9d6e; /* 绿 */
   --goal-4: #b8579f; /* 紫红 */
   --goal-5: #cc4f38; /* 朱红 */
+  --goal-6: #6d5ce0; /* 靛紫 */
+  --goal-7: #0e97ad; /* 青 */
+  --goal-8: #7d9b16; /* 橄榄绿 */
+  --goal-9: #d1568c; /* 玫红 */
+  --goal-10: #64748b; /* 石板灰 */
   --goal-1-40: color-mix(in srgb, var(--goal-1) 40%, transparent);
   --goal-2-40: color-mix(in srgb, var(--goal-2) 40%, transparent);
   --goal-3-40: color-mix(in srgb, var(--goal-3) 40%, transparent);
   --goal-4-40: color-mix(in srgb, var(--goal-4) 40%, transparent);
   --goal-5-40: color-mix(in srgb, var(--goal-5) 40%, transparent);
+  --goal-6-40: color-mix(in srgb, var(--goal-6) 40%, transparent);
+  --goal-7-40: color-mix(in srgb, var(--goal-7) 40%, transparent);
+  --goal-8-40: color-mix(in srgb, var(--goal-8) 40%, transparent);
+  --goal-9-40: color-mix(in srgb, var(--goal-9) 40%, transparent);
+  --goal-10-40: color-mix(in srgb, var(--goal-10) 40%, transparent);
   --goal-1-15: color-mix(in srgb, var(--goal-1) 15%, transparent);
   --goal-2-15: color-mix(in srgb, var(--goal-2) 15%, transparent);
   --goal-3-15: color-mix(in srgb, var(--goal-3) 15%, transparent);
   --goal-4-15: color-mix(in srgb, var(--goal-4) 15%, transparent);
   --goal-5-15: color-mix(in srgb, var(--goal-5) 15%, transparent);
+  --goal-6-15: color-mix(in srgb, var(--goal-6) 15%, transparent);
+  --goal-7-15: color-mix(in srgb, var(--goal-7) 15%, transparent);
+  --goal-8-15: color-mix(in srgb, var(--goal-8) 15%, transparent);
+  --goal-9-15: color-mix(in srgb, var(--goal-9) 15%, transparent);
+  --goal-10-15: color-mix(in srgb, var(--goal-10) 15%, transparent);
 
   /* ── 语义色 ── */
   --accent: #4a6ee0;          /* 主题主色：今天标记、选中、链接 */
@@ -115,6 +130,11 @@
   --goal-3: #2fbc8c;
   --goal-4: #d377bb;
   --goal-5: #e37257;
+  --goal-6: #8f80ee;
+  --goal-7: #34b4c9;
+  --goal-8: #a3c33a;
+  --goal-9: #ea77a2;
+  --goal-10: #8a99ad;
 
   --accent: #6d8bef;
   --success: #2cb87f;

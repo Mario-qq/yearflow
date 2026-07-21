@@ -1,13 +1,15 @@
 /**
- * 目标图标选择器（无外部依赖）。
+ * 目标外观选择器（图标 + 颜色，无外部依赖）。
+ * - 顶部色板：10 个预设色，点选即改目标色
  * - 分类 curated emoji 网格（可滚动），点选即存
- * - 顶部输入框：输入/粘贴任意 emoji（系统 emoji 键盘 Win+.），回车确认 → 覆盖无上限
+ * - emoji 输入框：输入/粘贴任意 emoji（系统 emoji 键盘 Win+.），回车确认 → 覆盖无上限
  * goal.icon 只是一段 Unicode 字符串，故图标数量无技术上限。
- * 点目标 emoji 或右键「更改图标」打开，锚在触发处；选中进 undo 栈。
+ * 点目标 emoji 或右键「更改图标 / 颜色」打开，锚在触发处；选中进 undo 栈。
  */
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { patchGoal } from '../store/actions';
+import { GOAL_PALETTE, goalColor } from '../lib/colors';
 import { useGanttUi } from './uiStore';
 
 interface Category {
@@ -111,6 +113,10 @@ export function GoalIconPicker() {
     setIconPicker(null);
   };
 
+  const applyColor = (color: string) => {
+    if (color !== goal.color) patchGoal(goal.id, { color }, `更改「${goal.name}」颜色`);
+  };
+
   const w = COLS * 32 + 16;
   const x = Math.min(picker.x, window.innerWidth - w - 8);
   const y = Math.min(picker.y, Math.max(8, window.innerHeight - 380));
@@ -130,6 +136,35 @@ export function GoalIconPicker() {
         boxShadow: 'var(--shadow-lg)',
       }}
     >
+      {/* 颜色色板：点选即改目标色（进 undo 栈） */}
+      <div className="mb-2 shrink-0">
+        <div className="mb-1 px-0.5" style={{ fontSize: 'var(--font-11)', color: 'var(--text-tertiary)' }}>
+          颜色
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {GOAL_PALETTE.map((c) => {
+            const active = c === goal.color;
+            return (
+              <button
+                key={c}
+                type="button"
+                className="cursor-pointer"
+                title={active ? '当前颜色' : '设为颜色'}
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: '50%',
+                  background: goalColor(c),
+                  outline: active ? '2px solid var(--text-primary)' : '1px solid var(--border-default)',
+                  outlineOffset: active ? 1 : 0,
+                }}
+                onClick={() => applyColor(c)}
+              />
+            );
+          })}
+        </div>
+      </div>
+
       {/* 任意 emoji 输入（系统 emoji 键盘 Win+.） */}
       <div className="mb-2 flex shrink-0 items-center gap-1.5">
         <input

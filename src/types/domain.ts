@@ -114,6 +114,8 @@ export interface AppSettings {
   yearInView: number;
   /** 甘特图视图状态持久化：下次打开恢复原样 */
   ganttView: GanttViewState;
+  /** 一次性迁移标记：旧数据（5 色轮转）目标撞色已重新分配过（本地，不同步） */
+  colorNormalized?: boolean;
 }
 
 /** 带同步元数据的实体（除 settings 外都满足） */

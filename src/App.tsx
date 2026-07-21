@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { useStore } from './store/useStore';
+import { normalizeGoalColors } from './store/actions';
 import { applyTheme, subscribeSystemTheme } from './lib/theme';
 import { showToast } from './lib/toast';
 import { Toasts } from './components/Toasts';
@@ -79,7 +80,14 @@ export default function App() {
   const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
-    void hydrate();
+    void hydrate().then(() => {
+      // 一次性迁移：旧数据（5 色轮转）会有目标撞色，载入后重新分配一次并记录标记
+      const s = useStore.getState();
+      if (s.settings.colorNormalized) return;
+      const changed = normalizeGoalColors();
+      s.updateSettings({ colorNormalized: true });
+      if (changed > 0) showToast(`已为 ${changed} 个目标重新分配颜色以避免撞色`);
+    });
   }, [hydrate]);
 
   useEffect(() => {

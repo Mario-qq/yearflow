@@ -15,6 +15,7 @@ import type {
 } from '../types/domain';
 import { diffDays, eachDay, fmtDay, toDay, todayStr } from '../lib/date';
 import { dayEntries } from '../lib/derive';
+import { GOAL_PALETTE, pickGoalColor } from '../lib/colors';
 import { useStore } from './useStore';
 import type { Change } from './types';
 
@@ -90,14 +91,14 @@ export function patchMilestone(id: string, patch: Partial<Milestone>, label: str
 
 // ── 新建 ─────────────────────────────────────────────────────────────────
 
-/** 新建目标：色板轮转取色、排在末尾；返回新 id（调用方随即打开行内改名） */
+/** 新建目标：取当前用得最少的色板色（尽量不撞色）、排在末尾；返回新 id（调用方随即打开行内改名） */
 export function createGoal(name = '新目标'): string {
   const s = useStore.getState();
   const active = Object.values(s.goals).filter((g) => !g.deletedAt && !g.archived);
   const goal: Goal = {
     id: nanoid(),
     name,
-    color: `goal-${(active.length % 5) + 1}`,
+    color: pickGoalColor(active.map((g) => g.color)),
     icon: '🎯',
     order: active.reduce((m, g) => Math.max(m, g.order), -1) + 1,
     archived: false,
@@ -106,6 +107,37 @@ export function createGoal(name = '新目标'): string {
   };
   s.execute(`新建目标「${name}」`, [{ table: 'goals', type: 'put', after: goal }]);
   return goal.id;
+}
+
+/**
+ * 重新分配撞色目标的颜色：按 order 遍历活动目标，遇到与前面重复的色板色就换成
+ * 当前未占用的色板色（十六进制/自定义色视为唯一、原样保留）。只改真正撞色的目标，
+ * 走 execute（可撤销 + 同步）。返回被改动的目标数。
+ */
+export function normalizeGoalColors(): number {
+  const s = useStore.getState();
+  const active = Object.values(s.goals)
+    .filter((g) => !g.deletedAt && !g.archived)
+    .sort((a, b) => a.order - b.order);
+  const used = new Set<string>();
+  const changes: Change[] = [];
+  for (const goal of active) {
+    const isPaletteKey = (GOAL_PALETTE as readonly string[]).includes(goal.color);
+    if (isPaletteKey && used.has(goal.color)) {
+      const color = pickGoalColor(used);
+      used.add(color);
+      changes.push({
+        table: 'goals',
+        type: 'put',
+        before: goal,
+        after: { ...goal, color, updatedAt: nowIso() },
+      });
+    } else {
+      used.add(goal.color);
+    }
+  }
+  if (changes.length > 0) s.execute('重新分配目标颜色（避免撞色）', changes);
+  return changes.length;
 }
 
 export interface CreateTaskInit {

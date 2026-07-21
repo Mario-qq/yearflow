@@ -174,7 +174,7 @@ const GoalRow = memo(function GoalRow({ goal, top, height, collapsed, taskCount,
       )}
       <span
         className="shrink-0 cursor-pointer rounded hover:bg-[var(--row-hover)]"
-        title="点击更改图标"
+        title="点击更改图标 / 颜色"
         style={{ fontSize: 'var(--font-14)', lineHeight: 1, padding: '1px 2px', filter: completed ? 'grayscale(0.8)' : undefined, opacity: completed ? 0.7 : 1 }}
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {

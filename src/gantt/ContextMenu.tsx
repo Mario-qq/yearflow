@@ -127,7 +127,7 @@ function buildItems(menu: ContextMenuState): Entry[] {
         onClick: () => ui.setEditing({ id: goal.id, field: 'goalName' }),
       },
       {
-        label: '更改图标',
+        label: '更改图标 / 颜色',
         onClick: () => ui.setIconPicker({ goalId: goal.id, x: menu.x, y: menu.y }),
       },
       {
