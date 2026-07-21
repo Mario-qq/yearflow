@@ -4,7 +4,6 @@
  * 打卡后卡片 FLIP 滑向"已完成"分组；昨日缺卡入口；全部完成显示 streak + 鼓励语。
  */
 import { useCallback, useMemo, useRef, useState } from 'react';
-import type { CheckIn, CheckInStatus } from '../types/domain';
 import { useStore } from '../store/useStore';
 import { fmtDay, toDay, todayStr } from '../lib/date';
 import { calcStreak, dayCompletionRate, dayEntries } from '../lib/derive';
@@ -22,8 +21,6 @@ const ENCOURAGEMENTS = [
   '安静地做，让结果说话。',
   '年度计划就是这样一天天长出来的。',
 ];
-
-const STATUS_RANK: Record<CheckInStatus, number> = { done: 3, partial: 2, skipped: 1 };
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -70,17 +67,6 @@ export default function CheckInPage() {
     [entriesOf, today],
   );
 
-  // 当日各目标的完整记录（同日多条取最强，与派生口径一致）
-  const recordByGoal = useMemo(() => {
-    const map = new Map<string, CheckIn>();
-    for (const c of checkInList) {
-      if (c.deletedAt || c.date !== selectedDate) continue;
-      const prev = map.get(c.goalId);
-      if (!prev || STATUS_RANK[c.status] > STATUS_RANK[prev.status]) map.set(c.goalId, c);
-    }
-    return map;
-  }, [checkInList, selectedDate]);
-
   const streakByGoal = useMemo(() => {
     const map = new Map<string, number>();
     for (const e of entries) {
@@ -100,18 +86,19 @@ export default function CheckInPage() {
 
   const yesterday = fmtDay(toDay(today).subtract(1, 'day'));
   const yesterdayMissed = useMemo(
-    () => entriesOf(yesterday).filter((e) => !e.exempt && !e.status).length,
+    () => entriesOf(yesterday).filter((e) => !e.exempt && !e.allRecorded).length,
     [entriesOf, yesterday],
   );
 
-  const pending = entries.filter((e) => !e.exempt && !e.status);
-  const finished = entries.filter((e) => !e.exempt && e.status);
+  // 目标级完成 = 其当日全部在办任务都已记录（任务级口径）
+  const pending = entries.filter((e) => !e.exempt && !e.allRecorded);
+  const finished = entries.filter((e) => !e.exempt && e.allRecorded);
   const resting = entries.filter((e) => e.exempt);
   const allDone = entries.length > 0 && pending.length === 0 && finished.length > 0;
 
   // FLIP：分组归属变化时卡片平滑滑动
   const listRef = useRef<HTMLDivElement>(null);
-  useFlip(listRef, entries.map((e) => `${e.goalId}:${e.status ?? ''}`).join('|') + selectedDate);
+  useFlip(listRef, entries.map((e) => `${e.goalId}:${e.allRecorded ? 1 : 0}`).join('|') + selectedDate);
 
   const isToday = selectedDate === today;
   const d = toDay(selectedDate);
@@ -131,8 +118,6 @@ export default function CheckInPage() {
         key={e.goalId}
         goal={goal}
         entry={e}
-        dueTasks={e.dueTaskIds.map((id) => tasks[id]).filter(Boolean)}
-        record={recordByGoal.get(e.goalId)}
         streak={isToday ? streakByGoal.get(e.goalId) : undefined}
         date={selectedDate}
         expanded={expandedGoalId === e.goalId}

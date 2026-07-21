@@ -162,7 +162,7 @@
 - [x] 截图门槛：scripts/capture-phase4.mjs → docs/screenshots/phase4/（打卡/复盘月度/复盘年度 × 深浅 6 张 + popover/补卡/免打卡特写 3 张 + 移动端 2 张，含移动端断言）
 
 ### 关键决策（Phase 5 需知）
-- **打卡口径**：目标级一天一条有效记录（同日多条取最强 done>partial>skipped）；upsert 原位更新保 id/createdAt；再点同状态=删除记录（toggle-off）
+- **打卡口径**（2026-07-21 起改为任务级，见「后续修补」）：记录按 `目标+任务+日期` upsert（`findCheckIn(goalId,date,taskId)`）；同键多条取最强 done>partial>skipped；原位更新保 id/createdAt；再点同状态=删除记录（toggle-off）。streak/热度/时长统计仍按目标 roll-up（max/sum），天然兼容一目标多条任务记录
 - **面板与甘特 popover 共用 actions**（setCheckIn/patchCheckIn/removeCheckIn），无记录时选分钟/写备注自动生成 done 记录
 - 批量补卡的 dryRun 与写入同一函数（batchCheckIn 第二参），预览与提交零口径漂移
 - 复盘笔记走 execute 进 undo（防抖 800ms 合并击键）；无变化早退不污染 undo 栈
@@ -198,6 +198,18 @@
 - **依赖连线拖不动（bug）**：连接柄只在 hover 本行（linked=hoverRowId===task.id）时渲染，而 useDepDrag 拖动中会把 hoverRow 改成命中目标行 → 源任务 linked 立即变 false → 柄 DOM 卸载 → pointer capture 随之丢失 → 拖拽被 pointercancel 中止（表现为「一按就弹回、连不上线」）
 - 修复：uiStore 增瞬态 depDragTaskId，useDepDrag 起手 setDepDragTask(源)、结束清空；TaskBar 渲染条件改 `(linked || depDragging) && !dragging`，拖动全程保持源柄挂载，capture 不丢
 - 浏览器面板实测（合成 PointerEvent 全链路）：里程碑右键→重命名→输入→提交名称落地；拖 sap-3 右柄至 sap-4（已存边，addDependency 去重 6→6，证明命中目标）、再拖至 en-1（新边 6→7）；两次拖动中 `document.contains(源柄)` 均为 true（回归锁定）
+
+### 2026-07-21 打卡改为任务级（多任务目标各自记录耗时）
+- **问题（结构性）**：打卡实为目标级（`一天对一个目标最多一条有效记录`），`findCheckIn/setCheckIn` upsert 键 = 目标+日期，`GoalCheckCard` 每目标一张卡一个时长输入且仅单任务时带 taskId。→ 同一目标下多个并行任务无法各自记录耗时（互相覆盖）；甘特 popover 也忽略 taskId，点任务 B 覆盖任务 A。数据模型早有 `CheckIn.taskId`，缺口在 UI + 写入/解析层
+- **方案（完整任务级，模型不变、无数据迁移）**：记录改按 `目标+任务+日期` 解析/upsert
+  - `dayPanel.dayEntries`：新增 `taskEntries[{taskId,name,status,record}]`（按 taskId 严格解析）、`allRecorded`（每个在办任务都记了才 true，供待办/已完成分组）、`legacyRecord`（旧的未分任务记录，仅提示手动清除）；目标级 `status` 仍取当日全部记录最强（供小环/热度口径）
+  - `GoalCheckCard`：单任务目标布局手感不变；多任务目标 = 目标卡头 +「N 个任务」+ 每任务一行（各自状态键 + 展开分钟/备注）；检测到 legacyRecord 显示「旧记录·清除」chip 避免与任务级记录重复计时
+  - `actions`：`findCheckIn(goalId,date,taskId?)` 严格匹配 taskId；`setCheckIn` 透传；`batchCheckIn` 多任务日改为每任务一条
+  - `CheckinPopover`：记录解析带上 anchor.taskId（修「点 B 覆盖 A」）
+  - streak/热度/时长统计（streak.ts/heat.ts/review.ts）**不改**——按目标 max/sum 聚合，天然兼容一目标多条任务记录；目标总时长因不再被单条封顶反而变准
+- **历史数据**：旧的多任务「未分任务」记录（taskId 空）不迁移、不改，仍计入目标总时长；单任务目标旧记录本就带 taskId，完全不受影响
+- 单测：dayPanel.test.ts 增 4 例（多任务各自解析/allRecorded/legacyRecord/单任务）；全量 97 测试绿
+- 浏览器面板实测：英语目标临时加第 2 个并行任务，07-17 卡显示「2 个任务」两行独立；点任务1「跳过」后读 IndexedDB 确认仅 en-1 变 skipped、en-tmp 仍 done，两条记录各带 60 分钟互不覆盖；单任务卡（SAP SD模块）布局回归无变化；测试数据已清理复原。截图接口本机超时，改读无障碍树 + IndexedDB 核对
 
 ## Phase 5 — 云同步与部署 【已完成 2026-07-18】
 

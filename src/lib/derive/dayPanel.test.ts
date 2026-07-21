@@ -29,13 +29,19 @@ const task = (id: string, goalId: string, partial: Partial<Task> = {}): Task => 
   ...partial,
 });
 
-const checkIn = (goalId: string, date: string, status: CheckIn['status']): CheckIn => ({
-  id: `c-${goalId}-${date}-${status}`,
+const checkIn = (
+  goalId: string,
+  date: string,
+  status: CheckIn['status'],
+  partial: Partial<CheckIn> = {},
+): CheckIn => ({
+  id: `c-${goalId}-${date}-${status}-${partial.taskId ?? 'g'}`,
   goalId,
   date,
   status,
   createdAt: `${date}T20:00:00.000Z`,
   updatedAt: `${date}T20:00:00.000Z`,
+  ...partial,
 });
 
 const exemption = (
@@ -104,11 +110,78 @@ describe('dayEntries 面板条目', () => {
   });
 });
 
+describe('dayEntries 任务级解析', () => {
+  it('多任务目标：记录按 taskId 各自解析，不互相覆盖', () => {
+    const entries = dayEntries({
+      date: '2026-01-05',
+      goals: [goal('g1')],
+      tasks: [task('t1', 'g1', { order: 0 }), task('t2', 'g1', { order: 1 })],
+      checkIns: [
+        checkIn('g1', '2026-01-05', 'done', { taskId: 't1', minutes: 30 }),
+        checkIn('g1', '2026-01-05', 'partial', { taskId: 't2', minutes: 60 }),
+      ],
+      exemptions: [],
+    });
+    const e = entries[0];
+    expect(e.taskEntries.map((t) => t.taskId)).toEqual(['t1', 't2']);
+    expect(e.taskEntries[0].record?.minutes).toBe(30);
+    expect(e.taskEntries[0].status).toBe('done');
+    expect(e.taskEntries[1].record?.minutes).toBe(60);
+    expect(e.taskEntries[1].status).toBe('partial');
+    expect(e.allRecorded).toBe(true);
+    // 目标级 status 取各任务最强
+    expect(e.status).toBe('done');
+  });
+
+  it('allRecorded：仅当每个在办任务都有记录才为 true', () => {
+    const entries = dayEntries({
+      date: '2026-01-05',
+      goals: [goal('g1')],
+      tasks: [task('t1', 'g1', { order: 0 }), task('t2', 'g1', { order: 1 })],
+      checkIns: [checkIn('g1', '2026-01-05', 'done', { taskId: 't1' })],
+      exemptions: [],
+    });
+    const e = entries[0];
+    expect(e.allRecorded).toBe(false);
+    expect(e.taskEntries[1].record).toBeUndefined();
+  });
+
+  it('未分任务的旧记录进 legacyRecord，不占任务行', () => {
+    const entries = dayEntries({
+      date: '2026-01-05',
+      goals: [goal('g1')],
+      tasks: [task('t1', 'g1', { order: 0 }), task('t2', 'g1', { order: 1 })],
+      checkIns: [checkIn('g1', '2026-01-05', 'done', { minutes: 45 })], // taskId 空
+      exemptions: [],
+    });
+    const e = entries[0];
+    expect(e.legacyRecord?.minutes).toBe(45);
+    expect(e.taskEntries.every((t) => !t.record)).toBe(true);
+    expect(e.allRecorded).toBe(false);
+  });
+
+  it('单任务目标：带 taskId 的记录正常解析', () => {
+    const entries = dayEntries({
+      date: '2026-01-05',
+      goals: [goal('g1')],
+      tasks: [task('t1', 'g1')],
+      checkIns: [checkIn('g1', '2026-01-05', 'done', { taskId: 't1' })],
+      exemptions: [],
+    });
+    const e = entries[0];
+    expect(e.taskEntries).toHaveLength(1);
+    expect(e.allRecorded).toBe(true);
+    expect(e.status).toBe('done');
+  });
+});
+
 describe('dayCompletionRate 当日完成率', () => {
   const entry = (partial: Partial<DayGoalEntry>): DayGoalEntry => ({
     goalId: 'g',
     dueTaskIds: ['t'],
+    taskEntries: [],
     exempt: false,
+    allRecorded: false,
     ...partial,
   });
 

@@ -14,15 +14,40 @@ import { isScheduledDow } from './scheduled';
 
 const STATUS_RANK: Record<CheckInStatus, number> = { done: 3, partial: 2, skipped: 1 };
 
+/** 从一组同目标同日记录中取"最强"（done > partial > skipped）。 */
+function strongest(records: CheckIn[]): CheckIn | undefined {
+  let best: CheckIn | undefined;
+  for (const c of records) {
+    if (!best || STATUS_RANK[c.status] > STATUS_RANK[best.status]) best = c;
+  }
+  return best;
+}
+
+/** 单个在办任务在某日的打卡条目（任务级：记录按 目标+任务+日期 解析）。 */
+export interface DayTaskEntry {
+  taskId: string;
+  name: string;
+  /** 该任务当日最强打卡状态（无记录 = undefined） */
+  status?: CheckInStatus;
+  /** 该任务当日已解析的打卡记录（用于就地更新分钟/备注/状态） */
+  record?: CheckIn;
+}
+
 export interface DayGoalEntry {
   goalId: string;
   /** 该日应打卡的任务 id（免打卡区间内为空数组） */
   dueTaskIds: string[];
+  /** 该日各在办任务的打卡条目（免打卡区间内为空数组） */
+  taskEntries: DayTaskEntry[];
   /** 该日处于命中该目标的免打卡区间 → 面板显示"休息中"而非按钮 */
   exempt: boolean;
   exemptReason?: string;
-  /** 当日最强打卡状态（无记录 = undefined） */
+  /** 当日目标级最强打卡状态（各任务记录取最强；供小环/热度口径） */
   status?: CheckInStatus;
+  /** 是否每个在办任务都已有记录（供"待打卡/已完成"分组） */
+  allRecorded: boolean;
+  /** 旧数据遗留：该目标当日未分配到具体任务的记录（taskId 空），供 UI 提示手动清除 */
+  legacyRecord?: CheckIn;
 }
 
 /**
@@ -39,24 +64,28 @@ export function dayEntries(args: {
   const { date, goals, tasks, checkIns, exemptions } = args;
   const dow = toDay(date).day();
 
-  const statusByGoal = new Map<string, CheckInStatus>();
+  // 该日全部有效记录按目标分组（任务级解析在下方按 taskId 细分）
+  const recordsByGoal = new Map<string, CheckIn[]>();
   for (const c of checkIns) {
     if (c.deletedAt || c.date !== date) continue;
-    const prev = statusByGoal.get(c.goalId);
-    if (!prev || STATUS_RANK[c.status] > STATUS_RANK[prev]) statusByGoal.set(c.goalId, c.status);
+    const list = recordsByGoal.get(c.goalId) ?? [];
+    list.push(c);
+    recordsByGoal.set(c.goalId, list);
   }
 
   const entries: DayGoalEntry[] = [];
   for (const goal of [...goals].filter((g) => !g.deletedAt && !g.archived).sort((a, b) => a.order - b.order)) {
-    const due = tasks.filter(
-      (t) =>
-        !t.deletedAt &&
-        t.goalId === goal.id &&
-        t.status !== 'done' &&
-        date >= t.startDate &&
-        date <= t.endDate &&
-        isScheduledDow(t.recurrence, dow),
-    );
+    const due = tasks
+      .filter(
+        (t) =>
+          !t.deletedAt &&
+          t.goalId === goal.id &&
+          t.status !== 'done' &&
+          date >= t.startDate &&
+          date <= t.endDate &&
+          isScheduledDow(t.recurrence, dow),
+      )
+      .sort((a, b) => a.order - b.order);
     if (due.length === 0) continue;
     const hit = exemptions.find(
       (e) =>
@@ -65,12 +94,26 @@ export function dayEntries(args: {
         date <= e.endDate &&
         (!e.goalIds || e.goalIds.length === 0 || e.goalIds.includes(goal.id)),
     );
+
+    const goalRecords = recordsByGoal.get(goal.id) ?? [];
+    // 任务级解析：每任务取「该任务 id 的记录」中最强；未分配任务的旧记录单列
+    const taskEntries: DayTaskEntry[] = hit
+      ? []
+      : due.map((t) => {
+          const record = strongest(goalRecords.filter((c) => c.taskId === t.id));
+          return { taskId: t.id, name: t.name, status: record?.status, record };
+        });
+    const legacyRecord = hit ? undefined : strongest(goalRecords.filter((c) => !c.taskId));
+
     entries.push({
       goalId: goal.id,
       dueTaskIds: hit ? [] : due.map((t) => t.id),
+      taskEntries,
       exempt: !!hit,
       exemptReason: hit?.reason,
-      status: statusByGoal.get(goal.id),
+      status: strongest(goalRecords)?.status,
+      allRecorded: taskEntries.length > 0 && taskEntries.every((e) => e.record),
+      legacyRecord,
     });
   }
   return entries;

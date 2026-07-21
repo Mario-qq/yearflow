@@ -211,12 +211,16 @@ const CHECKIN_TEXT: Record<CheckInStatus, string> = {
   skipped: '跳过',
 };
 
-/** 某目标某日的现有打卡记录（同日多条取"最强"，与派生口径一致） */
-export function findCheckIn(goalId: string, date: string): CheckIn | undefined {
+/**
+ * 某目标某任务某日的现有打卡记录（同键多条取"最强"，与派生口径一致）。
+ * 任务级 upsert：taskId 严格匹配（未指定 taskId 时只匹配同样未分配任务的旧记录）。
+ */
+export function findCheckIn(goalId: string, date: string, taskId?: string): CheckIn | undefined {
   const rank: Record<CheckInStatus, number> = { done: 3, partial: 2, skipped: 1 };
   let best: CheckIn | undefined;
   for (const c of Object.values(useStore.getState().checkIns)) {
     if (c.deletedAt || c.goalId !== goalId || c.date !== date) continue;
+    if ((c.taskId ?? undefined) !== (taskId ?? undefined)) continue;
     if (!best || rank[c.status] > rank[best.status]) best = c;
   }
   return best;
@@ -235,7 +239,7 @@ export interface SetCheckInArgs {
 export function setCheckIn(args: SetCheckInArgs): string {
   const s = useStore.getState();
   const goalName = s.goals[args.goalId]?.name ?? '';
-  const existing = findCheckIn(args.goalId, args.date);
+  const existing = findCheckIn(args.goalId, args.date, args.taskId);
   const label = `打卡「${goalName}」${CHECKIN_TEXT[args.status]}`;
   if (existing) {
     const after: CheckIn = {
@@ -301,20 +305,24 @@ export function batchCheckIn(args: BatchCheckInArgs, dryRun = false): number {
   const changes: Change[] = [];
   for (const date of eachDay(args.startDate, end)) {
     for (const entry of dayEntries({ date, goals: goalList, tasks: taskList, checkIns: checkInList, exemptions: exemptionList })) {
-      if (!wanted.has(entry.goalId) || entry.exempt || entry.status) continue;
-      changes.push({
-        table: 'checkIns',
-        type: 'put',
-        after: {
-          id: nanoid(),
-          goalId: entry.goalId,
-          taskId: entry.dueTaskIds.length === 1 ? entry.dueTaskIds[0] : undefined,
-          date,
-          status: args.status,
-          createdAt: stamp,
-          updatedAt: stamp,
-        },
-      });
+      if (!wanted.has(entry.goalId) || entry.exempt) continue;
+      // 任务级补卡：只补该目标当日「尚无记录」的任务，一任务一条
+      for (const te of entry.taskEntries) {
+        if (te.record) continue;
+        changes.push({
+          table: 'checkIns',
+          type: 'put',
+          after: {
+            id: nanoid(),
+            goalId: entry.goalId,
+            taskId: te.taskId,
+            date,
+            status: args.status,
+            createdAt: stamp,
+            updatedAt: stamp,
+          },
+        });
+      }
     }
   }
   if (!dryRun && changes.length > 0) {

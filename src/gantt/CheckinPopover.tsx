@@ -30,11 +30,12 @@ export function CheckinPopover() {
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const [customMin, setCustomMin] = useState('');
 
-  // 当前记录：同目标同日取最强（与派生口径一致）
+  // 当前记录：同目标同任务同日取最强（任务级口径；未分任务的旧记录仅当锚点也未指定任务时匹配）
   let record: CheckIn | undefined;
   if (anchor) {
     for (const c of Object.values(checkIns)) {
       if (c.deletedAt || c.goalId !== anchor.goalId || c.date !== anchor.date) continue;
+      if ((c.taskId ?? undefined) !== (anchor.taskId ?? undefined)) continue;
       if (!record || STATUS_RANK[c.status] > STATUS_RANK[record.status]) record = c;
     }
   }
