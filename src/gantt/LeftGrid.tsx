@@ -172,7 +172,17 @@ const GoalRow = memo(function GoalRow({ goal, top, height, collapsed, taskCount,
           ✓
         </span>
       )}
-      <span style={{ fontSize: 'var(--font-14)', filter: completed ? 'grayscale(0.8)' : undefined, opacity: completed ? 0.7 : 1 }}>
+      <span
+        className="shrink-0 cursor-pointer rounded hover:bg-[var(--row-hover)]"
+        title="点击更改图标"
+        style={{ fontSize: 'var(--font-14)', lineHeight: 1, padding: '1px 2px', filter: completed ? 'grayscale(0.8)' : undefined, opacity: completed ? 0.7 : 1 }}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          const r = e.currentTarget.getBoundingClientRect();
+          useGanttUi.getState().setIconPicker({ goalId: goal.id, x: r.left, y: r.bottom + 4 });
+        }}
+      >
         {goal.icon}
       </span>
       {editing ? (

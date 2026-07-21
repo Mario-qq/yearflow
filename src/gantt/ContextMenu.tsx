@@ -127,6 +127,10 @@ function buildItems(menu: ContextMenuState): Entry[] {
         onClick: () => ui.setEditing({ id: goal.id, field: 'goalName' }),
       },
       {
+        label: '更改图标',
+        onClick: () => ui.setIconPicker({ goalId: goal.id, x: menu.x, y: menu.y }),
+      },
+      {
         label: '新建任务',
         onClick: () => {
           const start = todayStr();

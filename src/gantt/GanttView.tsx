@@ -41,6 +41,7 @@ import { useDepDrag } from './hooks/useDepDrag';
 import { CreateOverlay } from './CreateDrag';
 import { CheckinPopover } from './CheckinPopover';
 import { GanttContextMenu } from './ContextMenu';
+import { GoalIconPicker } from './GoalIconPicker';
 import { BulkBar } from './BulkBar';
 import { DependencyLayer } from './DependencyLayer';
 import { TaskDrawer } from './TaskDrawer';
@@ -686,6 +687,7 @@ export default function GanttView() {
         <BarTooltip anchor={anchor} task={hoverTask} tg={hoverTg} streak={hoverGg.streak} />
       )}
       <GanttContextMenu />
+      <GoalIconPicker />
       <BulkBar />
       <TaskDrawer />
       <CheckinPopover />

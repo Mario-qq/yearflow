@@ -31,6 +31,13 @@ export interface CheckinPopoverState {
   y: number;
 }
 
+/** 目标图标选择器：点目标 emoji / 右键「更改图标」打开，锚在触发处 */
+export interface IconPickerState {
+  goalId: string;
+  x: number;
+  y: number;
+}
+
 interface GanttUiState {
   /** hover 所在行（任务/目标/幽灵行 id）——左右联动与整行淡背景 */
   hoverRowId: string | null;
@@ -50,6 +57,8 @@ interface GanttUiState {
   drawerTaskId: string | null;
   /** 打卡点 popover */
   checkinPopover: CheckinPopoverState | null;
+  /** 目标图标选择器 */
+  iconPicker: IconPickerState | null;
 
   setHoverRow: (id: string | null) => void;
   setHoverCell: (rowId: string | null, dayIdx: number | null) => void;
@@ -61,6 +70,7 @@ interface GanttUiState {
   setContextMenu: (m: ContextMenuState | null) => void;
   setDrawerTask: (id: string | null) => void;
   setCheckinPopover: (p: CheckinPopoverState | null) => void;
+  setIconPicker: (p: IconPickerState | null) => void;
 }
 
 let flashTimer: ReturnType<typeof setTimeout> | undefined;
@@ -76,6 +86,7 @@ export const useGanttUi = create<GanttUiState>()((set, get) => ({
   contextMenu: null,
   drawerTaskId: null,
   checkinPopover: null,
+  iconPicker: null,
 
   setHoverRow: (id) => {
     if (get().hoverRowId !== id) set({ hoverRowId: id });
@@ -104,6 +115,7 @@ export const useGanttUi = create<GanttUiState>()((set, get) => ({
   setContextMenu: (contextMenu) => set({ contextMenu }),
   setDrawerTask: (drawerTaskId) => set({ drawerTaskId }),
   setCheckinPopover: (checkinPopover) => set({ checkinPopover }),
+  setIconPicker: (iconPicker) => set({ iconPicker }),
 }));
 
 // dev 观测：与 __store 一致，供控制台/验证脚本读取瞬态 UI 状态（生产剔除）
