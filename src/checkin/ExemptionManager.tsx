@@ -4,9 +4,10 @@
  */
 import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { fmtDay, toDay, todayStr } from '../lib/date';
+import { diffDays, fmtDay, toDay, todayStr } from '../lib/date';
 import { goalColor } from '../lib/colors';
 import { createExemption, deleteExemption, updateExemption } from '../store/actions';
+import type { ExemptionPeriod } from '../types/domain';
 
 const inputStyle: React.CSSProperties = {
   fontSize: 'var(--font-12)',
@@ -22,6 +23,7 @@ export function ExemptionManager() {
   const goals = useStore((s) => s.goals);
   const [adding, setAdding] = useState(false);
   const today = todayStr();
+  const currentYear = today.slice(0, 4);
 
   const goalList = useMemo(
     () =>
@@ -38,6 +40,30 @@ export function ExemptionManager() {
     [exemptions],
   );
 
+  // 按开始日期的年份分组（跨年区间归入开始年份），年份倒序
+  const groups = useMemo(() => {
+    const byYear = new Map<string, ExemptionPeriod[]>();
+    for (const ex of list) {
+      const year = ex.startDate.slice(0, 4);
+      const arr = byYear.get(year);
+      if (arr) arr.push(ex);
+      else byYear.set(year, [ex]);
+    }
+    return [...byYear.entries()]
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .map(([year, items]) => ({
+        year,
+        items,
+        days: items.reduce((sum, ex) => sum + diffDays(ex.endDate, ex.startDate) + 1, 0),
+      }));
+  }, [list]);
+
+  // 折叠状态仅存组件内存：默认收起过去的年份，当年及未来展开
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const isCollapsed = (year: string) => collapsed[year] ?? year < currentYear;
+  const toggleYear = (year: string) =>
+    setCollapsed((prev) => ({ ...prev, [year]: !isCollapsed(year) }));
+
   const toggleGoal = (id: string, exGoalIds: string[] | undefined, goalId: string) => {
     // 空/缺省 = 全部目标；点选目标 chip 在"全部"与具体集合之间切换
     const cur = new Set(exGoalIds && exGoalIds.length > 0 ? exGoalIds : goalList.map((g) => g.id));
@@ -49,16 +75,9 @@ export function ExemptionManager() {
     });
   };
 
-  return (
-    <div className="flex flex-col gap-2">
-      {list.length === 0 && (
-        <p style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}>
-          还没有免打卡区间。出差、生病、假期时添加，期间不判缺卡、不断 streak。
-        </p>
-      )}
-      {list.map((ex) => {
-        const scoped = ex.goalIds && ex.goalIds.length > 0;
-        return (
+  const renderRow = (ex: ExemptionPeriod) => {
+    const scoped = ex.goalIds && ex.goalIds.length > 0;
+    return (
           <div
             key={ex.id}
             className="flex flex-col gap-2 border p-2.5"
@@ -146,6 +165,34 @@ export function ExemptionManager() {
                 );
               })}
             </div>
+          </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      {list.length === 0 && (
+        <p style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}>
+          还没有免打卡区间。出差、生病、假期时添加，期间不判缺卡、不断 streak。
+        </p>
+      )}
+      {groups.map((group) => {
+        const open = !isCollapsed(group.year);
+        return (
+          <div key={group.year} className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => toggleYear(group.year)}
+              className="flex cursor-pointer items-center gap-2 py-0.5 text-left"
+              style={{ fontSize: 'var(--font-12)', color: 'var(--text-secondary)' }}
+            >
+              <span style={{ width: 10, color: 'var(--text-tertiary)' }}>{open ? '▾' : '▸'}</span>
+              <span className="font-medium">{group.year} 年</span>
+              <span className="tnum" style={{ color: 'var(--text-tertiary)' }}>
+                · {group.items.length} 段 · 共 {group.days} 天
+              </span>
+            </button>
+            {open && group.items.map((ex) => renderRow(ex))}
           </div>
         );
       })}
