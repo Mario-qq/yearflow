@@ -181,6 +181,12 @@
 - Playwright 真实 Chrome 实测：真实右键全链路（菜单项/confirm 文案/级联软删/undo 完整还原）全绿
 - 注：浏览器面板里 dispatchEvent 合成 contextmenu 不触发 React 委托处理器（element.click() 可以），右键类验证必须走 Playwright
 
+### 2026-07-21 免打卡区间按年份分组折叠
+- 设置页 ExemptionManager 列表按 startDate 年份分组（跨年区间归入开始年份），年份倒序；每组头部显示「N 段 · 共 M 天」，点击展开/收起
+- 默认展开策略：当年及未来年份展开，过去年份默认收起——避免多年数据堆叠成长列表
+- 折叠状态只存组件内 useState，不入库、不进 undo，刷新回到默认展开范围
+- 浏览器实测：造 2024/2025/2026 三年数据，分组与默认展开/收起、点击切换均命中；截图接口本机再次超时，改读无障碍树核对
+
 ## Phase 5 — 云同步与部署 【已完成 2026-07-18】
 
 - [x] SQL migration（supabase/migrations/0001_init.sql，用户已在 SQL Editor 执行）：6 表（id+user_id 复合主键、data jsonb 存完整实体、updated_at/deleted_at 冗余列）+ RLS（user_id = auth.uid() 全操作）+ server_updated_at 触发器（clock_timestamp）+ upsert_rows RPC（条件 upsert：excluded.updated_at > 现值才覆盖）
