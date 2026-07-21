@@ -22,6 +22,7 @@ const goalSchema = z.object({
   icon: z.string().optional(),
   order: z.number(),
   archived: z.boolean(),
+  completedAt: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   deletedAt: z.string().optional(),

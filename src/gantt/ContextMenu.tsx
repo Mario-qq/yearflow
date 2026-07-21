@@ -20,9 +20,11 @@ import {
   patchMilestone,
   patchTask,
   patchTasks,
+  setGoalCompleted,
   splitTaskAt,
 } from '../store/actions';
 import { showToast } from '../lib/toast';
+import { celebrate } from '../lib/celebrate';
 import { fmtDay, toDay, todayStr } from '../lib/date';
 import { useGanttUi, type ContextMenuState } from './uiStore';
 
@@ -118,6 +120,7 @@ function buildItems(menu: ContextMenuState): Entry[] {
   if (menu.kind === 'goal' && menu.goalId) {
     const goal = store.goals[menu.goalId];
     if (!goal) return [];
+    const completed = Boolean(goal.completedAt);
     return [
       {
         label: '重命名',
@@ -134,6 +137,17 @@ function buildItems(menu: ContextMenuState): Entry[] {
           });
           ui.flashTask(id);
           ui.setEditing({ id, field: 'name' });
+        },
+      },
+      'divider',
+      {
+        label: completed ? '取消完成' : '标记完成 ✓',
+        onClick: () => {
+          setGoalCompleted(goal.id, !completed);
+          if (!completed) {
+            celebrate(menu.x, menu.y);
+            showToast(`🎉 目标「${goal.name}」已完成，可 Ctrl+Z 撤销`);
+          }
         },
       },
       'divider',

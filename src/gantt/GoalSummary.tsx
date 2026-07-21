@@ -58,7 +58,7 @@ export const GoalSummary = memo(function GoalSummary({
             width: spanW,
             height: SUMMARY_BAR_H,
             borderRadius: 'var(--radius-sm)',
-            background: goalColorAlpha(goal.color, 40),
+            background: goal.completedAt ? 'var(--border-strong)' : goalColorAlpha(goal.color, 40),
           }}
         />
       )}

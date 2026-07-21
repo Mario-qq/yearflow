@@ -81,6 +81,7 @@ const GoalRow = memo(function GoalRow({ goal, top, height, collapsed, taskCount,
   const setEditing = useGanttUi((s) => s.setEditing);
   const setHoverCell = useGanttUi((s) => s.setHoverCell);
   const solid = goalColor(goal.color);
+  const completed = Boolean(goal.completedAt);
   const monthRate = gg ? goalMonthlyRate(gg, today.slice(0, 7), today) : null;
   const streak = gg?.streak.current ?? 0;
   /** 拖拽后浏览器仍会补发一次 click：置位则吞掉，避免误触发折叠 */
@@ -122,7 +123,7 @@ const GoalRow = memo(function GoalRow({ goal, top, height, collapsed, taskCount,
         padding: '0 12px 0 8px',
         background: 'var(--bg-subtle)',
         borderBottom: '1px solid var(--border-subtle)',
-        borderLeft: `3px solid ${solid}`,
+        borderLeft: `3px solid ${completed ? 'var(--border-strong)' : solid}`,
         opacity: dim ? 0.35 : dragging ? 0.5 : 1,
         boxShadow: dragging ? 'var(--shadow-sm)' : undefined,
         cursor: dragging ? 'grabbing' : 'grab',
@@ -153,7 +154,27 @@ const GoalRow = memo(function GoalRow({ goal, top, height, collapsed, taskCount,
       >
         ▶
       </span>
-      <span style={{ fontSize: 'var(--font-14)' }}>{goal.icon}</span>
+      {completed && (
+        <span
+          aria-hidden
+          className="flex shrink-0 items-center justify-center"
+          title={`已完成 · ${toDay(goal.completedAt!).format('M月D日')}`}
+          style={{
+            width: 15,
+            height: 15,
+            borderRadius: '50%',
+            background: 'var(--success)',
+            color: 'var(--text-on-accent, #fff)',
+            fontSize: 10,
+            lineHeight: 1,
+          }}
+        >
+          ✓
+        </span>
+      )}
+      <span style={{ fontSize: 'var(--font-14)', filter: completed ? 'grayscale(0.8)' : undefined, opacity: completed ? 0.7 : 1 }}>
+        {goal.icon}
+      </span>
       {editing ? (
         <InlineInput
           defaultValue={goal.name}
@@ -168,7 +189,7 @@ const GoalRow = memo(function GoalRow({ goal, top, height, collapsed, taskCount,
       ) : (
         <span
           className="overflow-hidden text-ellipsis whitespace-nowrap font-semibold"
-          style={{ fontSize: 'var(--font-13)' }}
+          style={{ fontSize: 'var(--font-13)', color: completed ? 'var(--text-tertiary)' : undefined }}
           title="点击重命名"
           onClick={(e) => {
             e.stopPropagation();

@@ -51,6 +51,22 @@ export function patchGoal(id: string, patch: Partial<Goal>, label: string): void
   s.execute(label, [{ table: 'goals', type: 'put', before, after }]);
 }
 
+/** 标记/取消目标完成（手动，一条命令可撤销）；完成 ≠ 归档，泳道留在原位仅置灰+✓ */
+export function setGoalCompleted(id: string, completed: boolean): void {
+  const s = useStore.getState();
+  const before = s.goals[id];
+  if (!before) return;
+  if (completed === Boolean(before.completedAt)) return;
+  const after: Goal = {
+    ...before,
+    completedAt: completed ? nowIso() : undefined,
+    updatedAt: nowIso(),
+  };
+  s.execute(completed ? `完成目标「${before.name}」` : `取消完成「${before.name}」`, [
+    { table: 'goals', type: 'put', before, after },
+  ]);
+}
+
 /** 目标泳道重排：按新顺序重写 order（一条命令一次 undo；order 已一致的目标不产生变更） */
 export function reorderGoals(orderedIds: string[]): void {
   const s = useStore.getState();

@@ -11,6 +11,7 @@ export interface Goal {
   icon?: string; // emoji
   order: number; // 泳道排序
   archived: boolean;
+  completedAt?: string; // 手动标记完成的时间戳（ISO）；缺省 = 未完成。完成 ≠ 归档隐藏
   createdAt: string; // ISO
   updatedAt: string;
   deletedAt?: string; // 软删除（同步用）

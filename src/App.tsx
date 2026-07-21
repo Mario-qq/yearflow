@@ -4,6 +4,7 @@ import { useStore } from './store/useStore';
 import { applyTheme, subscribeSystemTheme } from './lib/theme';
 import { showToast } from './lib/toast';
 import { Toasts } from './components/Toasts';
+import { Celebration } from './components/Celebration';
 import { SyncIndicator } from './components/SyncIndicator';
 import { initSync } from './db/sync/syncApi';
 import { CommandPalette } from './components/CommandPalette';
@@ -223,6 +224,7 @@ export default function App() {
         </main>
         <MobileTabBar />
         <Toasts />
+        <Celebration />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       </div>
