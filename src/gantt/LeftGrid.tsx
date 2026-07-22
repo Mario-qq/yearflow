@@ -13,7 +13,7 @@ import type { GoalGantt, TaskGantt } from '../lib/derive';
 import { baselineDrift, goalMonthlyRate } from '../lib/derive';
 import type { RowLayout } from './rowLayout';
 import { useStore } from '../store/useStore';
-import { createGoal, createTask, patchGoal, patchTask, reorderGoals } from '../store/actions';
+import { createGoal, createTask, patchGoal, patchTask, reorderGoals, reorderTasks } from '../store/actions';
 import { useGanttUi } from './uiStore';
 import { goalColor } from '../lib/colors';
 import { toDay, fmtDay } from '../lib/date';
@@ -236,15 +236,39 @@ interface TaskRowProps {
   colWidths: Record<string, number>;
   tg?: TaskGantt;
   dim: boolean;
+  /** 正在被拖动重排 */
+  dragging: boolean;
   onLocate: (taskId: string) => void;
+  /** 任务重排拖拽回调（几何/落点由 LeftGrid 统一持有） */
+  onDragStart: (taskId: string) => void;
+  onDragMove: (clientY: number) => void;
+  onDragEnd: (committed: boolean) => void;
 }
 
-const TaskRow = memo(function TaskRow({ task, top, height, cols, colWidths, tg, dim, onLocate }: TaskRowProps) {
+const TaskRow = memo(function TaskRow({ task, top, height, cols, colWidths, tg, dim, dragging, onLocate, onDragStart, onDragMove, onDragEnd }: TaskRowProps) {
   const editing = useGanttUi((s) => (s.editing?.id === task.id ? s.editing.field : null));
   const setEditing = useGanttUi((s) => s.setEditing);
   const setHoverCell = useGanttUi((s) => s.setHoverCell);
   const progress = Math.round(tg?.effectiveProgress ?? task.progress);
   const solid = goalColor(useStore((s) => s.goals[task.goalId]?.color ?? 'goal-1'));
+  /** 拖拽后浏览器仍会补发一次 click：置位则吞掉，避免误触发定位/行内编辑 */
+  const suppressClick = useRef(false);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return; // 右键交给上层
+    if (editing) return; // 行内编辑中不抢指针（保持输入框选区/光标）
+    suppressClick.current = false;
+    startPointerDrag(e, {
+      onStart: () => {
+        suppressClick.current = true;
+        onDragStart(task.id);
+      },
+      onMove: (s) => onDragMove(s.clientY),
+      onEnd: (s, committed) => {
+        if (s.started) onDragEnd(committed);
+      },
+    });
+  };
 
   const cycleStatus = () => {
     const next = STATUS_ORDER[(STATUS_ORDER.indexOf(task.status) + 1) % STATUS_ORDER.length];
@@ -366,15 +390,29 @@ const TaskRow = memo(function TaskRow({ task, top, height, cols, colWidths, tg, 
 
   return (
     <div
-      className="absolute left-0 right-0 flex cursor-pointer items-center"
+      className="absolute left-0 right-0 flex items-center"
       style={{
         top,
         height,
         borderBottom: '1px solid var(--border-subtle)',
-        opacity: dim ? 0.35 : 1,
-        transition: 'opacity var(--dur-zoom) var(--ease)',
+        opacity: dim ? 0.35 : dragging ? 0.5 : 1,
+        background: dragging ? 'var(--bg-subtle)' : undefined,
+        boxShadow: dragging ? 'var(--shadow-sm)' : undefined,
+        cursor: dragging ? 'grabbing' : 'grab',
+        transition: dragging ? undefined : 'opacity var(--dur-zoom) var(--ease)',
+        touchAction: 'none',
+        zIndex: dragging ? 3 : undefined,
       }}
       onPointerEnter={() => setHoverCell(task.id, null)}
+      onPointerDown={handlePointerDown}
+      onClickCapture={(e) => {
+        // 拖拽后补发的 click：拦在子单元格处理器之前吞掉，避免误开行内编辑
+        if (suppressClick.current) {
+          suppressClick.current = false;
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      }}
       onClick={() => onLocate(task.id)}
     >
       {cols.map((c, i) => {
@@ -535,6 +573,56 @@ export const LeftGrid = memo(function LeftGrid({
     });
   };
 
+  // ── 任务行纵向拖拽重排（约束在同目标内）────────────────────────────────────
+  /** 拖拽中：被拖任务 id + 所属目标 + 插入位下标（同目标任务列表内 0..n）+ 落点指示线 y */
+  const [taskDrag, setTaskDrag] = useState<{ id: string; goalId: string; index: number; indicatorY: number } | null>(null);
+
+  /** 光标 layout-y → 同目标任务列表内的插入下标 + 指示线 y（落在某任务行中线之上则插到其前） */
+  const resolveTaskDrop = (goalId: string, layoutY: number): { index: number; indicatorY: number } => {
+    const siblings = layout.taskRowsByGoal[goalId] ?? [];
+    if (siblings.length === 0) return { index: 0, indicatorY: layout.rowById[goalId]?.top ?? 0 };
+    for (let i = 0; i < siblings.length; i++) {
+      const r = siblings[i];
+      if (layoutY < r.top + r.height / 2) return { index: i, indicatorY: r.top };
+    }
+    const last = siblings[siblings.length - 1];
+    return { index: siblings.length, indicatorY: last.top + last.height };
+  };
+
+  const handleTaskDragStart = (taskId: string) => {
+    const goalId = tasks[taskId]?.goalId;
+    if (!goalId) return;
+    const siblings = layout.taskRowsByGoal[goalId] ?? [];
+    const from = siblings.findIndex((r) => r.id === taskId);
+    setTaskDrag({ id: taskId, goalId, index: from, indicatorY: siblings[from]?.top ?? 0 });
+  };
+
+  const handleTaskDragMove = (clientY: number) => {
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setTaskDrag((prev) => {
+      if (!prev) return prev;
+      const { index, indicatorY } = resolveTaskDrop(prev.goalId, clientY - rect.top);
+      return prev.index !== index || prev.indicatorY !== indicatorY ? { ...prev, index, indicatorY } : prev;
+    });
+  };
+
+  const handleTaskDragEnd = (committed: boolean) => {
+    setTaskDrag((prev) => {
+      if (prev && committed) {
+        const ids = (layout.taskRowsByGoal[prev.goalId] ?? []).map((r) => r.id);
+        const from = ids.indexOf(prev.id);
+        const insertAt = prev.index > from ? prev.index - 1 : prev.index;
+        if (from !== -1 && insertAt !== from) {
+          const without = ids.filter((id) => id !== prev.id);
+          without.splice(insertAt, 0, prev.id);
+          reorderTasks(without);
+        }
+      }
+      return null;
+    });
+  };
+
   /** 分隔条拖宽（rAF 直写 settings，persist 防抖）；双击复位默认宽 */
   const startDividerDrag = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -621,19 +709,23 @@ export const LeftGrid = memo(function LeftGrid({
                 colWidths={gridColWidths}
                 tg={derive.get(r.goalId)?.perTask.get(r.id)}
                 dim={dimTaskIds.has(r.id) || dimGoalIds.has(r.goalId)}
+                dragging={taskDrag?.id === r.id}
                 onLocate={onLocateTask}
+                onDragStart={handleTaskDragStart}
+                onDragMove={handleTaskDragMove}
+                onDragEnd={handleTaskDragEnd}
               />
             );
           })}
 
           <RowHoverOverlay layout={layout} />
 
-          {/* 泳道重排落点指示线 */}
-          {goalDrag && (
+          {/* 泳道 / 任务重排落点指示线 */}
+          {(goalDrag || taskDrag) && (
             <div
               className="pointer-events-none absolute left-0 right-0"
               style={{
-                top: goalDrag.indicatorY - 1,
+                top: (goalDrag ? goalDrag.indicatorY : taskDrag!.indicatorY) - 1,
                 height: 2,
                 background: 'var(--accent)',
                 zIndex: 4,
@@ -642,7 +734,7 @@ export const LeftGrid = memo(function LeftGrid({
               <span
                 className="absolute"
                 style={{
-                  left: 2,
+                  left: taskDrag && !goalDrag ? 26 : 2,
                   top: -3,
                   width: 8,
                   height: 8,

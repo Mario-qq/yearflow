@@ -81,6 +81,19 @@ export function reorderGoals(orderedIds: string[]): void {
   if (changes.length > 0) s.execute('调整目标顺序', changes);
 }
 
+/** 任务重排：按新顺序重写同目标任务的 order（一条命令一次 undo；order 已一致的任务不产生变更） */
+export function reorderTasks(orderedIds: string[]): void {
+  const s = useStore.getState();
+  const stamp = nowIso();
+  const changes: Change[] = [];
+  orderedIds.forEach((id, i) => {
+    const before = s.tasks[id];
+    if (!before || before.order === i) return;
+    changes.push({ table: 'tasks', type: 'put', before, after: { ...before, order: i, updatedAt: stamp } });
+  });
+  if (changes.length > 0) s.execute('调整任务顺序', changes);
+}
+
 export function patchMilestone(id: string, patch: Partial<Milestone>, label: string): void {
   const s = useStore.getState();
   const before = s.milestones[id];
