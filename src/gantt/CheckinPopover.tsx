@@ -11,7 +11,7 @@ import { toDay } from '../lib/date';
 import { patchCheckIn, removeCheckIn, setCheckIn } from '../store/actions';
 import { useGanttUi } from './uiStore';
 
-const MINUTE_CHIPS = [15, 30, 60, 90];
+const MINUTE_CHIPS = [10, 15, 30, 60];
 const STATUS_RANK: Record<CheckInStatus, number> = { done: 3, partial: 2, skipped: 1 };
 
 const STATUS_BUTTONS: { status: CheckInStatus; icon: string; label: string; color: string }[] = [

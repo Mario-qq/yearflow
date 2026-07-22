@@ -9,7 +9,7 @@ import type { DayGoalEntry, DayTaskEntry } from '../lib/derive';
 import { goalColor } from '../lib/colors';
 import { patchCheckIn, removeCheckIn, setCheckIn } from '../store/actions';
 
-const MINUTE_CHIPS = [15, 30, 60, 90];
+const MINUTE_CHIPS = [10, 15, 30, 60];
 
 const STATUS_BUTTONS: { status: CheckInStatus; icon: string; label: string; color: string }[] = [
   { status: 'done', icon: '✓', label: '完成', color: 'var(--success)' },
