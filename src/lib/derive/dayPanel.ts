@@ -119,6 +119,60 @@ export function dayEntries(args: {
   return entries;
 }
 
+/** 随缘（不定期）任务在某日的记录条目：供打卡页「不定期」区随手补记。 */
+export interface AdhocEntry {
+  goalId: string;
+  taskId: string;
+  /** 任务名 */
+  name: string;
+  /** 该任务当日已解析的打卡记录（无 = 未记录） */
+  record?: CheckIn;
+  status?: CheckInStatus;
+}
+
+/**
+ * 某一天可补记的随缘任务（recurrence.type==='adhoc'）：
+ * 不进每日「待打卡」，仅在其日期范围内、未完成时列出，供用户想记时补一次。
+ * 按目标 order、再任务 order 排序（携带 goalOrder/taskOrder 供调用方排序）。
+ */
+export function adhocEntries(args: {
+  date: string;
+  goals: Goal[];
+  tasks: Task[];
+  checkIns: CheckIn[];
+}): AdhocEntry[] {
+  const { date, goals, tasks, checkIns } = args;
+  const goalById = new Map(goals.filter((g) => !g.deletedAt && !g.archived).map((g) => [g.id, g]));
+
+  const recordsByKey = new Map<string, CheckIn[]>();
+  for (const c of checkIns) {
+    if (c.deletedAt || c.date !== date || !c.taskId) continue;
+    const key = `${c.goalId}:${c.taskId}`;
+    const list = recordsByKey.get(key) ?? [];
+    list.push(c);
+    recordsByKey.set(key, list);
+  }
+
+  const rows = tasks
+    .filter(
+      (t) =>
+        !t.deletedAt &&
+        t.recurrence?.type === 'adhoc' &&
+        t.status !== 'done' &&
+        goalById.has(t.goalId) &&
+        date >= t.startDate &&
+        date <= t.endDate,
+    )
+    .map((t) => {
+      const record = strongest(recordsByKey.get(`${t.goalId}:${t.id}`) ?? []);
+      const goal = goalById.get(t.goalId)!;
+      return { goalId: t.goalId, taskId: t.id, name: t.name, record, status: record?.status, _g: goal.order, _t: t.order };
+    })
+    .sort((a, b) => a._g - b._g || a._t - b._t);
+
+  return rows.map(({ _g, _t, ...e }) => e);
+}
+
 /**
  * 当日完成率（微型日历小环，0-1）：done=1、partial=0.5；
  * skipped 与休息中不入分母；分母为 0 返回 null（环不渲染）。

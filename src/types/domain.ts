@@ -17,9 +17,13 @@ export interface Goal {
   deletedAt?: string; // 软删除（同步用）
 }
 
-/** 打卡规则：定义哪些天"应该做" */
+/**
+ * 打卡规则：定义哪些天"应该做"。
+ * adhoc（随缘）= 不排期：不进每日「待打卡」、永不缺卡、不断 streak、进度只能手动；
+ * 想记录时在打卡页「不定期」区随手补一次即可（见 derive/dayPanel adhocEntries）。
+ */
 export interface Recurrence {
-  type: 'daily' | 'weekdays' | 'custom';
+  type: 'daily' | 'weekdays' | 'custom' | 'adhoc';
   daysOfWeek?: number[]; // custom：0=周日...6=周六，如篮球 = [1,3,6]
 }
 

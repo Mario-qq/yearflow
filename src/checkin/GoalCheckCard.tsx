@@ -31,17 +31,22 @@ function springPress(el: HTMLElement) {
   );
 }
 
-/** 某任务的状态三键（点击即存，再点同状态 = 取消该记录）。compact 用于多任务行内。 */
-function StatusButtons({
+/**
+ * 某任务的状态键（点击即存，再点同状态 = 取消该记录）。compact 用于多任务行内。
+ * statuses 限定显示哪些键（随缘任务不显示"跳过"——无排期可跳）。
+ */
+export function StatusButtons({
   goalId,
   date,
   te,
   compact,
+  statuses,
 }: {
   goalId: string;
   date: string;
   te: DayTaskEntry;
   compact?: boolean;
+  statuses?: CheckInStatus[];
 }) {
   const pick = (status: CheckInStatus, el: HTMLElement) => {
     springPress(el);
@@ -51,9 +56,12 @@ function StatusButtons({
       setCheckIn({ goalId, date, status, taskId: te.taskId });
     }
   };
+  const buttons = statuses
+    ? STATUS_BUTTONS.filter((b) => statuses.includes(b.status))
+    : STATUS_BUTTONS;
   return (
     <div className="flex shrink-0 items-center gap-1.5">
-      {STATUS_BUTTONS.map(({ status, icon, label, color }) => {
+      {buttons.map(({ status, icon, label, color }) => {
         const active = te.record?.status === status;
         return (
           <button
@@ -81,7 +89,7 @@ function StatusButtons({
 }
 
 /** 某任务的分钟 chips + 一句话备注编辑区（展开态显示）。 */
-function TaskEditor({ goalId, date, te }: { goalId: string; date: string; te: DayTaskEntry }) {
+export function TaskEditor({ goalId, date, te }: { goalId: string; date: string; te: DayTaskEntry }) {
   const [customMin, setCustomMin] = useState('');
   const noteRef = useRef<HTMLInputElement>(null);
   const record = te.record;
@@ -183,7 +191,7 @@ function TaskEditor({ goalId, date, te }: { goalId: string; date: string; te: Da
   );
 }
 
-function ExpandChevron({ open, onClick, title }: { open: boolean; onClick: () => void; title: string }) {
+export function ExpandChevron({ open, onClick, title }: { open: boolean; onClick: () => void; title: string }) {
   return (
     <button
       type="button"

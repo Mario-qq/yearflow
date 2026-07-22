@@ -6,7 +6,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { fmtDay, toDay, todayStr } from '../lib/date';
-import { calcStreak, dayCompletionRate, dayEntries } from '../lib/derive';
+import { adhocEntries, calcStreak, dayCompletionRate, dayEntries } from '../lib/derive';
+import { AdhocSection } from '../checkin/AdhocSection';
 import { BackfillDialog } from '../checkin/BackfillDialog';
 import { DayStrip, type StripDay } from '../checkin/DayStrip';
 import { GoalCheckCard } from '../checkin/GoalCheckCard';
@@ -56,6 +57,11 @@ export default function CheckInPage() {
   );
 
   const entries = useMemo(() => entriesOf(selectedDate), [entriesOf, selectedDate]);
+
+  const adhoc = useMemo(
+    () => adhocEntries({ date: selectedDate, goals: goalList, tasks: taskList, checkIns: checkInList }),
+    [selectedDate, goalList, taskList, checkInList],
+  );
 
   // 最近 7 天完成率小环
   const stripDays: StripDay[] = useMemo(
@@ -174,9 +180,11 @@ export default function CheckInPage() {
       <DayStrip days={stripDays} selected={selectedDate} today={today} onSelect={setSelectedDate} />
 
       {entries.length === 0 ? (
-        <p className="mt-4" style={{ fontSize: 'var(--font-13)', color: 'var(--text-tertiary)' }}>
-          {isToday ? '今天没有应打卡项。到「设置」页载入示例数据试试。' : '这一天没有应打卡项。'}
-        </p>
+        adhoc.length === 0 && (
+          <p className="mt-4" style={{ fontSize: 'var(--font-13)', color: 'var(--text-tertiary)' }}>
+            {isToday ? '今天没有应打卡项。到「设置」页载入示例数据试试。' : '这一天没有应打卡项。'}
+          </p>
+        )
       ) : (
         <div ref={listRef} className="mt-3 flex flex-col gap-2">
           {allDone && (
@@ -213,6 +221,8 @@ export default function CheckInPage() {
           {resting.map(renderCard)}
         </div>
       )}
+
+      <AdhocSection entries={adhoc} goals={goals} date={selectedDate} />
 
       {isToday && yesterdayMissed > 0 && (
         <button

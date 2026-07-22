@@ -212,7 +212,7 @@ export function TaskDrawer() {
                 )
               }
             >
-              <option value="auto">自动</option>
+              <option value="auto" disabled={rec?.type === 'adhoc'}>自动</option>
               <option value="manual">手动</option>
             </select>
             {task.progressMode === 'manual' ? (
@@ -245,6 +245,7 @@ export function TaskDrawer() {
                 ['daily', '每天'],
                 ['weekdays', '工作日'],
                 ['custom', '自定义'],
+                ['adhoc', '随缘'],
               ] as const
             ).map(([type, label]) => {
               const active = (rec?.type ?? 'daily') === type; // 无 recurrence 默认 daily（与派生口径一致）
@@ -262,18 +263,32 @@ export function TaskDrawer() {
                     borderColor: active ? 'var(--accent)' : 'var(--border-default)',
                     color: active ? 'var(--accent)' : 'var(--text-secondary)',
                   }}
-                  onClick={() =>
+                  onClick={() => {
+                    if (type === 'adhoc') {
+                      // 随缘只能手动进度：切换时顺带把 auto 归位为 manual（自动进度分母为 0）
+                      patchTask(
+                        task.id,
+                        { recurrence: { type: 'adhoc' }, progressMode: 'manual' },
+                        `修改「${task.name}」打卡规则`,
+                      );
+                      return;
+                    }
                     setRecurrence(
                       type === 'daily' ? { type: 'daily' } : type === 'weekdays' ? { type: 'weekdays' } : { type: 'custom', daysOfWeek: rec?.daysOfWeek ?? [1, 3, 5] },
                       `修改「${task.name}」打卡规则`,
-                    )
-                  }
+                    );
+                  }}
                 >
                   {label}
                 </button>
               );
             })}
           </div>
+          {rec?.type === 'adhoc' && (
+            <div className="mt-1.5" style={{ fontSize: 'var(--font-11)', color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
+              不排期：不进每日「待打卡」、不算缺卡、不断 streak。想记录时在打卡页底部「不定期」区随手补一次。
+            </div>
+          )}
           {rec?.type === 'custom' && (
             <div className="mt-1.5 flex gap-1">
               {WEEKDAY_ZH.map((w, dow) => {

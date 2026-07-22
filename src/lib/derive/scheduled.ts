@@ -4,6 +4,8 @@ import { eachDay, toDay } from '../date';
 /** recurrence 是否命中某个星期几（0=周日...6=周六）；无 recurrence 默认 daily */
 export function isScheduledDow(recurrence: Recurrence | undefined, dow: number): boolean {
   if (!recurrence || recurrence.type === 'daily') return true;
+  // 随缘：不排期——不产生应打卡日，从而永不缺卡、不断 streak、自动进度分母为 0
+  if (recurrence.type === 'adhoc') return false;
   if (recurrence.type === 'weekdays') return dow >= 1 && dow <= 5;
   return recurrence.daysOfWeek?.includes(dow) ?? false;
 }

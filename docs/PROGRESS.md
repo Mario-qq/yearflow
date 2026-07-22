@@ -211,6 +211,17 @@
 - 单测：dayPanel.test.ts 增 4 例（多任务各自解析/allRecorded/legacyRecord/单任务）；全量 97 测试绿
 - 浏览器面板实测：英语目标临时加第 2 个并行任务，07-17 卡显示「2 个任务」两行独立；点任务1「跳过」后读 IndexedDB 确认仅 en-1 变 skipped、en-tmp 仍 done，两条记录各带 60 分钟互不覆盖；单任务卡（SAP SD模块）布局回归无变化；测试数据已清理复原。截图接口本机超时，改读无障碍树 + IndexedDB 核对
 
+### 2026-07-22 新增「随缘」打卡规则（不定期任务，不催打卡）
+- **问题（体验）**：投篮训练这类"一年随时可能记一次、但某月 99% 的天不记录"的任务，只能选每天/工作日/自定义——都会天天进「待打卡」、不打就算缺卡断 streak，想不缺卡只能天天手动点「跳过」，打扰严重
+- **方案**：`Recurrence.type` 加第 4 种 `'adhoc'`（界面名「随缘」），模型仅扩union、无数据迁移、jsonb 存储不动同步
+  - 派生一处收口：`isScheduledDow` 对 adhoc 恒返回 false → `expandScheduledDays` 为空 → 自动级联「无应打卡日 / 永不缺卡 / 不断 streak / 自动进度分母 0」；streak/热度/缺卡逻辑均不改
+  - `dayPanel`：adhoc 任务天然不入 `dayEntries`（isScheduledDow false）；新增 `adhocEntries`（按目标·任务 order 排序，仅列在日期范围内、未完成、目标未归档者，携带当日该任务记录）
+  - 打卡页底部新增默认折叠的「不定期 · N」区（`AdhocSection`），点开才列出供随手补记；复用 `GoalCheckCard` 导出的 `StatusButtons`（限 done/partial，随缘无「跳过」）/`TaskEditor`/`ExpandChevron`；写入走 setCheckIn 带 taskId（任务级）
+  - `TaskDrawer`：打卡规则加「随缘」按钮，切换即 `{recurrence:{type:'adhoc'}, progressMode:'manual'}` 一条命令（自动进度分母为 0，故禁用 auto 选项 + 行为说明）
+- 记录的时长仍按目标 roll-up 计入年度总览投入时长（review.ts 不改，按目标 sum 天然兼容）
+- 单测：derive.test.ts +4（adhoc 无应打卡日/无缺卡/自动进度 0/不进 streak）、dayPanel.test.ts +3（不入 dayEntries 改由 adhocEntries、taskId 严格解析、范围外/已完成/归档过滤 + order 排序）；全量 104 测试绿；tsc/oxlint 干净
+- 浏览器面板实测（注入「篮球」目标：日常「体能训练」+ 随缘「投篮训练」）：待打卡仅列体能训练、投篮训练不出现；底部「不定期 · 1」折叠区展开显示「篮球 · 投篮训练」两键（无跳过）；点完成后 IndexedDB 记录带 `taskId:'a1'` 任务级归属；甘特页无控制台报错。注入数据仅在内存（setState 未落库），刷新即净，无需清理
+
 ## Phase 5 — 云同步与部署 【已完成 2026-07-18】
 
 - [x] SQL migration（supabase/migrations/0001_init.sql，用户已在 SQL Editor 执行）：6 表（id+user_id 复合主键、data jsonb 存完整实体、updated_at/deleted_at 冗余列）+ RLS（user_id = auth.uid() 全操作）+ server_updated_at 触发器（clock_timestamp）+ upsert_rows RPC（条件 upsert：excluded.updated_at > 现值才覆盖）

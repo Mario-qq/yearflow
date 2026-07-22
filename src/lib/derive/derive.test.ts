@@ -259,3 +259,32 @@ describe('calcAutoProgress 自动进度', () => {
     expect(p).toBe(50); // 1 / 2
   });
 });
+
+describe('adhoc 随缘任务：不排期、不缺卡、不断 streak', () => {
+  const adhoc = (partial: Partial<Task> = {}) => task({ recurrence: { type: 'adhoc' }, ...partial });
+
+  it('expandScheduledDays 恒为空（无应打卡日）', () => {
+    expect(expandScheduledDays(adhoc({ endDate: '2026-01-10' }))).toEqual([]);
+  });
+
+  it('getMissedDays 恒为空（永不缺卡）', () => {
+    expect(getMissedDays(adhoc({ endDate: '2026-01-10' }), [], [], '2026-01-20')).toEqual([]);
+  });
+
+  it('calcAutoProgress 恒为 0（无分母，故只能手动进度）', () => {
+    expect(
+      calcAutoProgress(adhoc({ endDate: '2026-01-10' }), [checkIn('2026-01-05', 'done')], [], '2026-01-20'),
+    ).toBe(0);
+  });
+
+  it('随缘打卡不进 streak（既不 +1 也不打断）', () => {
+    const r = calcStreak({
+      goalId: 'g1',
+      tasks: [adhoc({ endDate: '2026-01-10' })],
+      checkIns: [checkIn('2026-01-05', 'done', { taskId: 't1' })],
+      exemptions: [],
+      today: '2026-01-20',
+    });
+    expect(r).toEqual({ current: 0, longest: 0 });
+  });
+});

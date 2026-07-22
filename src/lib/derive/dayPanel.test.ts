@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CheckIn, ExemptionPeriod, Goal, Task } from '../../types/domain';
-import { dayCompletionRate, dayEntries, type DayGoalEntry } from './dayPanel';
+import { adhocEntries, dayCompletionRate, dayEntries, type DayGoalEntry } from './dayPanel';
 
 /* 2026-01 日历参考：01-03 周六，01-04 周日，01-05 周一 */
 
@@ -204,5 +204,42 @@ describe('dayCompletionRate 当日完成率', () => {
 
   it('空条目返回 null', () => {
     expect(dayCompletionRate([])).toBeNull();
+  });
+});
+
+describe('adhocEntries 随缘任务补记', () => {
+  it('随缘任务不进 dayEntries「待打卡」，改由 adhocEntries 列出', () => {
+    const goals = [goal('g1')];
+    const tasks = [task('t1', 'g1', { recurrence: { type: 'adhoc' } })];
+    expect(dayEntries({ date: '2026-01-05', goals, tasks, checkIns: [], exemptions: [] })).toEqual([]);
+    const adhoc = adhocEntries({ date: '2026-01-05', goals, tasks, checkIns: [] });
+    expect(adhoc.map((e) => e.taskId)).toEqual(['t1']);
+    expect(adhoc[0].record).toBeUndefined();
+  });
+
+  it('携带当日该任务的记录（按 taskId 严格解析）', () => {
+    const goals = [goal('g1')];
+    const tasks = [task('t1', 'g1', { recurrence: { type: 'adhoc' } })];
+    const checkIns = [
+      checkIn('g1', '2026-01-05', 'done', { taskId: 't1', minutes: 45 }),
+      checkIn('g1', '2026-01-05', 'done', { taskId: 'other', minutes: 99 }), // 别的任务，不串
+    ];
+    const adhoc = adhocEntries({ date: '2026-01-05', goals, tasks, checkIns });
+    expect(adhoc[0].status).toBe('done');
+    expect(adhoc[0].record?.minutes).toBe(45);
+  });
+
+  it('范围外 / 已完成 / 归档目标的随缘任务不列出，并按目标·任务 order 排序', () => {
+    const goals = [goal('g1', 1), goal('g2', 0), goal('g3', 2, { archived: true })];
+    const tasks = [
+      task('a', 'g1', { order: 1, recurrence: { type: 'adhoc' } }),
+      task('b', 'g1', { order: 0, recurrence: { type: 'adhoc' } }),
+      task('c', 'g2', { order: 0, recurrence: { type: 'adhoc' } }),
+      task('d', 'g1', { recurrence: { type: 'adhoc' }, startDate: '2026-02-01', endDate: '2026-02-10' }), // 范围外
+      task('e', 'g1', { recurrence: { type: 'adhoc' }, status: 'done' }), // 已完成
+      task('f', 'g3', { recurrence: { type: 'adhoc' } }), // 归档目标
+    ];
+    const adhoc = adhocEntries({ date: '2026-01-05', goals, tasks, checkIns: [] });
+    expect(adhoc.map((e) => e.taskId)).toEqual(['c', 'b', 'a']); // g2(order0) → g1 内 b(order0) → a(order1)
   });
 });
