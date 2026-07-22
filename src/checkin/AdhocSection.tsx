@@ -4,8 +4,8 @@
  * + 展开分钟与备注。数据源 derive/dayPanel adhocEntries。
  */
 import { useState } from 'react';
-import type { AdhocEntry } from '../lib/derive';
-import type { DayTaskEntry, Goal } from '../types/domain';
+import type { AdhocEntry, DayTaskEntry } from '../lib/derive';
+import type { Goal } from '../types/domain';
 import { goalColor } from '../lib/colors';
 import { ExpandChevron, StatusButtons, TaskEditor } from './GoalCheckCard';
 

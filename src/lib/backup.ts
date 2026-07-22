@@ -11,7 +11,7 @@ export const BACKUP_SCHEMA_VERSION = 1;
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '日期须为 YYYY-MM-DD');
 
 const recurrenceSchema = z.object({
-  type: z.enum(['daily', 'weekdays', 'custom']),
+  type: z.enum(['daily', 'weekdays', 'custom', 'adhoc']),
   daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
 });
 
