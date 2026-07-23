@@ -16,7 +16,7 @@ export default defineConfig({
     // PWA（SPEC 第二节）：离线可用、可安装到手机主屏
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icon.svg', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.svg', 'icon.svg', 'icon-maskable.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'YearFlow — 年度计划',
         short_name: 'YearFlow',
@@ -30,7 +30,8 @@ export default defineConfig({
         icons: [
           { src: 'pwa-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          // 独立的全出血不透明底图，供 Android adaptive icon 裁切安全区用（不能复用带圆角透明边的 pwa-512）
+          { src: 'pwa-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
     }),

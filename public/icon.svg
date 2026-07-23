@@ -1,8 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <!-- YearFlow PWA 图标：深底 + 三根目标色甘特 bar + 今日线 -->
-  <rect width="512" height="512" rx="96" fill="#17171c"/>
-  <rect x="88" y="128" width="212" height="56" rx="20" fill="#5b93ea"/>
-  <rect x="152" y="228" width="272" height="56" rx="20" fill="#eb9440"/>
-  <rect x="112" y="328" width="168" height="56" rx="20" fill="#2fbc8c"/>
-  <rect x="332" y="96" width="10" height="320" rx="5" fill="#e05d52"/>
+  <!-- YearFlow 图标（透明底）：年度进度环 + 朱红今日点。供浏览器标签页 / PWA "any" 用途，环浮在页面上无底。 -->
+  <defs>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5b93ea"/>
+      <stop offset="0.55" stop-color="#2fbc8c"/>
+      <stop offset="1" stop-color="#eb9440"/>
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="130" fill="none" stroke="#ffffff" stroke-opacity="0.28" stroke-width="42"/>
+  <circle cx="256" cy="256" r="130" fill="none" stroke="url(#ring)" stroke-width="42"
+          stroke-linecap="round" stroke-dasharray="680 137" transform="rotate(-90 256 256)"/>
+  <circle cx="256" cy="126" r="24" fill="#e05d52"/>
 </svg>
