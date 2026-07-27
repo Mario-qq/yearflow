@@ -29,6 +29,7 @@ import { exportGanttPng } from './lib/exportPng';
 import { ZOOM_DAY_WIDTH } from './constants';
 import type { GanttZoom } from '../types/domain';
 import { buildRowLayout, rowAtY, visibleRowRange, type RowLayout } from './rowLayout';
+import { buildTracks, memberAtDate } from '../lib/derive';
 import { useViewport } from './hooks/useViewport';
 import { useZoomAnimation } from './hooks/useZoomAnimation';
 import { useGanttDerive } from './hooks/useGanttDerive';
@@ -69,6 +70,7 @@ export default function GanttView() {
   const year = useStore((s) => s.settings.yearInView);
   const zoom = useStore((s) => s.settings.ganttView.zoom);
   const collapsedGoalIds = useStore((s) => s.settings.ganttView.collapsedGoalIds);
+  const expandedTrackIds = useStore((s) => s.settings.ganttView.expandedTrackIds);
   const weekStartsOn = useStore((s) => s.settings.weekStartsOn);
   const gridWidth = useStore((s) => s.settings.ganttView.gridWidth);
   const gridCollapsed = useStore((s) => s.settings.ganttView.gridCollapsed);
@@ -101,7 +103,17 @@ export default function GanttView() {
   const layoutTasks = useMemo(() => {
     if (!filterActive || !filter.hideOthers) return tasks;
     const out: Record<string, Task> = {};
-    for (const t of Object.values(tasks)) if (taskMatches(t)) out[t.id] = t;
+    const hitTracks = new Set<string>();
+    for (const t of Object.values(tasks)) {
+      if (!taskMatches(t)) continue;
+      out[t.id] = t;
+      if (t.trackId) hitTracks.add(`${t.goalId}::${t.trackId}`);
+    }
+    // 任一成员命中就补回整条轨道，否则折叠条只剩半截、包络跨度失真
+    for (const t of Object.values(tasks)) {
+      if (out[t.id] || t.deletedAt || !t.trackId) continue;
+      if (hitTracks.has(`${t.goalId}::${t.trackId}`)) out[t.id] = t;
+    }
     return out;
   }, [tasks, filterActive, filter.hideOthers, taskMatches]);
   const layoutGoals = useMemo(() => {
@@ -129,9 +141,31 @@ export default function GanttView() {
   const bodyRef = useRef<HTMLDivElement>(null);
   const dayWidth = useZoomAnimation(scrollerRef, zoom, year, leftW);
   const scale = useMemo(() => createTimeScale(year, dayWidth), [year, dayWidth]);
+  // 执行轨道：同 goal 内 trackId 相同的任务折叠成一行（默认折叠，故记「已展开」）
+  const trackIndex = useMemo(() => buildTracks(Object.values(layoutTasks)), [layoutTasks]);
+  /**
+   * 部分成员被筛中时临时展开该轨道（不写回持久化）——
+   * 折叠条无法区分是哪一段命中，而筛选的目的正是指出「是哪个」。
+   */
+  const effectiveExpandedTrackIds = useMemo(() => {
+    if (dimTaskIds.size === 0) return expandedTrackIds;
+    const extra = trackIndex.tracks
+      .filter(
+        (tr) =>
+          !expandedTrackIds.includes(tr.id) &&
+          tr.memberIds.some((id) => !dimTaskIds.has(id)) &&
+          tr.memberIds.some((id) => dimTaskIds.has(id)),
+      )
+      .map((tr) => tr.id);
+    return extra.length > 0 ? [...expandedTrackIds, ...extra] : expandedTrackIds;
+  }, [trackIndex, expandedTrackIds, dimTaskIds]);
   const layout = useMemo(
-    () => buildRowLayout(layoutGoals, layoutTasks, collapsedGoalIds),
-    [layoutGoals, layoutTasks, collapsedGoalIds],
+    () =>
+      buildRowLayout(layoutGoals, layoutTasks, collapsedGoalIds, {
+        trackIndex,
+        expandedTrackIds: effectiveExpandedTrackIds,
+      }),
+    [layoutGoals, layoutTasks, collapsedGoalIds, trackIndex, effectiveExpandedTrackIds],
   );
   const { win, scrollToDate } = useViewport(scrollerRef, scale, leftW);
   const spaceHeld = useSpacePan(scrollerRef);
@@ -295,23 +329,50 @@ export default function GanttView() {
     [scrollToDate, leftW],
   );
 
-  // bus 命令：定位任务（先展开折叠的目标）/ 切到某月 / 导出 PNG
+  /**
+   * 让某个任务在布局里可见：必要时展开它所属的目标与轨道。
+   * 命令面板 / 日历 / 折叠条分段点击全走这里，一处修全局生效。
+   * 返回是否改了布局（改了要等一帧再定位）。
+   */
+  const revealTask = useCallback((taskId: string): boolean => {
+    const { tasks: all, settings, updateGanttView } = useStore.getState();
+    const task = all[taskId];
+    if (!task) return false;
+    const gv = settings.ganttView;
+    const patch: Partial<typeof gv> = {};
+    if (gv.collapsedGoalIds.includes(task.goalId)) {
+      patch.collapsedGoalIds = gv.collapsedGoalIds.filter((id) => id !== task.goalId);
+    }
+    if (task.trackId && !gv.expandedTrackIds.includes(task.trackId)) {
+      patch.expandedTrackIds = [...gv.expandedTrackIds, task.trackId];
+    }
+    if (Object.keys(patch).length === 0) return false;
+    updateGanttView(patch);
+    return true;
+  }, []);
+
+  // bus 命令：定位任务（先展开折叠的目标/轨道）/ 切到某月 / 导出 PNG
   useEffect(
     () =>
       onGantt('locate-task', ({ taskId }) => {
-        const { tasks: all, settings, updateGanttView } = useStore.getState();
-        const task = all[taskId];
-        if (!task) return;
-        if (settings.ganttView.collapsedGoalIds.includes(task.goalId)) {
-          updateGanttView({
-            collapsedGoalIds: settings.ganttView.collapsedGoalIds.filter((id) => id !== task.goalId),
-          });
-          setTimeout(() => locateTask(taskId), 80); // 等布局重算
-        } else {
-          locateTask(taskId);
-        }
+        if (revealTask(taskId)) setTimeout(() => locateTask(taskId), 80); // 等布局重算
+        else locateTask(taskId);
       }),
-    [locateTask],
+    [locateTask, revealTask],
+  );
+
+  /** 折叠轨道条上点某一段 → 展开轨道并定位到那一段任务 */
+  const onTrackSegmentClick = useCallback(
+    (trackId: string, segmentIndex: number) => {
+      const track = trackIndex.byId[trackId];
+      const seg = track?.segments[segmentIndex];
+      if (!seg) return;
+      const taskId = memberAtDate(track, useStore.getState().tasks, seg.startDate);
+      if (!taskId) return;
+      if (revealTask(taskId)) setTimeout(() => locateTask(taskId), 80);
+      else locateTask(taskId);
+    },
+    [trackIndex, locateTask, revealTask],
   );
   useEffect(
     () => onGantt('scroll-to-date', ({ date }) => scrollToDate(date, { smooth: true, anchorRatio: 1 / 5 })),
@@ -331,14 +392,23 @@ export default function GanttView() {
   );
 
   // 聚焦模式（SPEC 4.6）：双击目标行 → 只展开该目标并放大到其时间范围；再双击退出
-  const focusRef = useRef<{ goalId: string; prevCollapsed: string[]; prevZoom: GanttZoom } | null>(null);
+  const focusRef = useRef<{
+    goalId: string;
+    prevCollapsed: string[];
+    prevZoom: GanttZoom;
+    prevExpandedTracks: string[];
+  } | null>(null);
   const onFocusGoal = useCallback(
     (goalId: string) => {
       const { settings, updateGanttView, goals: allGoals, tasks: allTasks } = useStore.getState();
       const cur = focusRef.current;
       if (cur?.goalId === goalId) {
-        // 退出聚焦：恢复进入前的折叠与缩放
-        updateGanttView({ collapsedGoalIds: cur.prevCollapsed, zoom: cur.prevZoom });
+        // 退出聚焦：恢复进入前的折叠、缩放与轨道展开态
+        updateGanttView({
+          collapsedGoalIds: cur.prevCollapsed,
+          zoom: cur.prevZoom,
+          expandedTrackIds: cur.prevExpandedTracks,
+        });
         focusRef.current = null;
         return;
       }
@@ -346,11 +416,19 @@ export default function GanttView() {
         goalId,
         prevCollapsed: cur?.prevCollapsed ?? settings.ganttView.collapsedGoalIds,
         prevZoom: cur?.prevZoom ?? settings.ganttView.zoom,
+        prevExpandedTracks: cur?.prevExpandedTracks ?? settings.ganttView.expandedTrackIds,
       };
       const others = Object.values(allGoals)
         .filter((g) => !g.deletedAt && !g.archived && g.id !== goalId)
         .map((g) => g.id);
-      updateGanttView({ collapsedGoalIds: others });
+      // 聚焦 = 看这一个目标的全貌，故把它的轨道全展开
+      const focusTracks = (buildTracks(
+        Object.values(allTasks).filter((t) => !t.deletedAt && t.goalId === goalId),
+      ).tracksByGoal[goalId] ?? []).map((tr) => tr.id);
+      updateGanttView({
+        collapsedGoalIds: others,
+        expandedTrackIds: [...new Set([...settings.ganttView.expandedTrackIds, ...focusTracks])],
+      });
       // 放大到该目标时间范围：选使 span 占视口 ~85% 的最近档位，再滚到范围起点
       const goalTasks = Object.values(allTasks).filter((t) => !t.deletedAt && t.goalId === goalId);
       if (goalTasks.length === 0) return;
@@ -542,6 +620,8 @@ export default function GanttView() {
                 goals={goals}
                 tasks={tasks}
                 derive={derive}
+                trackIndex={trackIndex}
+                expandedTrackIds={effectiveExpandedTrackIds}
                 today={today}
                 leftW={leftW}
                 collapsed={effCollapsed}
@@ -582,6 +662,8 @@ export default function GanttView() {
                   tasks={tasks}
                   milestones={milestones}
                   derive={derive}
+                  trackIndex={trackIndex}
+                  expandedTrackIds={effectiveExpandedTrackIds}
                   scale={scale}
                   visStart={visStart}
                   visEnd={visEnd}
@@ -594,6 +676,7 @@ export default function GanttView() {
                   onBarDragStart={isMobile ? noopDrag : onBarDragStart}
                   onDepDragStart={isMobile ? noopDrag : onDepDragStart}
                   onDotClick={onDotClick}
+                  onTrackSegmentClick={onTrackSegmentClick}
                 />
                 {/* 依赖连线（全局开关，SVG 命中区可点删）+ 拖出中的临时虚线 */}
                 {showDependencies && (
@@ -602,6 +685,7 @@ export default function GanttView() {
                     scale={scale}
                     tasks={layoutTasks}
                     goals={goals}
+                    trackIndex={trackIndex}
                     width={scale.totalWidth}
                     height={layout.totalHeight}
                   />

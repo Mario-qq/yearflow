@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     scrollDate: '', // 空 = 从未记录：首次进入甘特页平滑滚到今日线视口 1/3 处
 
     collapsedGoalIds: [],
+    expandedTrackIds: [],
     gridColumns: DEFAULT_GRID_COLUMNS,
     gridWidth: 320,
     gridCollapsed: false,

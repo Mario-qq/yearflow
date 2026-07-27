@@ -20,6 +20,12 @@ export const ZOOM_DAY_WIDTH: Record<GanttZoom, number> = {
 export const ROW_H_GOAL = 40; // 目标分组行
 export const ROW_H_TASK = 48; // 任务行（bar 22 + 间距 4 + 点阵 10 + 上下留白 6×2）
 export const ROW_H_GHOST = 24; // 目标分组末尾「+ 添加任务」幽灵行（hover 时显示内容）
+export const ROW_H_TRACK = 40; // 执行轨道行（与目标行同高，容得下汇总条 + 聚合热度条两层）
+
+/** 执行轨道（track）：折叠时一条包络汇总条代表整条执行路径 */
+export const TRACK_INDENT = 14; // 成员任务行相对普通任务行的额外缩进
+export const TRACK_SEG_GAP_ALPHA = 12; // 折叠条上"没有任务覆盖"的间隙段透明度 %
+export const TRACK_BRACKET_ALPHA = 22; // 展开时轨道行那条低对比度包络"括号"条透明度 %
 
 /** 任务行内部纵向布局（Phase 2② 使用） */
 export const BAR_TOP = 6; // bar 距行顶偏移（= 上留白）

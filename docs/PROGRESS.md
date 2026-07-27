@@ -248,3 +248,28 @@
 - **UI 只从 syncApi.ts 导入同步功能**（懒加载门面）：直接 import engine/client 会把 supabase-js 拖回主包；isSyncConfigured 只读 env 不触发加载
 - 实测辅助：dev 暴露 window.__syncStore；RPC + REST（带 access_token）可从页面模拟第二设备
 - 本机 PowerShell 工具跑 node 脚本会静默挂起（零输出超时），Playwright/node 脚本一律用 Bash 工具跑
+
+## 执行轨道（track）—— 长期迭代项目收成一行 【已完成 2026-07-27】
+
+起因：一个目标（如「AI Agent Project」）下同时有"迭代很快就结束的短命项目"和"持续迭代的长期项目"。后者被拍平成多行散落在时间轴各处，既看不出整条执行路径（6.29 一直延伸到 8.02），又把年度视图淹没。加一层介于目标与任务之间的分组「轨道」：默认折叠 = 一个项目一行（年度视角），展开 = 完整执行路径（项目视角）。规格见 SPEC 4.3.1。
+
+- [x] 领域字段：`Task.trackId?: string`（显式归属）+ `GanttViewState.expandedTrackIds`（默认折叠，故记"已展开"）。Supabase 零 SQL 改动、Dexie 零版本升级 —— 实体整体存 `data jsonb`，加业务字段对 SQL 透明；backup.ts zod 补两处（老备份 `expandedTrackIds` 走 `.default([])`）
+- [x] 派生纯函数 `src/lib/derive/tracks.ts` + 16 单测：`buildTracks`（按 `goalId::trackId` 分组、<2 成员不成轨道、head 三级并列规则、区间并集含"相邻一天"合并）/ `aggregateTrackProgress`（按跨度天数加权）/ `memberAtDate`
+- [x] `GoalGantt.perTrack`：轨道包络/分段/聚合热度/聚合进度，复用既有 `unionDays + weeklyHeat + bestStatusByDate`，`useGanttDerive` 的 per-goal 缓存零改动
+- [x] `rowLayout.ts` 新增 `kind:'track'` 行 + task 行 `depth`，输出加 `trackRowByTrackId / unitRowsByGoal / memberRowsByTrack`；`buildRowLayout` 的 `opts` 缺省时行为与改造前完全一致（既有 6 条测试一行未改仍全绿，是本次改造的回归护栏），新增 6 条覆盖轨道分支；`rowAtY / visibleRowRange` 零改动
+- [x] 左栏 `TrackRow` + `TaskRow` 的 depth 缩进与导引线；抽 `grid/ProgressCell.tsx` 共用进度条
+- [x] 时间轴：抽 `SummaryBar.tsx`（多分段 + 间隙浅色底条），`GoalSummary` 改用它且视觉零变化；新 `TrackSummary.tsx`（`HeatStrip` 原样复用，一行未改）
+- [x] 建轨道三入口：多选右键「合成一条轨道」/ 单个右键「归入轨道「X」」「移出轨道」/ 目标行右键「按依赖链建轨道」（一次性辅助导入，整体可撤销）
+- [x] 拖拽改按"排序单元"：轨道整块移动（成员 order 一并平移），成员行禁拖并给出提示
+- [x] 依赖线端点上浮 + 轨道内部线隐藏 + 多条收拢去重；筛选保全整条轨道 / 部分命中临时展开；聚焦模式展开全部轨道并在退出时还原；`locate-task` 统一走新的 `revealTask`
+- [x] 截图门槛：`scripts/capture-tracks.mjs` → `docs/screenshots/tracks/`（四档缩放 × 深浅 8 张折叠态 + 2 张展开态，含「N 步」徽标渲染断言）
+- [x] 全量 131 测试绿、`tsc -b` 与 oxlint 干净
+
+### 关键决策
+- **归属用显式 `Task.trackId`，不从 `dependsOn` 推导**：一开始走的是"零字段改动、靠依赖链连通分量推轨道"，被两点否掉 —— ① 依赖表达时序、轨道表达归属，同项目的并行任务串不起来，有先后但无关的任务会被强行合并且用户无法修正；② 若把归属存进 `AppSettings` 则不同步（`TABLE_NAMES` 不含 settings），手机与电脑各存一份。归属是用户数据，必须跟着 tasks 走
+- **加字段的成本被高估过**：Supabase 每表 `data jsonb` 存整实体，只有 `updated_at/deleted_at` 是冗余列，加业务字段零 SQL、零 Dexie 升版
+- **轨道名派生自最早成员**，不另开实体表：省掉 9 处改动（含 SQL 白名单与 Dexie 升版），代价是轨道不能单独命名/上色（见 SPEC 4.3.1 局限清单与升级路径）
+- **`expandedTrackIds` 而非 collapsed**：默认折叠时只有记"已展开"语义才自洽；`trackId` 是稳定 id，不随头任务改期漂移，故无需交集判定或迁移代码
+- **展开后保留轨道汇总行**：折叠按钮位置不跳、可对照总路径看具体步骤，代价是每条轨道多占 40px
+- **`buildRowLayout` 加可选参数而非改签名**：缺省等价于改造前，旧测试即回归护栏
+- 截图脚本两处坑：`updateSettings/execute` 落库防抖 500ms，写完立刻 `page.goto` 会丢改动（主题不生效、轨道消失），须 `waitForTimeout(700)`；缩放档位是 `role="radio"` 不是 button

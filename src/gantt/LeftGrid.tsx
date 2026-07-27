@@ -7,11 +7,12 @@
  * - 右缘分隔条拖宽（双击复位），折叠为纯图模式时退化为窄轨
  * 行几何与时间轴共用 rowLayout，保证两侧严格对齐。
  */
-import { memo, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import type { Goal, Task } from '../types/domain';
-import type { GoalGantt, TaskGantt } from '../lib/derive';
+import type { GoalGantt, TaskGantt, Track, TrackIndex } from '../lib/derive';
 import { baselineDrift, goalMonthlyRate } from '../lib/derive';
-import type { RowLayout } from './rowLayout';
+import type { GanttRow, RowLayout } from './rowLayout';
+import { trackRowId } from './rowLayout';
 import { useStore } from '../store/useStore';
 import { createGoal, createTask, patchGoal, patchTask, reorderGoals, reorderTasks } from '../store/actions';
 import { useGanttUi } from './uiStore';
@@ -20,8 +21,9 @@ import { toDay, fmtDay } from '../lib/date';
 import { startPointerDrag } from './lib/dragCore';
 import { visibleColumns, columnWidth, type GridColumnDef } from './grid/columns';
 import { InlineInput } from './grid/InlineInput';
+import { ProgressMeter } from './grid/ProgressCell';
 import { RowHoverOverlay } from './HoverLayers';
-import { GRID_DEFAULT_W, GRID_FOOTER_H, GRID_MAX_W, GRID_MIN_W, GRID_DIVIDER_HIT } from './constants';
+import { GRID_DEFAULT_W, GRID_FOOTER_H, GRID_MAX_W, GRID_MIN_W, GRID_DIVIDER_HIT, TRACK_INDENT } from './constants';
 
 import { STATUS_COLOR, STATUS_LABEL, STATUS_ORDER } from './taskStatus';
 
@@ -238,6 +240,8 @@ interface TaskRowProps {
   dim: boolean;
   /** 正在被拖动重排 */
   dragging: boolean;
+  /** >0 = 轨道成员行：额外缩进 + 左侧导引线，且不参与重排（轨道内按开始日排序） */
+  depth?: number;
   onLocate: (taskId: string) => void;
   /** 任务重排拖拽回调（几何/落点由 LeftGrid 统一持有） */
   onDragStart: (taskId: string) => void;
@@ -245,7 +249,7 @@ interface TaskRowProps {
   onDragEnd: (committed: boolean) => void;
 }
 
-const TaskRow = memo(function TaskRow({ task, top, height, cols, colWidths, tg, dim, dragging, onLocate, onDragStart, onDragMove, onDragEnd }: TaskRowProps) {
+const TaskRow = memo(function TaskRow({ task, top, height, cols, colWidths, tg, dim, dragging, depth = 0, onLocate, onDragStart, onDragMove, onDragEnd }: TaskRowProps) {
   const editing = useGanttUi((s) => (s.editing?.id === task.id ? s.editing.field : null));
   const setEditing = useGanttUi((s) => s.setEditing);
   const setHoverCell = useGanttUi((s) => s.setHoverCell);
@@ -257,6 +261,7 @@ const TaskRow = memo(function TaskRow({ task, top, height, cols, colWidths, tg, 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return; // 右键交给上层
     if (editing) return; // 行内编辑中不抢指针（保持输入框选区/光标）
+    if (depth > 0) return; // 轨道成员：顺序由开始日决定，不给拖
     suppressClick.current = false;
     startPointerDrag(e, {
       onStart: () => {
@@ -329,18 +334,7 @@ const TaskRow = memo(function TaskRow({ task, top, height, cols, colWidths, tg, 
               setEditing({ id: task.id, field: 'progress' });
             }}
           >
-            <span
-              className="relative min-w-0 flex-1 overflow-hidden"
-              style={{ height: 4, borderRadius: 2, background: 'var(--bg-subtle)' }}
-            >
-              <span
-                className="absolute bottom-0 left-0 top-0"
-                style={{ width: `${progress}%`, borderRadius: 2, background: solid }}
-              />
-            </span>
-            <span className="tnum" style={{ fontSize: 'var(--font-11)', color: 'var(--text-tertiary)', width: 30, textAlign: 'right' }}>
-              {progress}%
-            </span>
+            <ProgressMeter value={progress} color={solid} />
           </span>
         );
       case 'status':
@@ -398,11 +392,12 @@ const TaskRow = memo(function TaskRow({ task, top, height, cols, colWidths, tg, 
         opacity: dim ? 0.35 : dragging ? 0.5 : 1,
         background: dragging ? 'var(--bg-subtle)' : undefined,
         boxShadow: dragging ? 'var(--shadow-sm)' : undefined,
-        cursor: dragging ? 'grabbing' : 'grab',
+        cursor: depth > 0 ? 'default' : dragging ? 'grabbing' : 'grab',
         transition: dragging ? undefined : 'opacity var(--dur-zoom) var(--ease)',
         touchAction: 'none',
         zIndex: dragging ? 3 : undefined,
       }}
+      title={depth > 0 ? '轨道内按开始日排序，拖动右侧 bar 改期即可调整顺序' : undefined}
       onPointerEnter={() => setHoverCell(task.id, null)}
       onPointerDown={handlePointerDown}
       onClickCapture={(e) => {
@@ -426,7 +421,183 @@ const TaskRow = memo(function TaskRow({ task, top, height, cols, colWidths, tg, 
               flex: isFlex ? 1 : undefined,
               minWidth: c.minWidth,
               flexShrink: 0,
-              paddingLeft: i === 0 ? 32 : 6,
+              paddingLeft: i === 0 ? 32 + depth * TRACK_INDENT : 6,
+              paddingRight: 6,
+              justifyContent: c.key === 'status' ? 'center' : undefined,
+            }}
+          >
+            {cell(c)}
+          </span>
+        );
+      })}
+      {depth > 0 && (
+        // 轨道成员的左侧导引线，暗示「这几行同属上面那条轨道」
+        <span
+          aria-hidden
+          className="pointer-events-none absolute"
+          style={{ left: 32, top: 0, bottom: 0, width: 1, background: 'var(--border-subtle)' }}
+        />
+      )}
+    </div>
+  );
+});
+
+interface TrackRowProps {
+  track: Track;
+  top: number;
+  height: number;
+  cols: GridColumnDef[];
+  colWidths: Record<string, number>;
+  color: string;
+  /** 聚合进度 0-100（缺省 = 派生尚未就绪） */
+  progress: number;
+  expanded: boolean;
+  dim: boolean;
+  dragging: boolean;
+  onToggle: (trackId: string) => void;
+  onLocate: (taskId: string) => void;
+  onDragStart: (rowId: string) => void;
+  onDragMove: (clientY: number) => void;
+  onDragEnd: (committed: boolean) => void;
+}
+
+/**
+ * 执行轨道行：折叠时代表整条执行路径（长期迭代项目的多段执行）。
+ * 名称派生自组内最早的任务，无独立存储；进度是成员按天数加权的聚合值，只读。
+ */
+const TrackRow = memo(function TrackRow({ track, top, height, cols, colWidths, color, progress, expanded, dim, dragging, onToggle, onLocate, onDragStart, onDragMove, onDragEnd }: TrackRowProps) {
+  const setHoverCell = useGanttUi((s) => s.setHoverCell);
+  const rowId = trackRowId(track.id);
+  /**
+   * 「N 步」徽标优先放在状态列 —— 轨道没有单一状态，那一格本来就空着；
+   * 挤在名称列里会把轨道名压到只剩几个字（名称列是 flex 列，总共才 ~110px）。
+   * 状态列被用户隐藏时才退回名称列。
+   */
+  const badgeCol = cols.some((c) => c.key === 'status') ? 'status' : 'name';
+  const badge = (
+    <span
+      className="tnum shrink-0 whitespace-nowrap"
+      title={`这条轨道由 ${track.memberIds.length} 段任务组成`}
+      style={{
+        padding: '0 5px',
+        borderRadius: 999,
+        background: 'var(--bg-subtle)',
+        fontSize: 'var(--font-11)',
+        color: 'var(--text-tertiary)',
+      }}
+    >
+      {track.memberIds.length} 步
+    </span>
+  );
+  /** 拖拽后浏览器仍会补发一次 click：置位则吞掉，避免误触发展开 */
+  const suppressClick = useRef(false);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    suppressClick.current = false;
+    startPointerDrag(e, {
+      onStart: () => {
+        suppressClick.current = true;
+        onDragStart(rowId);
+      },
+      onMove: (s) => onDragMove(s.clientY),
+      onEnd: (s, committed) => {
+        if (s.started) onDragEnd(committed);
+      },
+    });
+  };
+
+  const cell = (c: GridColumnDef) => {
+    switch (c.key) {
+      case 'name':
+        return (
+          <>
+            <span
+              aria-hidden
+              className="inline-block shrink-0 text-center"
+              style={{
+                width: 14,
+                fontSize: 10,
+                color: 'var(--text-tertiary)',
+                transform: expanded ? 'rotate(90deg)' : 'none',
+                transition: 'transform var(--dur-drop) var(--ease)',
+              }}
+            >
+              ▶
+            </span>
+            <span
+              className="overflow-hidden text-ellipsis whitespace-nowrap font-medium"
+              style={{ fontSize: 'var(--font-13)', color: 'var(--text-secondary)' }}
+              title="点击定位到首段任务"
+              onClick={(e) => {
+                e.stopPropagation();
+                onLocate(track.headId);
+              }}
+            >
+              {track.name}
+            </span>
+            {badgeCol === 'name' && <span style={{ marginLeft: 4 }}>{badge}</span>}
+          </>
+        );
+      case 'dates':
+        return (
+          <span className="tnum whitespace-nowrap" style={{ fontSize: 'var(--font-11)', color: 'var(--text-tertiary)' }}>
+            {fmtRange(track.startDate, track.endDate)}
+          </span>
+        );
+      case 'progress':
+        return (
+          <span className="flex w-full items-center gap-1.5" title={`聚合进度 ${progress}%（按各段天数加权，不可直接编辑）`}>
+            <ProgressMeter value={progress} color={color} />
+          </span>
+        );
+      case 'status':
+        return badgeCol === 'status' ? badge : null;
+      default:
+        // 打卡率 / 偏移在轨道层面无单一取值，留空避免误读
+        return null;
+    }
+  };
+
+  return (
+    <div
+      className="absolute left-0 right-0 flex items-center"
+      style={{
+        top,
+        height,
+        background: 'var(--bg-subtle)',
+        borderBottom: '1px solid var(--border-subtle)',
+        opacity: dim ? 0.35 : dragging ? 0.5 : 1,
+        boxShadow: dragging ? 'var(--shadow-sm)' : undefined,
+        cursor: dragging ? 'grabbing' : 'grab',
+        transition: dragging ? undefined : 'opacity var(--dur-zoom) var(--ease)',
+        touchAction: 'none',
+        zIndex: dragging ? 3 : undefined,
+      }}
+      title="拖动可整块调整顺序，单击展开/折叠这条执行路径"
+      onPointerEnter={() => setHoverCell(rowId, null)}
+      onPointerDown={handlePointerDown}
+      onClickCapture={(e) => {
+        if (suppressClick.current) {
+          suppressClick.current = false;
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      }}
+      onClick={() => onToggle(track.id)}
+    >
+      {cols.map((c, i) => {
+        const isFlex = c.width === 0;
+        return (
+          <span
+            key={c.key}
+            className="flex min-w-0 items-center"
+            style={{
+              width: isFlex ? undefined : columnWidth(c, colWidths),
+              flex: isFlex ? 1 : undefined,
+              minWidth: c.minWidth,
+              flexShrink: 0,
+              paddingLeft: i === 0 ? 18 : 6,
               paddingRight: 6,
               justifyContent: c.key === 'status' ? 'center' : undefined,
             }}
@@ -496,6 +667,9 @@ interface Props {
   goals: Record<string, Goal>;
   tasks: Record<string, Task>;
   derive: Map<string, GoalGantt>;
+  trackIndex: TrackIndex;
+  /** 含筛选临时展开在内的最终展开集合 */
+  expandedTrackIds: string[];
   today: string;
   leftW: number;
   collapsed: boolean;
@@ -513,6 +687,8 @@ export const LeftGrid = memo(function LeftGrid({
   goals,
   tasks,
   derive,
+  trackIndex,
+  expandedTrackIds,
   today,
   leftW,
   collapsed,
@@ -527,6 +703,15 @@ export const LeftGrid = memo(function LeftGrid({
   const setEditing = useGanttUi((s) => s.setEditing);
   const setHoverCell = useGanttUi((s) => s.setHoverCell);
   const cols = visibleColumns(gridColumns);
+
+  /** 轨道默认折叠，故持久化的是「已展开」集合 */
+  const toggleTrack = useCallback((trackId: string) => {
+    const { settings, updateGanttView } = useStore.getState();
+    const ids = settings.ganttView.expandedTrackIds;
+    updateGanttView({
+      expandedTrackIds: ids.includes(trackId) ? ids.filter((id) => id !== trackId) : [...ids, trackId],
+    });
+  }, []);
 
   // ── 目标泳道纵向拖拽重排 ────────────────────────────────────────────────
   const rootRef = useRef<HTMLDivElement>(null);
@@ -573,28 +758,42 @@ export const LeftGrid = memo(function LeftGrid({
     });
   };
 
-  // ── 任务行纵向拖拽重排（约束在同目标内）────────────────────────────────────
-  /** 拖拽中：被拖任务 id + 所属目标 + 插入位下标（同目标任务列表内 0..n）+ 落点指示线 y */
+  // ── 任务/轨道行纵向拖拽重排（约束在同目标内）──────────────────────────────
+  // 排序单位是「排序单元」：一个非成员任务，或一整条轨道。轨道整块移动，
+  // 其成员的 order 跟着一起平移，保证头任务的 order 仍代表整块的位置。
+  /** 拖拽中：被拖单元的行 id + 所属目标 + 插入位下标（同目标单元列表内 0..n）+ 落点指示线 y */
   const [taskDrag, setTaskDrag] = useState<{ id: string; goalId: string; index: number; indicatorY: number } | null>(null);
 
-  /** 光标 layout-y → 同目标任务列表内的插入下标 + 指示线 y（落在某任务行中线之上则插到其前） */
+  /** 单元行 → 它代表的任务 id 列表（轨道 = 全部成员，按轨道内顺序） */
+  const unitTaskIds = useCallback(
+    (row: GanttRow): string[] =>
+      row.kind === 'track' ? (trackIndex?.byId[row.trackId!]?.memberIds ?? []) : [row.id],
+    [trackIndex],
+  );
+
+  /** 光标 layout-y → 同目标单元列表内的插入下标 + 指示线 y（落在某单元块中线之上则插到其前） */
   const resolveTaskDrop = (goalId: string, layoutY: number): { index: number; indicatorY: number } => {
-    const siblings = layout.taskRowsByGoal[goalId] ?? [];
-    if (siblings.length === 0) return { index: 0, indicatorY: layout.rowById[goalId]?.top ?? 0 };
-    for (let i = 0; i < siblings.length; i++) {
-      const r = siblings[i];
-      if (layoutY < r.top + r.height / 2) return { index: i, indicatorY: r.top };
+    const units = layout.unitRowsByGoal[goalId] ?? [];
+    if (units.length === 0) return { index: 0, indicatorY: layout.rowById[goalId]?.top ?? 0 };
+    for (let i = 0; i < units.length; i++) {
+      // 展开的轨道块底 = 下一个单元的 top（含其成员行），不能只看单元行自身高度
+      const blockTop = units[i].top;
+      const blockBottom = i + 1 < units.length ? units[i + 1].top : blockTop + unitHeight(units[i]);
+      if (layoutY < (blockTop + blockBottom) / 2) return { index: i, indicatorY: blockTop };
     }
-    const last = siblings[siblings.length - 1];
-    return { index: siblings.length, indicatorY: last.top + last.height };
+    const last = units[units.length - 1];
+    return { index: units.length, indicatorY: last.top + unitHeight(last) };
   };
 
-  const handleTaskDragStart = (taskId: string) => {
-    const goalId = tasks[taskId]?.goalId;
+  const unitHeight = (row: GanttRow): number =>
+    row.height + (layout.memberRowsByTrack[row.trackId ?? '']?.reduce((n, r) => n + r.height, 0) ?? 0);
+
+  const handleTaskDragStart = (rowId: string) => {
+    const goalId = layout.rowById[rowId]?.goalId;
     if (!goalId) return;
-    const siblings = layout.taskRowsByGoal[goalId] ?? [];
-    const from = siblings.findIndex((r) => r.id === taskId);
-    setTaskDrag({ id: taskId, goalId, index: from, indicatorY: siblings[from]?.top ?? 0 });
+    const units = layout.unitRowsByGoal[goalId] ?? [];
+    const from = units.findIndex((r) => r.id === rowId);
+    setTaskDrag({ id: rowId, goalId, index: from, indicatorY: units[from]?.top ?? 0 });
   };
 
   const handleTaskDragMove = (clientY: number) => {
@@ -610,13 +809,13 @@ export const LeftGrid = memo(function LeftGrid({
   const handleTaskDragEnd = (committed: boolean) => {
     setTaskDrag((prev) => {
       if (prev && committed) {
-        const ids = (layout.taskRowsByGoal[prev.goalId] ?? []).map((r) => r.id);
-        const from = ids.indexOf(prev.id);
+        const units = layout.unitRowsByGoal[prev.goalId] ?? [];
+        const from = units.findIndex((r) => r.id === prev.id);
         const insertAt = prev.index > from ? prev.index - 1 : prev.index;
         if (from !== -1 && insertAt !== from) {
-          const without = ids.filter((id) => id !== prev.id);
-          without.splice(insertAt, 0, prev.id);
-          reorderTasks(without);
+          const reordered = units.filter((r) => r.id !== prev.id);
+          reordered.splice(insertAt, 0, units[from]);
+          reorderTasks(reordered.flatMap(unitTaskIds));
         }
       }
       return null;
@@ -697,6 +896,32 @@ export const LeftGrid = memo(function LeftGrid({
                 <GhostRow key={r.id} goalId={r.goalId} top={r.top} height={r.height} layout={layout} today={today} />
               );
             }
+            if (r.kind === 'track') {
+              const track = trackIndex.byId[r.trackId!];
+              if (!track) return null;
+              const members = track.memberIds;
+              return (
+                <TrackRow
+                  key={r.id}
+                  track={track}
+                  top={r.top}
+                  height={r.height}
+                  cols={cols}
+                  colWidths={gridColWidths}
+                  color={goalColor(goals[r.goalId]?.color ?? 'goal-1')}
+                  progress={Math.round(derive.get(r.goalId)?.perTrack.get(track.id)?.progress ?? 0)}
+                  expanded={expandedTrackIds.includes(track.id)}
+                  // 整条轨道都被筛掉才淡出；部分命中时上层已把它临时展开
+                  dim={dimGoalIds.has(r.goalId) || members.every((id) => dimTaskIds.has(id))}
+                  dragging={taskDrag?.id === r.id}
+                  onToggle={toggleTrack}
+                  onLocate={onLocateTask}
+                  onDragStart={handleTaskDragStart}
+                  onDragMove={handleTaskDragMove}
+                  onDragEnd={handleTaskDragEnd}
+                />
+              );
+            }
             const task = tasks[r.id];
             if (!task) return null;
             return (
@@ -710,6 +935,7 @@ export const LeftGrid = memo(function LeftGrid({
                 tg={derive.get(r.goalId)?.perTask.get(r.id)}
                 dim={dimTaskIds.has(r.id) || dimGoalIds.has(r.goalId)}
                 dragging={taskDrag?.id === r.id}
+                depth={r.depth}
                 onLocate={onLocateTask}
                 onDragStart={handleTaskDragStart}
                 onDragMove={handleTaskDragMove}

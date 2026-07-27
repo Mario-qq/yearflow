@@ -15,6 +15,7 @@ import { patchMilestone } from '../store/actions';
 import { startPointerDrag } from './lib/dragCore';
 import { showDragHint, hideDragHint, fmtDayHint } from './lib/dragHint';
 import { HeatStrip } from './HeatStrip';
+import { SummaryBar } from './SummaryBar';
 import { InlineInput } from './grid/InlineInput';
 import { useGanttUi } from './uiStore';
 import {
@@ -54,16 +55,11 @@ export const GoalSummary = memo(function GoalSummary({
   return (
     <>
       {span && (
-        <div
-          className="absolute"
-          style={{
-            top: barTop,
-            left: spanX,
-            width: spanW,
-            height: SUMMARY_BAR_H,
-            borderRadius: 'var(--radius-sm)',
-            background: goal.completedAt ? 'var(--border-strong)' : goalColorAlpha(goal.color, 40),
-          }}
+        <SummaryBar
+          top={barTop}
+          scale={scale}
+          segments={[span]}
+          color={goal.completedAt ? 'var(--border-strong)' : goalColorAlpha(goal.color, 40)}
         />
       )}
       {collapsed && span && (

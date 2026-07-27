@@ -5,7 +5,7 @@
  */
 import { memo, useMemo, useRef } from 'react';
 import type { Goal, Milestone, Task } from '../types/domain';
-import type { GoalGantt } from '../lib/derive';
+import type { GoalGantt, TrackIndex } from '../lib/derive';
 import type { RowLayout } from './rowLayout';
 import { dateToX, type TimeScale } from './timeScale';
 import { diffDays, fmtDay, toDay } from '../lib/date';
@@ -16,6 +16,7 @@ import { TaskBar } from './TaskBar';
 import { CheckinDots } from './CheckinDots';
 import { HeatStrip } from './HeatStrip';
 import { GoalSummary } from './GoalSummary';
+import { TrackSummary } from './TrackSummary';
 import { BAR_H, BAR_TOP, BASELINE_H, HEAT_MODE_THRESHOLD } from './constants';
 
 interface Props {
@@ -26,6 +27,9 @@ interface Props {
   tasks: Record<string, Task>;
   milestones: Record<string, Milestone>;
   derive: Map<string, GoalGantt>;
+  trackIndex: TrackIndex;
+  /** 含筛选临时展开在内的最终展开集合 */
+  expandedTrackIds: string[];
   scale: TimeScale;
   /** 可视日索引范围（点阵列虚拟化） */
   visStart: number;
@@ -41,6 +45,8 @@ interface Props {
   onBarDragStart: (e: React.PointerEvent, taskId: string, mode: BarDragMode) => void;
   onDepDragStart: (e: React.PointerEvent, taskId: string, side: DepHandleSide) => void;
   onDotClick: (taskId: string, date: string, e: React.MouseEvent) => void;
+  /** 折叠轨道条上点某一段 → 展开并定位到那一段任务 */
+  onTrackSegmentClick: (trackId: string, segmentIndex: number) => void;
 }
 
 export const BarsLayer = memo(function BarsLayer({
@@ -51,6 +57,8 @@ export const BarsLayer = memo(function BarsLayer({
   tasks,
   milestones,
   derive,
+  trackIndex,
+  expandedTrackIds,
   scale,
   visStart,
   visEnd,
@@ -63,6 +71,7 @@ export const BarsLayer = memo(function BarsLayer({
   onBarDragStart,
   onDepDragStart,
   onDotClick,
+  onTrackSegmentClick,
 }: Props) {
   const prevMsRef = useRef<Map<string, Milestone[]>>(new Map());
   const milestonesByGoal = useMemo(() => {
@@ -103,6 +112,34 @@ export const BarsLayer = memo(function BarsLayer({
             />
           );
           return dimGoalIds.has(r.id) ? (
+            <div key={r.id} style={{ opacity: 0.3 }}>
+              {summary}
+            </div>
+          ) : (
+            summary
+          );
+        }
+        if (r.kind === 'track') {
+          const track = trackIndex.byId[r.trackId!];
+          const tk = derive.get(r.goalId)?.perTrack.get(r.trackId!);
+          const goal = goals[r.goalId];
+          if (!track || !tk || !goal) return null;
+          const summary = (
+            <TrackSummary
+              key={r.id}
+              track={track}
+              tk={tk}
+              rowTop={r.top}
+              expanded={expandedTrackIds.includes(track.id)}
+              color={goal.color}
+              scale={scale}
+              onSegmentClick={onTrackSegmentClick}
+            />
+          );
+          // 整条轨道都被筛掉才淡出（部分命中时上层已把它临时展开）
+          const dim =
+            dimGoalIds.has(r.goalId) || track.memberIds.every((id) => dimTaskIds.has(id));
+          return dim ? (
             <div key={r.id} style={{ opacity: 0.3 }}>
               {summary}
             </div>

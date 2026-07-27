@@ -40,6 +40,7 @@ const taskSchema = z.object({
   note: z.string().optional(),
   recurrence: recurrenceSchema.optional(),
   order: z.number(),
+  trackId: z.string().optional(),
   dependsOn: z.array(z.string()).optional(),
   baseline: z.object({ startDate: dateStr, endDate: dateStr }).optional(),
   updatedAt: z.string(),
@@ -92,6 +93,8 @@ const ganttViewSchema = z.object({
   zoom: z.enum(['year', 'quarter', 'month', 'week']),
   scrollDate: dateStr.or(z.literal('')), // 空 = 从未记录（首次进甘特页滚到今日线）
   collapsedGoalIds: z.array(z.string()),
+  // 执行轨道新增：老备份缺省时补默认值
+  expandedTrackIds: z.array(z.string()).default([]),
   gridColumns: z.array(z.string()),
   gridWidth: z.number(),
   // Phase 3 新增：老备份缺省时补默认值

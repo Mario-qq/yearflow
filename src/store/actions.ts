@@ -44,6 +44,94 @@ export function patchTasks(items: { id: string; patch: Partial<Task> }[], label:
   s.execute(label, changes);
 }
 
+// ── 执行轨道（Task.trackId 显式归属，同 goal 内成组）──────────────────────
+
+/** 把若干任务归入同一条轨道；trackId 缺省新建一条。返回 trackId（无有效任务则 null） */
+export function groupTasksIntoTrack(taskIds: string[], trackId?: string, label?: string): string | null {
+  const s = useStore.getState();
+  const stamp = nowIso();
+  const id = trackId ?? nanoid();
+  const changes: Change[] = [];
+  for (const taskId of taskIds) {
+    const before = s.tasks[taskId];
+    if (!before || before.deletedAt || before.trackId === id) continue;
+    changes.push({ table: 'tasks', type: 'put', before, after: { ...before, trackId: id, updatedAt: stamp } });
+  }
+  if (changes.length === 0) return null;
+  s.execute(label ?? `归入轨道（${changes.length} 段）`, changes);
+  return id;
+}
+
+/** 把任务移出所属轨道（删除 trackId 键，而非置 undefined，保持落库/同步干净） */
+export function ungroupTasks(taskIds: string[], label?: string): void {
+  const s = useStore.getState();
+  const stamp = nowIso();
+  const changes: Change[] = [];
+  for (const taskId of taskIds) {
+    const before = s.tasks[taskId];
+    if (!before || !before.trackId) continue;
+    const after = { ...before, updatedAt: stamp };
+    delete after.trackId;
+    changes.push({ table: 'tasks', type: 'put', before, after });
+  }
+  if (changes.length > 0) s.execute(label ?? `移出轨道（${changes.length} 段）`, changes);
+}
+
+/**
+ * 一次性辅助导入：把某目标内由 dependsOn 连成一片、且尚未归组的任务建成轨道。
+ * 用无向连通分量（不做拓扑排序，故对环免疫）。
+ * 依赖只是「猜归属」的线索而非判定规则 —— 结果可 Ctrl+Z 整体撤销，也可事后手动增删。
+ * 返回新建的轨道条数。
+ */
+export function autoGroupByDependencies(goalId: string): number {
+  const s = useStore.getState();
+  const pool = Object.values(s.tasks).filter(
+    (t) => !t.deletedAt && t.goalId === goalId && !t.trackId,
+  );
+  const inPool = new Set(pool.map((t) => t.id));
+  const parent = new Map(pool.map((t) => [t.id, t.id] as const));
+  const find = (x: string): string => {
+    let r = x;
+    while (parent.get(r) !== r) r = parent.get(r)!;
+    while (parent.get(x) !== r) {
+      const next = parent.get(x)!;
+      parent.set(x, r);
+      x = next;
+    }
+    return r;
+  };
+  for (const t of pool) {
+    for (const dep of t.dependsOn ?? []) {
+      if (!inPool.has(dep)) continue; // 已归组 / 跨目标 / 已删的前置不参与
+      const [a, b] = [find(t.id), find(dep)];
+      if (a !== b) parent.set(a, b);
+    }
+  }
+
+  const comps = new Map<string, string[]>();
+  for (const t of pool) {
+    const root = find(t.id);
+    const list = comps.get(root);
+    if (list) list.push(t.id);
+    else comps.set(root, [t.id]);
+  }
+
+  const stamp = nowIso();
+  const changes: Change[] = [];
+  let n = 0;
+  for (const ids of comps.values()) {
+    if (ids.length < 2) continue;
+    n += 1;
+    const trackId = nanoid();
+    for (const id of ids) {
+      const before = s.tasks[id];
+      changes.push({ table: 'tasks', type: 'put', before, after: { ...before, trackId, updatedAt: stamp } });
+    }
+  }
+  if (changes.length > 0) s.execute(`按依赖链建成 ${n} 条轨道`, changes);
+  return n;
+}
+
 export function patchGoal(id: string, patch: Partial<Goal>, label: string): void {
   const s = useStore.getState();
   const before = s.goals[id];

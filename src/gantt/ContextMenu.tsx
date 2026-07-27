@@ -7,8 +7,11 @@
  * 里程碑：重命名 / 标记达成⇄取消 / 删除
  */
 import { useEffect, useRef } from 'react';
+import type { Task } from '../types/domain';
 import { useStore } from '../store/useStore';
+import { buildTracks } from '../lib/derive';
 import {
+  autoGroupByDependencies,
   createExemption,
   createMilestone,
   createTask,
@@ -17,6 +20,8 @@ import {
   deleteTask,
   deleteTasks,
   duplicateTaskAfter,
+  groupTasksIntoTrack,
+  ungroupTasks,
   patchMilestone,
   patchTask,
   patchTasks,
@@ -37,6 +42,49 @@ interface Item {
 
 type Entry = Item | 'divider';
 
+/**
+ * 执行轨道相关条目（bar 菜单顶部）：
+ * - 多选同目标 → 合成一条轨道
+ * - 已在轨道内 → 移出
+ * - 未归组且同目标已有轨道 → 逐条列出可归入的轨道（菜单是平铺的，不做子菜单）
+ */
+function trackItems(task: Task, selected: string[], multi: boolean, n: number): Entry[] {
+  const store = useStore.getState();
+  const items: Item[] = [];
+
+  if (multi) {
+    const sameGoal = selected.every((id) => store.tasks[id]?.goalId === task.goalId);
+    items.push({
+      label: sameGoal ? `合成一条轨道（${n} 段）` : '合成一条轨道（需同一目标）',
+      disabled: !sameGoal,
+      onClick: () => {
+        groupTasksIntoTrack(selected, undefined, `合成一条轨道（${n} 段）`);
+        showToast(`已把 ${n} 个任务合成一条轨道，可 Ctrl+Z 撤销`);
+      },
+    });
+  } else if (task.trackId) {
+    items.push({
+      label: '移出轨道',
+      onClick: () => {
+        ungroupTasks([task.id], `「${task.name}」移出轨道`);
+        showToast(`已把「${task.name}」移出轨道，可 Ctrl+Z 撤销`);
+      },
+    });
+  } else {
+    const tracks = buildTracks(Object.values(store.tasks)).tracksByGoal[task.goalId] ?? [];
+    for (const tr of tracks) {
+      items.push({
+        label: `归入轨道「${tr.name}」`,
+        onClick: () => {
+          groupTasksIntoTrack([task.id], tr.id, `「${task.name}」归入轨道「${tr.name}」`);
+          showToast(`已归入轨道「${tr.name}」，可 Ctrl+Z 撤销`);
+        },
+      });
+    }
+  }
+  return items.length > 0 ? [...items, 'divider'] : [];
+}
+
 function buildItems(menu: ContextMenuState): Entry[] {
   const ui = useGanttUi.getState();
   const store = useStore.getState();
@@ -49,6 +97,7 @@ function buildItems(menu: ContextMenuState): Entry[] {
     const multi = selected.length > 1;
     const n = selected.length;
     return [
+      ...trackItems(task, selected, multi, n),
       {
         label: '编辑详情',
         onClick: () => ui.setDrawerTask(task.id),
@@ -141,6 +190,18 @@ function buildItems(menu: ContextMenuState): Entry[] {
           });
           ui.flashTask(id);
           ui.setEditing({ id, field: 'name' });
+        },
+      },
+      'divider',
+      {
+        label: '按依赖链建轨道',
+        onClick: () => {
+          const n = autoGroupByDependencies(goal.id);
+          showToast(
+            n > 0
+              ? `已按依赖链建成 ${n} 条轨道，可 Ctrl+Z 撤销；没连线的任务需右键手动归入`
+              : '没有可成组的依赖链：先用 bar 端点的连接柄把有先后关系的任务连起来',
+          );
         },
       },
       'divider',

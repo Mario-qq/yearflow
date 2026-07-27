@@ -3,6 +3,7 @@ import { diffDays } from '../date';
 import { calcAutoProgress, expandScheduledDays, getMissedDays } from './scheduled';
 import { bestStatusByDate, calcStreak, statusByDateFor, type StreakResult } from './streak';
 import { weeklyHeat, type WeekHeat } from './heat';
+import { aggregateTrackProgress, buildTracks, type TrackSegment } from './tracks';
 
 /** 时间进度：已过天数 / 总天数（endDate 含当天），0-100 clamp */
 export function timeProgressPct(
@@ -35,9 +36,24 @@ export interface TaskGantt {
   counts: { scheduled: number; checked: number; missed: number };
 }
 
+/** 一条执行轨道折叠成一行时所需的派生数据 */
+export interface TrackGantt {
+  /** 包络：成员 min(start)..max(end) */
+  span: { startDate: string; endDate: string };
+  /** 成员区间并集，实心分段；段间即浅色间隙 */
+  segments: TrackSegment[];
+  memberIds: string[];
+  /** 聚合热度：成员应打卡日并集（截至今天）× 目标口径最强状态 */
+  heat: WeekHeat[];
+  /** 按跨度天数加权的聚合进度 0-100 */
+  progress: number;
+}
+
 /** 单目标甘特渲染所需的派生数据（目标行 + 各任务行） */
 export interface GoalGantt {
   perTask: Map<string, TaskGantt>;
+  /** 该目标下每条轨道（key = trackId）折叠行所需数据；无轨道时为空 Map */
+  perTrack: Map<string, TrackGantt>;
   streak: StreakResult;
   /** 汇总条范围：子任务 min(start)..max(end)；无任务 = null */
   summarySpan: { startDate: string; endDate: string } | null;
@@ -124,15 +140,36 @@ export function deriveGoalGantt(args: {
     if (!maxEnd || t.endDate > maxEnd) maxEnd = t.endDate;
   }
 
+  // 轨道聚合：并集范围从整目标缩到轨道成员，复用同一套 unionDays × 目标口径状态
+  const goalStatusByDate = bestStatusByDate(checkIns, goalId);
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  const perTrack = new Map<string, TrackGantt>();
+  for (const tr of buildTracks(tasks).tracks) {
+    const members = tr.memberIds.map((id) => byId.get(id)).filter((t): t is Task => !!t);
+    const trackDays = new Set<string>();
+    for (const m of members) {
+      for (const d of perTask.get(m.id)?.scheduledDays ?? []) {
+        if (d <= today) trackDays.add(d);
+      }
+    }
+    perTrack.set(tr.id, {
+      span: { startDate: tr.startDate, endDate: tr.endDate },
+      segments: tr.segments,
+      memberIds: tr.memberIds,
+      heat: weeklyHeat([...trackDays].sort(), goalStatusByDate, weekStartsOn),
+      progress: aggregateTrackProgress(
+        members,
+        (id) => perTask.get(id)?.effectiveProgress ?? 0,
+      ),
+    });
+  }
+
   return {
     perTask,
+    perTrack,
     streak: calcStreak({ goalId, tasks, checkIns, exemptions, today }),
     summarySpan:
       minStart && maxEnd ? { startDate: minStart, endDate: maxEnd } : null,
-    aggregatedHeat: weeklyHeat(
-      [...unionDays].sort(),
-      bestStatusByDate(checkIns, goalId),
-      weekStartsOn,
-    ),
+    aggregatedHeat: weeklyHeat([...unionDays].sort(), goalStatusByDate, weekStartsOn),
   };
 }

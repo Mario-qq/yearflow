@@ -38,3 +38,22 @@ describe('JSON 备份导出/导入', () => {
     expect(bundle.tasks.filter((t) => t.baseline)).toHaveLength(2);
   });
 });
+
+describe('执行轨道字段的备份兼容', () => {
+  it('任务的 trackId 往返保留', () => {
+    const bundle = buildSeedBundle('2026-07-16');
+    bundle.tasks[0] = { ...bundle.tasks[0], trackId: 'tk-1' };
+    bundle.tasks[1] = { ...bundle.tasks[1], trackId: 'tk-1' };
+    const parsed = parseBackupJSON(buildBackupJSON(bundle, DEFAULT_SETTINGS));
+    expect(parsed.data.tasks[0].trackId).toBe('tk-1');
+    expect(parsed.data.tasks[1].trackId).toBe('tk-1');
+  });
+
+  it('老备份缺 expandedTrackIds 时补默认空数组', () => {
+    const bundle = buildSeedBundle('2026-07-16');
+    const raw = JSON.parse(buildBackupJSON(bundle, DEFAULT_SETTINGS));
+    delete raw.settings.ganttView.expandedTrackIds;
+    const parsed = parseBackupJSON(JSON.stringify(raw));
+    expect(parsed.settings?.ganttView.expandedTrackIds).toEqual([]);
+  });
+});

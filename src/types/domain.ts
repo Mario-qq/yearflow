@@ -42,6 +42,12 @@ export interface Task {
   note?: string; // markdown 备注
   recurrence?: Recurrence;
   order: number;
+  /**
+   * 执行轨道归属：同一 goal 内 trackId 相同的任务收成一条可折叠的轨道
+   * （长期迭代项目的多段执行）。缺省 = 不属于任何轨道，独占一行。
+   * 显式字段而非从 dependsOn 推导：依赖表达时序，轨道表达项目归属，二者不等价。
+   */
+  trackId?: string;
   dependsOn?: string[]; // 轻量依赖（仅可视化连线与冲突提示，不做自动重排）
   baseline?: { startDate: string; endDate: string }; // 基线快照（原计划）
   updatedAt: string;
@@ -102,6 +108,8 @@ export interface GanttViewState {
   zoom: GanttZoom;
   scrollDate: string; // 视口左缘日期
   collapsedGoalIds: string[];
+  /** 轨道默认折叠，故记「已展开」而非「已折叠」 */
+  expandedTrackIds: string[];
   gridColumns: string[]; // 左侧网格显示哪些列
   gridWidth: number; // 左侧面板宽度 px
   gridCollapsed: boolean; // 整体折叠左栏 = 纯图模式

@@ -24,10 +24,19 @@ export {
   type MonthGoalStats,
 } from './review';
 export {
+  buildTracks,
+  aggregateTrackProgress,
+  memberAtDate,
+  type Track,
+  type TrackIndex,
+  type TrackSegment,
+} from './tracks';
+export {
   timeProgressPct,
   deriveTaskGantt,
   deriveGoalGantt,
   goalMonthlyRate,
   type TaskGantt,
   type GoalGantt,
+  type TrackGantt,
 } from './gantt';

@@ -226,3 +226,75 @@ describe('goalMonthlyRate 目标月完成率', () => {
     expect(goalMonthlyRate(g, '2026-02', '2026-01-02')).toBeNull(); // 2 月还没到
   });
 });
+
+describe('deriveGoalGantt perTrack 轨道聚合', () => {
+  const trackTasks = [
+    task({
+      id: 'a',
+      trackId: 'tk',
+      startDate: '2026-01-01',
+      endDate: '2026-01-04',
+      progressMode: 'manual',
+      progress: 100,
+    }),
+    task({
+      id: 'b',
+      trackId: 'tk',
+      startDate: '2026-01-09',
+      endDate: '2026-01-10',
+      progressMode: 'manual',
+      progress: 0,
+    }),
+    // 非成员，且刻意落在两段成员区间的间隙里，才能验证它没被算进轨道热度
+    task({ id: 'solo', startDate: '2026-01-06', endDate: '2026-01-07' }),
+  ];
+
+  it('只为成员≥2 的轨道产出条目，包络与分段来自成员并集', () => {
+    const g = deriveGoalGantt({
+      goalId: 'g1',
+      tasks: trackTasks,
+      checkIns: [],
+      exemptions: [],
+      today: '2026-01-10',
+      weekStartsOn: 1,
+    });
+    expect([...g.perTrack.keys()]).toEqual(['tk']);
+    const tk = g.perTrack.get('tk')!;
+    expect(tk.span).toEqual({ startDate: '2026-01-01', endDate: '2026-01-10' });
+    expect(tk.segments).toEqual([
+      { startDate: '2026-01-01', endDate: '2026-01-04' },
+      { startDate: '2026-01-09', endDate: '2026-01-10' },
+    ]);
+    expect(tk.memberIds).toEqual(['a', 'b']);
+    // 4 天 @100% + 2 天 @0% → 400/6 = 66.7 → 67
+    expect(tk.progress).toBe(67);
+  });
+
+  it('聚合热度只含成员的应打卡日，不含同目标的非成员任务', () => {
+    const g = deriveGoalGantt({
+      goalId: 'g1',
+      tasks: trackTasks,
+      checkIns: [checkIn('2026-01-01', 'done')],
+      exemptions: [],
+      today: '2026-01-10',
+      weekStartsOn: 1,
+    });
+    const tk = g.perTrack.get('tk')!;
+    const trackDays = tk.heat.reduce((n, w) => n + w.scheduled, 0);
+    // 成员 a(1/1-1/4) + b(1/9-1/10) = 6 天；solo 的 2 天不计入
+    expect(trackDays).toBe(6);
+    expect(g.aggregatedHeat.reduce((n, w) => n + w.scheduled, 0)).toBe(8);
+  });
+
+  it('没有 trackId 时 perTrack 为空', () => {
+    const g = deriveGoalGantt({
+      goalId: 'g1',
+      tasks: [task({ id: 'x' })],
+      checkIns: [],
+      exemptions: [],
+      today: '2026-01-10',
+      weekStartsOn: 1,
+    });
+    expect(g.perTrack.size).toBe(0);
+  });
+});

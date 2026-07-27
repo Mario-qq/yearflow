@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildRowLayout, rowAtY, visibleRowRange } from './rowLayout';
-import { ROW_H_GHOST, ROW_H_GOAL, ROW_H_TASK } from './constants';
+import { ROW_H_GHOST, ROW_H_GOAL, ROW_H_TASK, ROW_H_TRACK } from './constants';
+import { buildTracks } from '../lib/derive/tracks';
 import type { Goal, Task } from '../types/domain';
 
 const goal = (id: string, order: number, extra?: Partial<Goal>): Goal => ({
@@ -95,5 +96,91 @@ describe('rowAtY', () => {
     expect(rowAtY(layout, layout.totalHeight - 1)?.id).toBe('ghost-g2');
     expect(rowAtY(layout, -1)).toBeNull();
     expect(rowAtY(layout, layout.totalHeight)).toBeNull();
+  });
+});
+
+describe('buildRowLayout 执行轨道', () => {
+  /* g1: solo(order 0) + 轨道 tk{ h(order 1, 1月), m(order 2, 3月) } */
+  const trackGoals = { g1: goal('g1', 0) };
+  const trackTasks = {
+    solo: task('solo', 'g1', 0),
+    h: task('h', 'g1', 1, { trackId: 'tk', startDate: '2026-01-01', endDate: '2026-01-10' }),
+    m: task('m', 'g1', 2, { trackId: 'tk', startDate: '2026-03-01', endDate: '2026-03-10' }),
+  };
+  const index = buildTracks(Object.values(trackTasks));
+
+  it('缺省 opts 时不产生 track 行（回归护栏）', () => {
+    const layout = buildRowLayout(trackGoals, trackTasks, []);
+    expect(layout.rows.map((r) => r.kind)).toEqual(['goal', 'task', 'task', 'task', 'ghost']);
+    expect(layout.trackRowByTrackId).toEqual({});
+  });
+
+  it('折叠时轨道成员收成一行，不占任务行', () => {
+    const layout = buildRowLayout(trackGoals, trackTasks, [], { trackIndex: index });
+    expect(layout.rows.map((r) => [r.kind, r.id])).toEqual([
+      ['goal', 'g1'],
+      ['task', 'solo'],
+      ['track', 'track:tk'],
+      ['ghost', 'ghost-g1'],
+    ]);
+    const trackRow = layout.trackRowByTrackId.tk;
+    expect(trackRow.memberCount).toBe(2);
+    expect(trackRow.height).toBe(ROW_H_TRACK);
+    expect(trackRow.top).toBe(ROW_H_GOAL + ROW_H_TASK);
+    expect(layout.taskRowsByGoal.g1.map((r) => r.id)).toEqual(['solo']);
+    expect(layout.memberRowsByTrack.tk).toEqual([]);
+    expect(layout.rowById.h).toBeUndefined();
+    expect(layout.totalHeight).toBe(ROW_H_GOAL + ROW_H_TASK + ROW_H_TRACK + ROW_H_GHOST);
+  });
+
+  it('展开时保留轨道行，成员按开始日缩进列在其下', () => {
+    const layout = buildRowLayout(trackGoals, trackTasks, [], {
+      trackIndex: index,
+      expandedTrackIds: ['tk'],
+    });
+    expect(layout.rows.map((r) => r.id)).toEqual([
+      'g1',
+      'solo',
+      'track:tk',
+      'h',
+      'm',
+      'ghost-g1',
+    ]);
+    expect(layout.rowById.h.depth).toBe(1);
+    expect(layout.rowById.h.trackId).toBe('tk');
+    expect(layout.rowById.solo.depth).toBeUndefined();
+    // taskRowsByGoal 含成员行（语义不变：该目标下所有可见任务行）
+    expect(layout.taskRowsByGoal.g1.map((r) => r.id)).toEqual(['solo', 'h', 'm']);
+    expect(layout.memberRowsByTrack.tk.map((r) => r.id)).toEqual(['h', 'm']);
+  });
+
+  it('unitRowsByGoal 只含顶层排序单元，轨道整块按头任务 order 参与排序', () => {
+    // solo 的 order 改到轨道头之后 → 轨道整块排到 solo 前面
+    const reordered = { ...trackTasks, solo: task('solo', 'g1', 9) };
+    const layout = buildRowLayout(trackGoals, reordered, [], {
+      trackIndex: buildTracks(Object.values(reordered)),
+      expandedTrackIds: ['tk'],
+    });
+    expect(layout.unitRowsByGoal.g1.map((r) => r.id)).toEqual(['track:tk', 'solo']);
+    expect(layout.rows.map((r) => r.id)).toEqual(['g1', 'track:tk', 'h', 'm', 'solo', 'ghost-g1']);
+  });
+
+  it('目标折叠时轨道行一并收起', () => {
+    const layout = buildRowLayout(trackGoals, trackTasks, ['g1'], {
+      trackIndex: index,
+      expandedTrackIds: ['tk'],
+    });
+    expect(layout.rows.map((r) => r.kind)).toEqual(['goal']);
+    expect(layout.trackRowByTrackId).toEqual({});
+  });
+
+  it('rowAtY 能命中 track 行，visibleRowRange 覆盖 track 行', () => {
+    const layout = buildRowLayout(trackGoals, trackTasks, [], { trackIndex: index });
+    const trackTop = ROW_H_GOAL + ROW_H_TASK;
+    expect(rowAtY(layout, trackTop)?.id).toBe('track:tk');
+    expect(rowAtY(layout, trackTop + ROW_H_TRACK - 1)?.id).toBe('track:tk');
+    expect(rowAtY(layout, trackTop + ROW_H_TRACK)?.id).toBe('ghost-g1');
+    const [lo, hi] = visibleRowRange(layout, trackTop, trackTop + 1);
+    expect(layout.rows.slice(lo, hi + 1).map((r) => r.id)).toContain('track:tk');
   });
 });
