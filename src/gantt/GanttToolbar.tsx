@@ -55,6 +55,15 @@ export function GanttToolbar() {
   const showBaseline = useStore((s) => s.settings.ganttView.showBaseline);
   const updateSettings = useStore((s) => s.updateSettings);
   const updateGanttView = useStore((s) => s.updateGanttView);
+  const filter = useStore((s) => s.settings.ganttView.filter);
+
+  // 快捷筛选：只留计划中 + 进行中，并直接收起其余行（等价于「仅显示匹配项」）
+  const activeOnly =
+    (filter.status?.length ?? 0) === 2 &&
+    filter.status!.includes('planned') &&
+    filter.status!.includes('active') &&
+    !filter.goalIds?.length &&
+    !!filter.hideOthers;
 
   return (
     <div className="flex items-center gap-3">
@@ -129,7 +138,19 @@ export function GanttToolbar() {
         今天
       </button>
 
-      <FilterMenu />
+      <div className="flex items-center gap-1">
+        <FilterMenu />
+        <ToggleBtn
+          on={activeOnly}
+          label="Active Tasks"
+          title="只看计划中与进行中的任务（收起其余）"
+          onClick={() =>
+            updateGanttView({
+              filter: activeOnly ? {} : { status: ['planned', 'active'], hideOthers: true },
+            })
+          }
+        />
+      </div>
 
       <div className="flex items-center gap-1">
         <ToggleBtn

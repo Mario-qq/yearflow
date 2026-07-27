@@ -102,18 +102,10 @@ export default function GanttView() {
   );
   const layoutTasks = useMemo(() => {
     if (!filterActive || !filter.hideOthers) return tasks;
+    // 轨道成员与普通任务同等对待：不匹配就收起（轨道条只包络仍命中的成员，
+    // 全员落选则整条轨道消失）——筛选的语义优先于折叠条的跨度完整性。
     const out: Record<string, Task> = {};
-    const hitTracks = new Set<string>();
-    for (const t of Object.values(tasks)) {
-      if (!taskMatches(t)) continue;
-      out[t.id] = t;
-      if (t.trackId) hitTracks.add(`${t.goalId}::${t.trackId}`);
-    }
-    // 任一成员命中就补回整条轨道，否则折叠条只剩半截、包络跨度失真
-    for (const t of Object.values(tasks)) {
-      if (out[t.id] || t.deletedAt || !t.trackId) continue;
-      if (hitTracks.has(`${t.goalId}::${t.trackId}`)) out[t.id] = t;
-    }
+    for (const t of Object.values(tasks)) if (taskMatches(t)) out[t.id] = t;
     return out;
   }, [tasks, filterActive, filter.hideOthers, taskMatches]);
   const layoutGoals = useMemo(() => {
