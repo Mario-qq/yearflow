@@ -1,20 +1,24 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
+import { db } from '../db/schema';
+import { flushNow } from '../store/persist';
 import { ExemptionManager } from '../checkin/ExemptionManager';
 import { SyncSection } from '../components/SyncSection';
 import { buildBackupJSON, parseBackupJSON } from '../lib/backup';
 import { buildSeedBundle } from '../seed/seedData';
 import { todayStr } from '../lib/date';
-import { TABLE_NAMES } from '../store/types';
-import type { AppSettings } from '../types/domain';
+import { TABLE_NAMES, type TableName } from '../store/types';
+import type { AppSettings, SyncableEntity } from '../types/domain';
 
-const TABLE_LABEL: Record<string, string> = {
+/** ⚠️ Record<string,string> 无编译护栏：加表时漏加这里不报错，界面会渲染出 undefined */
+const TABLE_LABEL: Record<TableName, string> = {
   goals: '目标',
   tasks: '任务',
   milestones: '里程碑',
   checkIns: '打卡记录',
   exemptions: '免打卡区间',
   reviews: '月度复盘',
+  focusSessions: '专注会话',
 };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -50,8 +54,35 @@ export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
 
-  const counts = TABLE_NAMES.map((t) => ({ table: t, count: Object.keys(store[t]).length }));
+  /**
+   * 各表行数直接数 Dexie，不数内存 map。
+   * 理由（容量红线可见性）：将来专注会话超过 8000 行要启用「只载入近 400 天」的窗口化 hydrate，
+   * 那时内存计数会被窗口封顶在约 6400，永远到不了 8000 —— 触发条件的观测手段会被窗口化本身砍掉。
+   * 先 flushNow() 再数，避免 500ms 防抖期内显示旧值；墓碑行不计入（与内存口径一致）。
+   */
+  const [counts, setCounts] = useState<{ table: TableName; count: number }[]>([]);
   const totalCount = counts.reduce((sum, c) => sum + c.count, 0);
+  const dataVersion = TABLE_NAMES.map((t) => Object.keys(store[t]).length).join(',');
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      await flushNow();
+      const rows = await Promise.all(
+        TABLE_NAMES.map(async (t) => ({
+          table: t,
+          count: await db
+            .table(t)
+            .filter((e: SyncableEntity) => !e.deletedAt)
+            .count(),
+        })),
+      );
+      if (alive) setCounts(rows);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [dataVersion]);
 
   const say = (text: string, error = false) => setMessage({ text, error });
 
@@ -62,9 +93,21 @@ export default function SettingsPage() {
   };
 
   const clearAll = async () => {
-    if (!confirm('将删除全部目标、任务、打卡记录与复盘，且无法撤销。建议先导出 JSON 备份。确定清空？'))
+    if (
+      !confirm(
+        '将删除全部目标、任务、打卡记录、专注会话与复盘，且无法撤销。建议先导出 JSON 备份。确定清空？',
+      )
+    )
       return;
-    await replaceAllData({ goals: [], tasks: [], milestones: [], checkIns: [], exemptions: [], reviews: [] });
+    await replaceAllData({
+      goals: [],
+      tasks: [],
+      milestones: [],
+      checkIns: [],
+      exemptions: [],
+      reviews: [],
+      focusSessions: [],
+    });
     say('已清空全部数据');
   };
 

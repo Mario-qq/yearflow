@@ -4,6 +4,7 @@ import type {
   AppSettings,
   CheckIn,
   ExemptionPeriod,
+  FocusSession,
   Goal,
   Milestone,
   MonthlyReview,
@@ -32,6 +33,7 @@ class SettingsRepo {
       ...DEFAULT_SETTINGS,
       ...row?.value,
       ganttView: { ...DEFAULT_SETTINGS.ganttView, ...row?.value?.ganttView },
+      pomodoro: { ...DEFAULT_SETTINGS.pomodoro, ...row?.value?.pomodoro },
     };
   }
 
@@ -46,6 +48,7 @@ export const milestoneRepo = new BaseRepo<Milestone>(db.milestones);
 export const checkInRepo = new CheckInRepo(db.checkIns);
 export const exemptionRepo = new BaseRepo<ExemptionPeriod>(db.exemptions);
 export const reviewRepo = new BaseRepo<MonthlyReview>(db.reviews);
+export const focusRepo = new BaseRepo<FocusSession>(db.focusSessions);
 export const settingsRepo = new SettingsRepo();
 
 /** 清空全库（JSON 导入重建 / 清空示例数据） */
@@ -57,5 +60,6 @@ export async function clearAllData(): Promise<void> {
     db.checkIns.clear(),
     db.exemptions.clear(),
     db.reviews.clear(),
+    db.focusSessions.clear(),
   ]);
 }

@@ -1,6 +1,11 @@
 -- YearFlow 云同步建表 + RLS（SPEC 第十节）
 -- 在 Supabase Dashboard → SQL Editor 中整段执行一次即可。
 --
+-- ⚠️ 本文件不得在 0002 之后单独重跑：下面 upsert_rows 的表名白名单硬编码为 6 表，
+--    重跑会把 0002_focus_sessions.sql 加进去的 focus_sessions 静默移出白名单，
+--    之后专注会话推送会报「upsert_rows: 非法表名 focus_sessions」。
+--    重建请按 0001 → 0002 的顺序执行。
+--
 -- 设计：
 --   每张表与本地 IndexedDB 一一对应；实体完整内容存 data(jsonb)，
 --   updated_at/deleted_at 为索引/清理用途的冗余列（真值以 data 内 ISO 字符串为准）。

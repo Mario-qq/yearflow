@@ -2,6 +2,7 @@ import type { AppSettings } from '../types/domain';
 import {
   checkInRepo,
   exemptionRepo,
+  focusRepo,
   goalRepo,
   milestoneRepo,
   reviewRepo,
@@ -20,6 +21,7 @@ export const repoByTable: Record<TableName, BaseRepo<SyncableEntity>> = {
   checkIns: checkInRepo as BaseRepo<SyncableEntity>,
   exemptions: exemptionRepo as BaseRepo<SyncableEntity>,
   reviews: reviewRepo as BaseRepo<SyncableEntity>,
+  focusSessions: focusRepo as BaseRepo<SyncableEntity>,
 };
 
 const PERSIST_DEBOUNCE_MS = 500; // SPEC：所有变更自动保存（防抖 500ms）

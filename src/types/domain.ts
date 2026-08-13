@@ -81,6 +81,80 @@ export interface CheckIn {
   deletedAt?: string;
 }
 
+/** 一次暂停（ISO 时刻对）。until 缺省 = 该暂停尚未结束（仅出现在运行中状态，落库时必闭合） */
+export interface FocusPause {
+  at: string; // ISO
+  until?: string; // ISO
+}
+
+/**
+ * 会话结局：
+ * completed = 跑到计划终点（含「到点自动结算」与「恢复时按计划终点结算」）
+ * stopped   = 用户提前停止，按实际净时长记账
+ * discarded = 用户主动丢弃 / 恢复时选择「不算」，不计入任何统计（留痕仅供审计）
+ */
+export type FocusOutcome = 'completed' | 'stopped' | 'discarded';
+
+/**
+ * 专注会话 = 一次专注（不是「一个番茄」）。是「真实投入时间」的唯一事实来源。
+ * 只有已结束的会话入库；运行中状态在 localStorage（见 RunningState），不入库、不同步、不进 undo。
+ * 行语义近似不可变：不含任何需要累加的字段 —— 这正是 append-only 行在整行 LWW 下天然安全的原因。
+ */
+export interface FocusSession {
+  id: string; // nanoid。运行开始时预生成并存进 localStorage，结算时作为落库 id ⇒ 天然幂等
+  goalId?: string; // 缺省 = 未归类（面板常驻「N 段未归类」清理入口）
+  taskId?: string; // 缺省 = 只挂到目标，或完全未归类
+  /**
+   * YYYY-MM-DD。从 startAt 派生一次后冻结在字段里，绝不每次显示时重算（跨时区旅行会让整片历史漂移）。
+   * ⚠️ 用户可经结果卡「一键改归相邻日」显式覆盖它 ⇒ date 与 startAt 允许永久不一致，
+   * 任何迁移/修复脚本禁止从 startAt 重算 date（会把用户的显式修正静默改回去）。
+   */
+  date: string;
+  startAt: string; // ISO，专注开始时刻
+  endAt: string; // ISO，结算时刻
+  focusMs: number; // 净专注毫秒：已扣暂停、已 clamp。结算后的权威值，不由 pauses 反算
+  plannedMs: number; // 计划专注毫秒（结算截断上限）。手动补录时 = focusMs
+  pauses?: FocusPause[]; // 审计与展示用；空数组不写。上限 PAUSE_LIMIT 段，超出合并最早的相邻两段
+  outcome: FocusOutcome;
+  source: 'timer' | 'manual'; // manual = 手动补录或事后编辑过时长；标记中性，不做降权
+  needsReview?: boolean; // 结算异常待人确认（时钟跳变 / 超长 / 长时间失联后补算）
+  note?: string;
+  createdAt: string;
+  updatedAt: string; // 补录/编辑一律用当前时间，不用会话发生时间（同步游标依赖它）
+  deletedAt?: string;
+}
+
+/** 番茄钟阶段。休息段只存在于运行态，永不落库 */
+export type PomodoroPhase = 'focus' | 'shortBreak' | 'longBreak';
+
+/** 运行态里的一次暂停（毫秒时刻，与 FocusPause 的 ISO 口径区分开） */
+export interface RunningPause {
+  at: number;
+  until?: number;
+}
+
+/**
+ * 运行中状态：localStorage `yearflow:pomodoro:running`，不入库、不同步、不进 undo。
+ * 放在领域模型里是因为它是 settleSession/planRecovery 的输入契约（CLAUDE.md：领域模型唯一定义在此）。
+ */
+export interface RunningState {
+  sessionId: string; // 预生成的 nanoid，结算时作为落库 id ⇒ 重复结算幂等
+  phase: PomodoroPhase;
+  goalId?: string;
+  taskId?: string;
+  startAt: number; // Date.now()，本段开始
+  plannedMs: number;
+  pauses: RunningPause[]; // 末条 until 缺省 = 正在暂停中
+  lastHeartbeatAt: number; // 心跳，5 秒一次 + hidden/pagehide 各强制一次
+}
+
+/** 节律计数：localStorage `yearflow:pomodoro:cycle`，独立于 RunningState（后者每回 idle 即删） */
+export interface CycleState {
+  date: string; // YYYY-MM-DD
+  completed: number; // 只有 outcome === 'completed' 才递增
+  lastAt: number;
+}
+
 /** 免打卡区间：出差/生病/长假，期间不判缺卡、不断 streak */
 export interface ExemptionPeriod {
   id: string;
@@ -120,12 +194,24 @@ export interface GanttViewState {
   filter: { status?: TaskStatus[]; goalIds?: string[]; hideOthers?: boolean };
 }
 
+/** 番茄钟偏好。属设备本地偏好（settings 不同步），故换设备需各配一次 */
+export interface PomodoroSettings {
+  focusMin: number; // 默认 25，取值 [1, 180]
+  shortBreakMin: number; // 默认 5，取值 [1, 60]
+  longBreakMin: number; // 默认 15，取值 [1, 120]
+  longBreakEvery: number; // 默认 4，取值 [1, 12]（每 4 段专注后进长休息）
+  sound: boolean; // 默认 true
+  notify: boolean; // 默认 false（需浏览器授权，开启时才请求权限）
+}
+
 export interface AppSettings {
   theme: 'light' | 'dark' | 'system';
   weekStartsOn: 0 | 1;
   yearInView: number;
   /** 甘特图视图状态持久化：下次打开恢复原样 */
   ganttView: GanttViewState;
+  /** 番茄钟偏好（取值范围在设置页 onBlur clamp 与 backup zod schema 两处强制） */
+  pomodoro: PomodoroSettings;
   /** 一次性迁移标记：旧数据（5 色轮转）目标撞色已重新分配过（本地，不同步） */
   colorNormalized?: boolean;
 }

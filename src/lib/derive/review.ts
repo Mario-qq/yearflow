@@ -2,9 +2,10 @@
  * 复盘统计派生（SPEC 第七节）：月度目标统计、年度热力图日分值、按月投入时长。
  * 口径与其余派生一致：目标级一天一条最强记录，done=1、partial=0.5 计权。
  */
-import type { CheckIn, ExemptionPeriod, Task } from '../../types/domain';
+import type { CheckIn, ExemptionPeriod, FocusSession, Task } from '../../types/domain';
 import { expandScheduledDays } from './scheduled';
 import { bestStatusByDate } from './streak';
+import { effectiveMsByGoalByYear, effectiveMsByGoalPrefix } from './focus';
 
 export interface MonthGoalStats {
   /** 本月应打卡天数（目标级并集，截至今天） */
@@ -13,7 +14,7 @@ export interface MonthGoalStats {
   score: number;
   /** 完成率 0-100；无应打卡返回 null（横条不渲染） */
   rate: number | null;
-  /** 本月投入分钟数（该目标全部记录） */
+  /** 本月投入分钟数：max(手填, 番茄) 按 (任务,日) 分桶后求和，只在最后取整一次 */
   minutes: number;
   /** 缺卡天数（应打卡、< 今天、无记录） */
   missedDays: number;
@@ -27,8 +28,10 @@ export function monthlyGoalStats(args: {
   exemptions: ExemptionPeriod[];
   month: string;
   today: string;
+  /** 专注会话；缺省为空时结果与番茄钟改造前完全一致（既有测试即回归护栏） */
+  sessions?: FocusSession[];
 }): MonthGoalStats {
-  const { goalId, tasks, checkIns, exemptions, month, today } = args;
+  const { goalId, tasks, checkIns, exemptions, month, today, sessions = [] } = args;
   const dayset = new Set<string>();
   for (const t of tasks) {
     if (t.deletedAt || t.goalId !== goalId) continue;
@@ -47,11 +50,8 @@ export function monthlyGoalStats(args: {
     else if (!s && d < today) missedDays += 1;
   }
 
-  let minutes = 0;
-  for (const c of checkIns) {
-    if (c.deletedAt || c.goalId !== goalId || !c.date.startsWith(month)) continue;
-    minutes += c.minutes ?? 0;
-  }
+  // 按记录自身的 date 分桶（不是按上面的 dayset：那样会丢掉非应打卡日的手填分钟）
+  const minutes = Math.round(effectiveMsByGoalPrefix(checkIns, sessions, goalId, month) / 60000);
 
   const scheduled = dayset.size;
   return {
@@ -93,19 +93,22 @@ export function dailyActivityScores(
   return scores;
 }
 
-/** 按月×目标投入分钟数（年度堆叠面积图数据源）。返回 month(1-12) → goalId → minutes */
+/**
+ * 按月×目标投入分钟数（年度堆叠面积图数据源）。返回 month(1-12) → goalId → minutes。
+ * sessions 缺省为空时结果与番茄钟改造前完全一致（回归护栏）。
+ * ⚠️ 只在这一层取整；调用方要总时长请自己求和 ms 或改用 effectiveMsByGoalByYear，
+ * 绝不要累加这里已四舍五入的月值。
+ */
 export function minutesByGoalByMonth(
   checkIns: CheckIn[],
   year: number,
+  sessions: FocusSession[] = [],
 ): Map<number, Map<string, number>> {
-  const prefix = `${year}-`;
   const out = new Map<number, Map<string, number>>();
-  for (const c of checkIns) {
-    if (c.deletedAt || !c.minutes || !c.date.startsWith(prefix)) continue;
-    const m = Number(c.date.slice(5, 7));
-    const byGoal = out.get(m) ?? new Map<string, number>();
-    byGoal.set(c.goalId, (byGoal.get(c.goalId) ?? 0) + c.minutes);
-    out.set(m, byGoal);
+  for (const [month, byGoal] of effectiveMsByGoalByYear(checkIns, sessions, year)) {
+    const minutes = new Map<string, number>();
+    for (const [goalId, ms] of byGoal) minutes.set(goalId, Math.round(ms / 60000));
+    out.set(month, minutes);
   }
   return out;
 }

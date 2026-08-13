@@ -20,4 +20,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
     showBaseline: false,
     filter: {},
   },
+  pomodoro: {
+    focusMin: 25,
+    shortBreakMin: 5,
+    longBreakMin: 15,
+    longBreakEvery: 4,
+    sound: true,
+    notify: false,
+  },
 };

@@ -8,6 +8,7 @@ import { Toasts } from './components/Toasts';
 import { Celebration } from './components/Celebration';
 import { SyncIndicator } from './components/SyncIndicator';
 import { initSync } from './db/sync/syncApi';
+import { initPomodoro } from './pomodoro/kernel';
 import { CommandPalette } from './components/CommandPalette';
 import { ShortcutHelp } from './components/ShortcutHelp';
 import { GanttToolbar } from './gantt/GanttToolbar';
@@ -99,6 +100,12 @@ export default function App() {
   // 云同步引擎：hydrate 完成后启动（幂等；未配置 Supabase 时内部直接返回）
   useEffect(() => {
     if (hydrated) void initSync();
+  }, [hydrated]);
+
+  // 番茄钟计时内核：恢复判定与结算必须在 hydrate 之后（否则结算会进了库却不在内存）。
+  // 内核本身是模块单例，与本组件的挂载/卸载无关，这里只负责挑对时机初始化一次。
+  useEffect(() => {
+    if (hydrated) initPomodoro();
   }, [hydrated]);
 
   // 全局撤销/重做（SPEC 4.7 / 第六节）：Ctrl+Z / Ctrl+Shift+Z（或 Ctrl+Y），toast 显示摘要

@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import type { AppSettings } from '../types/domain';
 import type { DataBundle } from '../store/types';
+import { DEFAULT_SETTINGS } from '../store/defaults';
 
 export const BACKUP_SCHEMA_VERSION = 1;
 
@@ -89,6 +90,30 @@ const reviewSchema = z.object({
   deletedAt: z.string().optional(),
 });
 
+const focusPauseSchema = z.object({
+  at: z.string(),
+  until: z.string().optional(),
+});
+
+const focusSessionSchema = z.object({
+  id: z.string().min(1),
+  goalId: z.string().optional(),
+  taskId: z.string().optional(),
+  date: dateStr,
+  startAt: z.string(),
+  endAt: z.string(),
+  focusMs: z.number().min(0),
+  plannedMs: z.number().min(0),
+  pauses: z.array(focusPauseSchema).optional(),
+  outcome: z.enum(['completed', 'stopped', 'discarded']),
+  source: z.enum(['timer', 'manual']),
+  needsReview: z.boolean().optional(),
+  note: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().optional(),
+});
+
 const ganttViewSchema = z.object({
   zoom: z.enum(['year', 'quarter', 'month', 'week']),
   scrollDate: dateStr.or(z.literal('')), // 空 = 从未记录（首次进甘特页滚到今日线）
@@ -109,11 +134,31 @@ const ganttViewSchema = z.object({
   }),
 });
 
+/**
+ * 番茄钟偏好。整块缺省值直接引用 DEFAULT_SETTINGS.pomodoro —— 不在这里手抄一份：
+ * 手抄的话它必须与 store/defaults.ts 逐字段深相等，否则 backup.test.ts 那条
+ * parsed.settings toEqual(DEFAULT_SETTINGS) 会失败（这是实际存在的耦合）。
+ * 取值范围在此强制的理由：SettingsRepo.get() 只做浅合并不校验，导入一份畸形备份即中毒
+ * （focusMin=0 ⇒ 每段都被 clamp 成 0 且不足 1 分钟不落库，计时器永远记不上账；
+ *  longBreakEvery=0 ⇒ completed % 0 = NaN，长休息永不触发。两者都不报错）。
+ */
+const pomodoroSchema = z
+  .object({
+    focusMin: z.number().int().min(1).max(180).default(25),
+    shortBreakMin: z.number().int().min(1).max(60).default(5),
+    longBreakMin: z.number().int().min(1).max(120).default(15),
+    longBreakEvery: z.number().int().min(1).max(12).default(4),
+    sound: z.boolean().default(true),
+    notify: z.boolean().default(false),
+  })
+  .default(() => ({ ...DEFAULT_SETTINGS.pomodoro }));
+
 const settingsSchema = z.object({
   theme: z.enum(['light', 'dark', 'system']),
   weekStartsOn: z.union([z.literal(0), z.literal(1)]),
   yearInView: z.number().int(),
   ganttView: ganttViewSchema,
+  pomodoro: pomodoroSchema,
 });
 
 const backupSchema = z.object({
@@ -127,6 +172,8 @@ const backupSchema = z.object({
     checkIns: z.array(checkInSchema),
     exemptions: z.array(exemptionSchema),
     reviews: z.array(reviewSchema),
+    // 番茄钟新增：老备份没有这个键，缺省补空数组（否则老备份导入直接校验失败）
+    focusSessions: z.array(focusSessionSchema).default([]),
   }),
   settings: settingsSchema.optional(),
 });

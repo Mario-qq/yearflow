@@ -29,7 +29,12 @@ npx vitest run   # 单元测试
 
 1. 打开 Dashboard → **SQL Editor** → New query
 2. 把 `supabase/migrations/0001_init.sql` 全文粘贴进去，点 **Run**
-3. 成功后 Table Editor 中应出现 6 张表：`goals / tasks / milestones / check_ins / exemptions / reviews`（均已开启 RLS，只能读写自己的行）
+3. 再新建一个 query，把 `supabase/migrations/0002_focus_sessions.sql` 全文粘贴进去，点 **Run**
+4. 成功后 Table Editor 中应出现 7 张表：`goals / tasks / milestones / check_ins / exemptions / reviews / focus_sessions`（均已开启 RLS，只能读写自己的行）
+
+> ⚠️ 两条顺序约定：
+> · **0001 执行过 0002 之后不得再单独重跑** —— 0001 里的 `upsert_rows` 表名白名单是硬编码 6 表，重跑会把 `focus_sessions` 移出白名单，之后专注会话推送会报「非法表名」。要重建请按 0001 → 0002 顺序执行。
+> · **新增表时先执行 migration，再部署前端** —— 远端表不存在时整轮同步会 fail-fast（顶栏同步点常亮红并指名该表），执行完 SQL 后自动恢复，不会丢数据。
 
 ### 3. 配置环境变量
 

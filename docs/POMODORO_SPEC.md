@@ -252,12 +252,21 @@ $$;
 - 该异常被 `:102-107` 的 catch 接住 → `useSyncStore.status = 'error'`（`SyncIndicator` 常亮红，不是控制台日志）；
 - ⇒ **`pushAll` 与 `cleanupTombstones` 整个不执行** ⇒ goals/tasks/milestones/checkIns/exemptions/reviews **六张老表也全部停止推送**，且每 5 分钟、每次 focus/visibilitychange 重复失败。
 
-把「忘了执行一段 SQL」升级成「全量云同步静默中断」是不可接受的。**因此本次必须同时改同步引擎**，加进 S3 清单（§十二）：
+把「忘了执行一段 SQL」升级成「全量云同步静默中断」是不可接受的 —— 但注意这个后果的**触发条件只有一个**：远端表不存在（永久性失败）。
 
-> **单表失败不得中断整轮**：`pullAll` / `pushAll` 的**每表循环体**各包一层 try/catch，失败时记录 `{table, message}` 并 `continue`，不更新该表游标；整轮结束后若 `failed.length > 0` 才把 `status` 置 `'error'` 并把表名带进 `error` 文案（如「focus_sessions 同步失败：远端表不存在，请执行 0002」）。成功的表照常推拉与推进游标。
-> 这条改动**对既有 6 张表也是净收益**（任何单表故障不再拖垮全库同步），且不改变正常路径行为。
+#### S3 裁决（2026-08-13）：**同步引擎一行不改**
 
-S3 验收必须有这一条：**在未执行 0002 的环境下，六张老表仍能正常推拉**。
+初稿评审开的处方是「`pullAll` / `pushAll` 的每表循环体各包一层 try/catch，失败即 `continue`」。S3 落地前复核发现**照这个字面实现会引入比原问题更严重的静默丢数**：
+
+- `pushAll` 的推送游标是**全局单值**，在整个表循环**之后**才 `cursors.push = t0`（`engine.ts:155,175`）。
+- 若吞掉某张表的推送异常并继续，游标仍会推进 ⇒ 那张表的脏行从此**永久低于游标、再也不会被推送**（除非该行日后又被改写）。
+- 而现状的 fail-fast 恰恰是安全的：整轮失败 = 游标不动 = 下一轮（3 秒防抖 / 5 分钟 / 每次 focus）自动重试。
+
+要在推送侧做到真正的单表隔离，必须把 `cursors.push` 改成 per-table 并迁移已存在的老游标（旧值是 `string`）—— 那是动所有 7 张表共用的游标结构，风险与收益不成比例。拉取侧虽可安全隔离（游标本就 per-table），但**用户已执行 0002**，永久性失败条件消失，剩下的只有网络/RLS 之类的瞬时失败，而瞬时失败每轮自愈。
+
+⇒ **保持 fail-fast**。失败不是静默的：`useSyncStore.status = 'error'` + `error` 文案会在 `SyncIndicator`（顶栏常亮红）与设置页云同步区同时显示，文案本身已含表名（`拉取 focus_sessions 失败：…`）。
+
+若将来再加表，把「先在 Supabase 执行对应 migration，再部署前端」作为顺序约定；这条已写进 §十二 S3 与 README。
 
 ### 4.3 写入路径与 undo 语义
 
@@ -741,7 +750,7 @@ effectiveMsByGoalDate(checkIns, sessions, goalId, date):
 | 休息中关页面再重开 | 休息总闸：静默回 `idle`，不落库、不弹对话、不动节律 | §5.5 第 0 行 |
 | 到点 timeout 与用户点「停止」同时发生 | §5.3b 终止序列：先 `clearTimeout` + `settledIds` 早退 ⇒ 一次会话恒定**一格** undo | §5.3b |
 | 窗口被拖窄到 `<768px` | 计时照常跑（内核是模块单例），只是入口不渲染；拉宽回来无缝接上 | §5.1.5 |
-| 用户忘了在 Supabase 执行 0002 | 单表失败不中断整轮：其余六张表照常推拉，`status` 报「focus_sessions 同步失败」 | §4.2 |
+| 用户忘了在 Supabase 执行 0002 | fail-fast：整轮同步失败并在顶栏与设置页显示「拉取 focus_sessions 失败」，下一轮自动重试；游标不动故无丢数。**不做单表隔离**（推送游标是全局单值，吞掉异常反而会让该表永久漏推），裁决与证据见 §4.2 | §4.2 |
 | 两台设备各开一个番茄 | 各自结算成独立行，都计入统计。不设「全局唯一 running」不变量 | §4.4 |
 | 跨天会话（23:50 开始） | 按开始日整段归属；结果卡明示「计入 X 月 X 日」+ 一键改归 | §三 |
 | 忘记停 | 到点自动结算（主手段）；页面被冻结时按计划终点结算；4h 硬截断 | §5.3/5.5 |
@@ -830,11 +839,13 @@ effectiveMsByGoalDate(checkIns, sessions, goalId, date):
 
 - [ ] 视觉门槛：胶囊（空闲/专注中/暂停中）× 面板（含任务选择器展开、结果卡）× **深浅两主题**
 - [ ] 挂钟对照：启动 → `waitForTimeout(65_000)` → 读 `window.__pomodoro` 剩余时间，与真实经过时间误差 < 2s
-- [ ] 结算落库：`window.__pomodoro.start({ plannedMs: 3000 })` 跑完 → 读 IndexedDB 确认一条 `focusSessions` 行，字段与口径正确
+- [ ] 结算落库：`window.__pomodoro.start({ plannedMs: 62_000 })` 跑完 → 读 IndexedDB 确认一条 `focusSessions` 行，字段与口径正确。
+      ⚠️ **`plannedMs` 必须 > 60 秒**：初稿写的 3000ms 结构上永远落不了库（净时长 < 1 分钟 ⇒ `settleSession` 返回 `null`）。
+      要跑短用例请改用「注入一个 `startAt` 在数分钟前的运行态 + `forceSettle()`」（S3 已用该手法验过整条落库/undo 链路）
 - [ ] undo：结算后 `Ctrl+Z` 完整移除该行；栈只吃掉**一格**（对照 `window.__store.getState().undoStack.length`）
 - [ ] **终止竞态**：`start({plannedMs: 1500})` 后立刻点「停止」→ 只落一行、undo 栈只 +1、`outcome = 'stopped'`（不被随后的 timeout 覆盖成 `completed`）
 - [ ] **双标签只写一条**：开两个标签跑同一段 → 落库恰好一行、undo 栈只 +1（这条从人工清单提到自动化）
-- [ ] **单表失败不中断整轮**：stub 掉 `focus_sessions` 的远端响应为错误 → 其余六张表仍完成推拉，`status` 文案指名该表
+- [ ] **远端表缺失时报错清楚**：stub 掉 `focus_sessions` 的远端响应为错误 → `status = 'error'` 且 `error` 文案指名该表（S3 裁决为 fail-fast，不做单表隔离，见 §4.2）
 - [ ] 恢复：运行中 `page.reload()` → 无缝续跑（gap 小）；手动改 localStorage 的 `lastHeartbeatAt` 制造 `gap > 90s` → 出现结算对话
 - [ ] 打卡页 ▶ 入口启动 → 归属正确带 `taskId`
 - [ ] 移动端 viewport（375×812）→ **番茄入口全部不渲染**
@@ -858,7 +869,8 @@ effectiveMsByGoalDate(checkIns, sessions, goalId, date):
 ### S3 — 数据层 + 计时内核（含单测，UI 最小化）
 
 - [ ] §四 全部 **21** 项逐项打勾，**特别核对 ⚠️ 四处无编译护栏的**（`TABLE_NAMES` / `hydrate` 的 `set()` / `TABLE_LABEL` / **`replaceAllData` 的 `set()`**）
-- [ ] **同步引擎：单表失败不中断整轮**（§4.2）——每表循环体各包 try/catch，失败表不推进游标，整轮末尾汇总报错。验收：未执行 0002 时六张老表仍正常推拉
+- [x] ~~同步引擎：单表失败不中断整轮~~ → **裁决为不改**（§4.2）：推送游标是全局单值，吞掉单表异常会让该表永久漏推，比原问题更严重；0002 已执行 ⇒ 永久性失败条件消失。`engine.ts` 只加 `REMOTE_TABLE` 一个键
+- [ ] **部署顺序约定**：新增表时先在 Supabase 执行 migration，再部署前端（否则整轮同步 fail-fast 报错直到执行）
 - [ ] `0002_focus_sessions.sql` 落地 + `0001_init.sql` 头部加「不得单独重跑」注释；提醒用户在 SQL Editor 执行一次
 - [ ] `src/lib/derive/focus.ts` + `focus.test.ts`（§11.1 用例）
 - [ ] `src/pomodoro/`：`constants.ts`、运行状态 store（瞬态 zustand + localStorage 读写）、节律计数独立 key（§5.2b）、`settleSession`/`planRecovery` 接线、单根 timeout 闹钟（回调里跳宏任务再下单）、Web Locks 选主（**模块顶层，非 effect**）、心跳（暂停期间照写）、`settledIds` 终止序列（§5.3b）、DEV 测试面（§5.8）
@@ -947,7 +959,7 @@ effectiveMsByGoalDate(checkIns, sessions, goalId, date):
 
 | # | 问题 | 落点 |
 |---|---|---|
-| 1 | 不执行 0002 会让**六张老表也停止同步**（`pullAll` 先于 `pushAll` 且抛错中断整轮），初稿说的「只是该表不同步」错误 | §4.2 + S3 加「单表失败不中断整轮」 |
+| 1 | 不执行 0002 会让**六张老表也停止同步**（`pullAll` 先于 `pushAll` 且抛错中断整轮），初稿说的「只是该表不同步」错误 | §4.2（诊断成立；处方在 S3 复核后改为「保持 fail-fast」，理由见该节） |
 | 2 | 漏了第 4 处无编译护栏的改动点 `replaceAllData` 的 `set()`，后果含**已软删数据复活并推上云** | §四 第 21 项 |
 | 3 | `deleteTasks`（多选删除）是独立批量路径，级联漏改会留孤儿会话 | §四 第 19 项 |
 | 4 | `clockAnchor` 持久化后 `performance.now()` 跨文档归零 ⇒ **刷新一次就 `needsReview`**，徽标沦为噪音 | §5.2 |
@@ -964,6 +976,7 @@ effectiveMsByGoalDate(checkIns, sessions, goalId, date):
 1. **`taskId` 缺省桶与任务级桶相加**（A-F4）：改公式会毁掉「空 sessions 与改造前完全一致」这条回归护栏，而复核确认现行 UI 无任何路径写出目标级打卡 ⇒ 只影响历史数据。记入 §十三 局限 8。证据见 §6.4。
 2. **推送游标全局单值的「静默漏推」**（初稿列为风险）：`BaseRepo` 无条件重盖 `updatedAt`、`persist.ts` 是唯一应用层通道 ⇒ 结构上不可能漏推。降级为文档性约定，§4.4。
 3. **多标签通知条件不精确**：修它要引入跨标签可见性汇总，单人单窗口是常态 ⇒ v1 接受，记入 §十三 局限 9。
+4. **「单表失败不中断整轮」**（A-F1 的处方，S3 落地前复核后否决）：`pushAll` 的推送游标是全局单值且在表循环之后才推进，吞掉单表异常会让该表脏行永久低于游标、再也不被推送 —— 比「整轮 fail-fast + 下轮重试」严重得多。真正的隔离要把游标改成 per-table 并迁移老游标（动 7 张表共用结构），风险与收益不成比例。0002 已执行 ⇒ 永久性失败条件消失，剩下的瞬时失败每轮自愈。详见 §4.2。
 
 ### 复核确认「初稿是对的」，不必再纠结的点
 

@@ -12,8 +12,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { CheckIn, Goal, Milestone, Task } from '../types/domain';
-import { baselineDrift, minutesByGoalByMonth } from '../lib/derive';
+import type { CheckIn, FocusSession, Goal, Milestone, Task } from '../types/domain';
+import { baselineDrift, effectiveMsByGoalByYear } from '../lib/derive';
 import { goalColor, goalColorAlpha } from '../lib/colors';
 import { toDay } from '../lib/date';
 
@@ -23,6 +23,8 @@ interface Props {
   tasks: Task[];
   milestones: Milestone[];
   checkIns: CheckIn[];
+  /** 专注会话；缺省为空则投入时长退化为纯手填口径 */
+  sessions?: FocusSession[];
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
@@ -93,41 +95,47 @@ export const AnnualOverview = memo(function AnnualOverview({
   tasks,
   milestones,
   checkIns,
+  sessions = [],
 }: Props) {
+  // 投入毫秒：月 × 目标，堆叠面积图与「投入总时长」卡共用这一份（全程 ms，只在渲染处取整）
+  const msByMonth = useMemo(
+    () => effectiveMsByGoalByYear(checkIns, sessions, year),
+    [checkIns, sessions, year],
+  );
+
   // 堆叠面积图数据：月 × 目标小时数（保留 1 位小数）
   const hoursData = useMemo(() => {
-    const byMonth = minutesByGoalByMonth(checkIns, year);
     return Array.from({ length: 12 }, (_, i) => {
       const m = i + 1;
       const row: Record<string, number | string> = { month: `${m}月` };
-      const byGoal = byMonth.get(m);
+      const byGoal = msByMonth.get(m);
       for (const g of goals) {
-        row[g.id] = byGoal ? Math.round(((byGoal.get(g.id) ?? 0) / 60) * 10) / 10 : 0;
+        row[g.id] = byGoal ? Math.round(((byGoal.get(g.id) ?? 0) / 3600000) * 10) / 10 : 0;
       }
       return row;
     });
-  }, [checkIns, year, goals]);
+  }, [msByMonth, goals]);
   const hasHours = useMemo(
     () => hoursData.some((row) => goals.some((g) => (row[g.id] as number) > 0)),
     [hoursData, goals],
   );
 
-  // 全年投入总时长：按目标汇总分钟（直接从 checkIns 累加，避免累加已四舍五入的月值）
+  // 全年投入总时长：按目标汇总毫秒后才取整，绝不累加已四舍五入的月值
   const totals = useMemo(() => {
-    const prefix = `${year}-`;
     const byGoal = new Map<string, number>();
-    for (const c of checkIns) {
-      if (c.deletedAt || !c.minutes || !c.date.startsWith(prefix)) continue;
-      byGoal.set(c.goalId, (byGoal.get(c.goalId) ?? 0) + c.minutes);
+    for (const byGoalOfMonth of msByMonth.values()) {
+      for (const [goalId, ms] of byGoalOfMonth) {
+        byGoal.set(goalId, (byGoal.get(goalId) ?? 0) + ms);
+      }
     }
     const rows = goals
-      .map((g) => ({ goal: g, hours: Math.round(((byGoal.get(g.id) ?? 0) / 60) * 10) / 10 }))
+      .map((g) => ({ goal: g, hours: Math.round(((byGoal.get(g.id) ?? 0) / 3600000) * 10) / 10 }))
       .filter((r) => r.hours > 0)
       .sort((a, b) => b.hours - a.hours);
     const grand = Math.round((rows.reduce((s, r) => s + r.hours, 0)) * 10) / 10;
     const max = Math.max(1, ...rows.map((r) => r.hours));
     return { rows, grand, max };
-  }, [checkIns, year, goals]);
+  }, [msByMonth, goals]);
 
   // 各目标任务完成数
   const doneCounts = useMemo(

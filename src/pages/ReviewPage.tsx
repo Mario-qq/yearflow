@@ -50,6 +50,7 @@ export default function ReviewPage() {
   const milestones = useStore((s) => s.milestones);
   const checkIns = useStore((s) => s.checkIns);
   const exemptions = useStore((s) => s.exemptions);
+  const focusSessions = useStore((s) => s.focusSessions);
   const weekStartsOn = useStore((s) => s.settings.weekStartsOn);
 
   const today = todayStr();
@@ -68,6 +69,7 @@ export default function ReviewPage() {
   const checkInList = useMemo(() => Object.values(checkIns), [checkIns]);
   const exemptionList = useMemo(() => Object.values(exemptions), [exemptions]);
   const milestoneList = useMemo(() => Object.values(milestones), [milestones]);
+  const sessionList = useMemo(() => Object.values(focusSessions), [focusSessions]);
 
   // 各目标本月统计
   const stats = useMemo(
@@ -81,9 +83,10 @@ export default function ReviewPage() {
           exemptions: exemptionList,
           month,
           today,
+          sessions: sessionList,
         }),
       })),
-    [goalList, taskList, checkInList, exemptionList, month, today],
+    [goalList, taskList, checkInList, exemptionList, sessionList, month, today],
   );
   const totalMinutes = stats.reduce((sum, s) => sum + s.stats.minutes, 0);
   const totalMissed = stats.reduce((sum, s) => sum + s.stats.missedDays, 0);
@@ -173,6 +176,7 @@ export default function ReviewPage() {
           tasks={taskList}
           milestones={milestoneList}
           checkIns={checkInList}
+          sessions={sessionList}
         />
       ) : (
         <>

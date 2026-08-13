@@ -3,6 +3,7 @@ import type { AppSettings, GanttViewState, SyncableEntity } from '../types/domai
 import {
   checkInRepo,
   exemptionRepo,
+  focusRepo,
   goalRepo,
   milestoneRepo,
   reviewRepo,
@@ -30,7 +31,15 @@ export type RemoteOps = Partial<
 const HISTORY_LIMIT = 100; // SPEC 要求 ≥50 步
 
 function emptyMaps(): EntityMaps {
-  return { goals: {}, tasks: {}, milestones: {}, checkIns: {}, exemptions: {}, reviews: {} };
+  return {
+    goals: {},
+    tasks: {},
+    milestones: {},
+    checkIns: {},
+    exemptions: {},
+    reviews: {},
+    focusSessions: {},
+  };
 }
 
 function toMap<T extends SyncableEntity>(list: T[]): Record<string, T> {
@@ -82,15 +91,19 @@ export const useStore = create<StoreState>()((set, get) => ({
   redoStack: [],
 
   hydrate: async () => {
-    const [goals, tasks, milestones, checkIns, exemptions, reviews, settings] = await Promise.all([
-      goalRepo.getAllActive(),
-      taskRepo.getAllActive(),
-      milestoneRepo.getAllActive(),
-      checkInRepo.getAllActive(),
-      exemptionRepo.getAllActive(),
-      reviewRepo.getAllActive(),
-      settingsRepo.get(),
-    ]);
+    // ⚠️ 加表时这里有三处要一起改：import、Promise.all 数组项、下面 set() 的键。
+    // set() 缺键不会编译报错（Partial 语义），后果是「表存在但内存永远为空」。
+    const [goals, tasks, milestones, checkIns, exemptions, reviews, focusSessions, settings] =
+      await Promise.all([
+        goalRepo.getAllActive(),
+        taskRepo.getAllActive(),
+        milestoneRepo.getAllActive(),
+        checkInRepo.getAllActive(),
+        exemptionRepo.getAllActive(),
+        reviewRepo.getAllActive(),
+        focusRepo.getAllActive(),
+        settingsRepo.get(),
+      ]);
     set({
       goals: toMap(goals),
       tasks: toMap(tasks),
@@ -98,6 +111,7 @@ export const useStore = create<StoreState>()((set, get) => ({
       checkIns: toMap(checkIns),
       exemptions: toMap(exemptions),
       reviews: toMap(reviews),
+      focusSessions: toMap(focusSessions),
       settings,
       hydrated: true,
     });
@@ -166,16 +180,13 @@ export const useStore = create<StoreState>()((set, get) => ({
       }),
     );
     emitLocalWrite();
-    set({
-      goals: toMap(bundle.goals),
-      tasks: toMap(bundle.tasks),
-      milestones: toMap(bundle.milestones),
-      checkIns: toMap(bundle.checkIns),
-      exemptions: toMap(bundle.exemptions),
-      reviews: toMap(bundle.reviews),
-      undoStack: [],
-      redoStack: [],
-    });
+    // 内存 map 与上面的写盘循环一样由 TABLE_NAMES 驱动：曾经这里是硬编码的表名列表，
+    // 漏一张表不会编译报错，而 Dexie 已被墓碑化 ⇒ 内存与库当场分叉，
+    // 此后任何整行 bulkPut 会把不带 deletedAt 的旧行写回，已删数据静默复活并推上云端。
+    const maps = Object.fromEntries(
+      TABLE_NAMES.map((t) => [t, toMap(bundle[t] as SyncableEntity[])]),
+    ) as unknown as EntityMaps;
+    set({ ...maps, undoStack: [], redoStack: [] });
   },
 
   exportBundle: () => {

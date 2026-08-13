@@ -115,6 +115,31 @@ interface ExemptionPeriod {
   deletedAt?: string;
 }
 
+/**
+ * 专注会话 = 一次番茄钟专注（第 7 张表，番茄钟模块新增）。
+ * 「真实投入时间」的唯一事实来源；CheckIn 保持「我今天做没做」的语义不变。
+ * 只有已结束的会话入库；运行中状态在 localStorage，不入库、不同步、不进 undo。
+ * 完整口径见 docs/POMODORO_SPEC.md（番茄钟范围内以该文档为准）。
+ */
+interface FocusSession {
+  id: string;
+  goalId?: string;       // 缺省 = 未归类
+  taskId?: string;
+  date: string;          // YYYY-MM-DD，从 startAt 派生一次后冻结（不随时区漂移）
+  startAt: string;       // ISO
+  endAt: string;         // ISO
+  focusMs: number;       // 净专注毫秒（已扣暂停、已 clamp 到 plannedMs）
+  plannedMs: number;
+  pauses?: { at: string; until?: string }[];
+  outcome: 'completed' | 'stopped' | 'discarded'; // discarded 不计入任何统计
+  source: 'timer' | 'manual';
+  needsReview?: boolean;
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string;
+}
+
 /** 月度复盘 */
 interface MonthlyReview {
   id: string;
@@ -303,7 +328,8 @@ interface AppSettings {
 
 架构原则：**本地优先（local-first）**。UI 永远只读写本地 IndexedDB，保证秒开与离线可用；同步引擎后台负责本地 ↔ Supabase 双向同步。断网一切照常，联网自动补同步。
 
-- **repository 层**：`GoalRepo / TaskRepo / CheckInRepo / MilestoneRepo / ExemptionRepo / ReviewRepo`，UI 不直接碰 Dexie 或 Supabase。
+- **repository 层**：`GoalRepo / TaskRepo / CheckInRepo / MilestoneRepo / ExemptionRepo / ReviewRepo / FocusRepo`，UI 不直接碰 Dexie 或 Supabase。
+- **表清单（7 张实体表）**：`goals / tasks / milestones / checkIns / exemptions / reviews / focusSessions`（远端 snake_case，`focus_sessions` 由 `0002_focus_sessions.sql` 建）。加表时 `TABLE_NAMES`、`hydrate` 的 `set()`、`TABLE_LABEL` 三处漏改不会编译报错，逐处清单见 `docs/POMODORO_SPEC.md` §四。
 - **同步元数据**：每条记录 `updatedAt`（写入即刷新）+ `deletedAt` 软删除（同步后 30 天真删）。
 - **策略**：整行 last-write-wins（按 updatedAt），维护 `lastSyncedAt` 游标做增量推拉。单人两设备足够。
 - **触发**：启动时、窗口重获焦点、本地写入后防抖 3 秒、每 5 分钟；顶栏同步状态点（✓/⟳/离线/⚠），点击手动同步与查看详情。

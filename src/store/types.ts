@@ -1,13 +1,14 @@
 import type {
   CheckIn,
   ExemptionPeriod,
+  FocusSession,
   Goal,
   Milestone,
   MonthlyReview,
   Task,
 } from '../types/domain';
 
-/** 六张实体表（settings 单独处理，不进 undo 栈） */
+/** 七张实体表（settings 单独处理，不进 undo 栈） */
 export interface EntityOf {
   goals: Goal;
   tasks: Task;
@@ -15,10 +16,15 @@ export interface EntityOf {
   checkIns: CheckIn;
   exemptions: ExemptionPeriod;
   reviews: MonthlyReview;
+  focusSessions: FocusSession;
 }
 
 export type TableName = keyof EntityOf;
 
+/**
+ * ⚠️ 这一个数组驱动同步的推拉与墓碑三循环、replaceAllData、exportBundle、applyRemote、
+ * 设置页计数。加新表时漏加这里不会编译报错，后果是「新表永不同步、不导出、不进墓碑清库」。
+ */
 export const TABLE_NAMES: TableName[] = [
   'goals',
   'tasks',
@@ -26,6 +32,7 @@ export const TABLE_NAMES: TableName[] = [
   'checkIns',
   'exemptions',
   'reviews',
+  'focusSessions',
 ];
 
 /**
@@ -52,6 +59,7 @@ export interface EntityMaps {
   checkIns: Record<string, CheckIn>;
   exemptions: Record<string, ExemptionPeriod>;
   reviews: Record<string, MonthlyReview>;
+  focusSessions: Record<string, FocusSession>;
 }
 
 /** 全库数据包（导出/导入/种子载入用） */
@@ -62,6 +70,7 @@ export interface DataBundle {
   checkIns: CheckIn[];
   exemptions: ExemptionPeriod[];
   reviews: MonthlyReview[];
+  focusSessions: FocusSession[];
 }
 
 /** 把 Change 反转（undo 用）：新建↔删除、更新↔回滚 */

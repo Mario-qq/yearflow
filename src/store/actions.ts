@@ -8,6 +8,7 @@ import type {
   CheckIn,
   CheckInStatus,
   ExemptionPeriod,
+  FocusSession,
   Goal,
   Milestone,
   MonthlyReview,
@@ -588,9 +589,112 @@ export function saveBaselineAll(): number {
   return changes.length;
 }
 
+// ── 番茄钟专注会话 ───────────────────────────────────────────────────────
+//
+// 铁律：运行中状态（心跳、暂停、剩余时间）一律不进 store，只有「一次已结束的会话」
+// 走一次 execute。否则一天几十次写入会把甘特图的编辑全部挤出 undo 栈（上限 100），
+// 且 execute 无条件清空 redoStack ⇒ 番茄运行期间 Ctrl+Shift+Z 形同失效。
+
+const focusMinutes = (ms: number) => Math.round(ms / 60000);
+
+/** 会话归属的可读名（undo toast 用）：任务名优先，其次目标名，都没有则「未归类」 */
+function focusOwnerLabel(session: Pick<FocusSession, 'goalId' | 'taskId'>): string {
+  const s = useStore.getState();
+  const task = session.taskId ? s.tasks[session.taskId] : undefined;
+  if (task) return `「${task.name}」`;
+  const goal = session.goalId ? s.goals[session.goalId] : undefined;
+  return goal ? `「${goal.name}」` : '（未归类）';
+}
+
+/** 结算落库：一条命令 = 一格 undo。不足 1 分钟的会话在 settleSession 里已早退，不到这里 */
+export function commitFocusSession(session: FocusSession): void {
+  const s = useStore.getState();
+  s.execute(`记录专注 ${focusMinutes(session.focusMs)} 分钟${focusOwnerLabel(session)}`, [
+    { table: 'focusSessions', type: 'put', after: session },
+  ]);
+}
+
+/** 手动补录一段专注（source: 'manual'，plannedMs = focusMs） */
+export function addManualFocusSession(args: {
+  goalId?: string;
+  taskId?: string;
+  date: string;
+  startAt: string;
+  focusMs: number;
+  note?: string;
+}): void {
+  const s = useStore.getState();
+  const stamp = nowIso();
+  const session: FocusSession = {
+    id: nanoid(),
+    goalId: args.goalId,
+    taskId: args.taskId,
+    date: args.date,
+    startAt: args.startAt,
+    endAt: new Date(new Date(args.startAt).getTime() + args.focusMs).toISOString(),
+    focusMs: args.focusMs,
+    plannedMs: args.focusMs,
+    outcome: 'completed',
+    source: 'manual',
+    note: args.note,
+    createdAt: stamp,
+    updatedAt: stamp,
+  };
+  s.execute(`补录专注 ${focusMinutes(args.focusMs)} 分钟${focusOwnerLabel(session)}`, [
+    { table: 'focusSessions', type: 'put', after: session },
+  ]);
+}
+
+/**
+ * 修改专注记录。改时长即置 source: 'manual' 且同时把 plannedMs 抬到 focusMs ——
+ * 否则「把 25 分钟的会话改成 90 分钟」会打破 focusMs ≤ plannedMs 恒等式。
+ * 软删行禁止走这里（陈旧整行会在 undo 删目标时把已删数据写回复活）。
+ */
+export function updateFocusSession(id: string, patch: Partial<FocusSession>): void {
+  const s = useStore.getState();
+  const before = s.focusSessions[id];
+  if (!before || before.deletedAt) return;
+  const changedDuration = patch.focusMs !== undefined && patch.focusMs !== before.focusMs;
+  const after: FocusSession = {
+    ...before,
+    ...patch,
+    ...(changedDuration
+      ? { source: 'manual' as const, plannedMs: Math.max(patch.focusMs ?? 0, before.plannedMs) }
+      : {}),
+    updatedAt: nowIso(),
+  };
+  s.execute('修改专注记录', [{ table: 'focusSessions', type: 'put', before, after }]);
+}
+
+export function deleteFocusSession(id: string): void {
+  const s = useStore.getState();
+  const session = s.focusSessions[id];
+  if (!session || session.deletedAt) return;
+  s.execute('删除专注记录', [{ table: 'focusSessions', type: 'delete', before: session }]);
+}
+
+/** 改归属（面板「N 段未归类」清理入口）：不改时长，故不置 source: 'manual' */
+export function reassignFocusSession(
+  id: string,
+  sel: { goalId?: string; taskId?: string },
+): void {
+  const s = useStore.getState();
+  const before = s.focusSessions[id];
+  if (!before || before.deletedAt) return;
+  const after: FocusSession = {
+    ...before,
+    goalId: sel.goalId,
+    taskId: sel.taskId,
+    updatedAt: nowIso(),
+  };
+  s.execute(`改归属为${focusOwnerLabel(after)}`, [
+    { table: 'focusSessions', type: 'put', before, after },
+  ]);
+}
+
 // ── 删除（软删除，级联进同一条命令） ─────────────────────────────────────
 
-/** 删除任务：级联软删指向该任务的打卡记录 */
+/** 删除任务：级联软删指向该任务的打卡记录与专注会话 */
 export function deleteTask(id: string): void {
   const s = useStore.getState();
   const task = s.tasks[id];
@@ -599,12 +703,22 @@ export function deleteTask(id: string): void {
   for (const c of Object.values(s.checkIns)) {
     if (!c.deletedAt && c.taskId === id) changes.push({ table: 'checkIns', type: 'delete', before: c });
   }
+  for (const f of Object.values(s.focusSessions)) {
+    if (!f.deletedAt && f.taskId === id)
+      changes.push({ table: 'focusSessions', type: 'delete', before: f });
+  }
   s.execute(`删除任务「${task.name}」`, changes);
 }
 
-/** 批量删除任务（多选），一条命令 */
+/**
+ * 批量删除任务（多选），一条命令。
+ * ⚠️ 这是与 deleteTask 无复用关系的独立路径，级联漏改不会报错，
+ * 后果是会话成孤儿：仍被投入时长计进该目标，而用户在 UI 上再也找不到它们
+ * （「未归类」入口只收 goalId 缺省者）。
+ */
 export function deleteTasks(ids: string[]): void {
   const s = useStore.getState();
+  const idSet = new Set(ids);
   const changes: Change[] = [];
   for (const id of ids) {
     const task = s.tasks[id];
@@ -614,10 +728,14 @@ export function deleteTasks(ids: string[]): void {
       if (!c.deletedAt && c.taskId === id) changes.push({ table: 'checkIns', type: 'delete', before: c });
     }
   }
+  for (const f of Object.values(s.focusSessions)) {
+    if (!f.deletedAt && f.taskId && idSet.has(f.taskId))
+      changes.push({ table: 'focusSessions', type: 'delete', before: f });
+  }
   s.execute(`删除 ${ids.length} 个任务`, changes);
 }
 
-/** 删除目标：级联软删其任务、里程碑与全部打卡记录（调用方先弹确认并说清后果） */
+/** 删除目标：级联软删其任务、里程碑、全部打卡记录与专注会话（调用方先弹确认并说清后果） */
 export function deleteGoal(id: string): void {
   const s = useStore.getState();
   const goal = s.goals[id];
@@ -631,6 +749,11 @@ export function deleteGoal(id: string): void {
   }
   for (const c of Object.values(s.checkIns)) {
     if (!c.deletedAt && c.goalId === id) changes.push({ table: 'checkIns', type: 'delete', before: c });
+  }
+  // 按 goalId 级联，覆盖 taskId 缺省的目标级会话
+  for (const f of Object.values(s.focusSessions)) {
+    if (!f.deletedAt && f.goalId === id)
+      changes.push({ table: 'focusSessions', type: 'delete', before: f });
   }
   s.execute(`删除目标「${goal.name}」`, changes);
 }

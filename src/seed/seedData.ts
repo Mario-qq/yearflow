@@ -111,7 +111,8 @@ export function buildSeedBundle(today: string): DataBundle {
     { id: 'seed-ex-holiday', startDate: '2026-10-01', endDate: '2026-10-07', reason: '国庆假期', updatedAt: now },
   ];
 
-  return { goals, tasks, milestones, checkIns, exemptions, reviews: [] };
+  // focusSessions 恒空：示例数据不伪造专注记录（真实投入时长只能由计时器产生）
+  return { goals, tasks, milestones, checkIns, exemptions, reviews: [], focusSessions: [] };
 }
 
 /** 判断当前库是否是（或包含）示例数据（"清空示例数据"入口用） */

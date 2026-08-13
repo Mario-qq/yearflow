@@ -223,10 +223,14 @@ function buildItems(menu: ContextMenuState): Entry[] {
           const taskN = Object.values(store.tasks).filter((t) => !t.deletedAt && t.goalId === goal.id).length;
           const msN = Object.values(store.milestones).filter((m) => !m.deletedAt && m.goalId === goal.id).length;
           const ckN = Object.values(store.checkIns).filter((c) => !c.deletedAt && c.goalId === goal.id).length;
+          const fsN = Object.values(store.focusSessions).filter(
+            (f) => !f.deletedAt && f.goalId === goal.id,
+          ).length;
           const parts = [
             taskN > 0 && `${taskN} 个任务`,
             msN > 0 && `${msN} 个里程碑`,
             ckN > 0 && `${ckN} 条打卡记录`,
+            fsN > 0 && `${fsN} 条专注会话`,
           ].filter(Boolean);
           const detail = parts.length > 0 ? `其 ${parts.join('、')} 将一并删除。` : '';
           if (!confirm(`删除目标「${goal.name}」？${detail}`)) return;

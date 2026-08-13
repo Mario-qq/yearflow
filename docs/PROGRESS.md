@@ -274,7 +274,7 @@
 - **`buildRowLayout` 加可选参数而非改签名**：缺省等价于改造前，旧测试即回归护栏
 - 截图脚本两处坑：`updateSettings/execute` 落库防抖 500ms，写完立刻 `page.goto` 会丢改动（主题不生效、轨道消失），须 `waitForTimeout(700)`；缩放档位是 `role="radio"` 不是 button
 
-## 番茄钟模块 —— 专注计时与真实投入统计 【规格已定稿，S1+S2 完成 2026-08-13，待 S3 实施】
+## 番茄钟模块 —— 专注计时与真实投入统计 【S1+S2+S3 完成 2026-08-13，待 S4 实施 UI】
 
 起因：现有 `CheckIn.minutes` 是手填估算（chips 10/15/30/60），只能表达「这天这个任务大概花了多久」，无法回答「实际专注了多少、什么时段、被打断几次」。加一个番茄钟：日常工作时集中注意力，并把年度总览的「投入时长」从估算升级为实测。
 
@@ -284,18 +284,42 @@
 ### 会话规划（5 个会话，每个独立可提交）
 - **S1 抢救落盘 + 规格书初稿** 【已完成】
 - **S2 对抗评审 + 规格定稿** 【已完成】
-- **S3 数据层 + 计时内核**：SPEC §四 20 项 + `0002` SQL + `derive/focus.ts` + `src/pomodoro/` 内核 + 单测
+- **S3 数据层 + 计时内核** 【已完成】：§四 21 项 + `0002` SQL + `derive/focus.ts`（47 条单测）+ `src/pomodoro/` 内核
 - **S4 桌面 UI 完全体**：顶栏胶囊 + 面板 + 结果卡 + 声音/通知/title + `P` 键 + 设置区 + 打卡页入口
 - **S5 统计可视化 + 打磨验收**：甘特中间态 + 补卡建议 + 会话历史/补录 + 性能实测 + 截图门槛 + 人工验收
 
 纪律（额度保护）：每会话开头读 CLAUDE.md → 本文件 → POMODORO_SPEC.md；除 S2 外不用 agent；到 85% 额度无条件收手并留交接；结尾 `tsc -b` + oxlint + vitest 全绿再 commit。
+
+### S3 产出（2026-08-13）：数据层 + 计时内核落地（UI 留给 S4）
+
+`tsc -b` + oxlint + vitest **178 通过 / 11 文件**（既有 131 条一行未改仍全绿 ⇒ 回归护栏成立）。
+
+**新增文件**：`src/lib/derive/focus.ts`（结算 / 恢复判定 / 投入口径，纯函数）+ `focus.test.ts`（47 条）；`src/pomodoro/constants.ts`（阈值 + 进度环几何 + localStorage 键）、`running.ts`（运行态与节律计数的 localStorage 存取）、`store.ts`（瞬态 zustand，**只存状态迁移时才变的字段**）、`kernel.ts`（闹钟 / 心跳 / Web Locks 选主 / 终止序列 / 恢复 / DEV 测试面）；`supabase/migrations/0002_focus_sessions.sql`。
+
+**§四 21 项全部打勾**，其中四处无编译护栏的处理方式：
+- `TABLE_NAMES` / `hydrate` 的 `set()` / `TABLE_LABEL`：逐处加键并就地留下「漏改不报错 + 后果」的注释。
+- **`replaceAllData` 的 `set()` 改为 `TABLE_NAMES` 驱动**（`Object.fromEntries` + `toMap`），与同函数的写盘循环同源 ⇒ 这一处的风险**结构性消除**，将来加表不可能再漏。
+- `TABLE_LABEL` 类型从 `Record<string,string>` 收紧为 `Record<TableName,string>` ⇒ 从此有编译护栏。
+
+**三条实施期新发现（都已回填规格）**：
+1. **同步引擎「单表失败不中断整轮」被否决**（详见 POMODORO_SPEC §4.2 与 §十五「裁决为不改」第 4 条）：`pushAll` 推送游标是全局单值且在表循环之后才推进，吞掉单表异常会让该表脏行**永久低于游标、再也不被推送**；现状 fail-fast 反而安全（游标不动 ⇒ 下轮重试）。用户已执行 0002 ⇒ 永久性失败条件消失。`engine.ts` 只加 `REMOTE_TABLE` 一个键。
+2. **§11.2 的 `start({plannedMs: 3000})` 用例结构上跑不通**：3 秒 < `MIN_SESSION_MS` ⇒ `settleSession` 必然返回 `null`，永远落不了库。已改为 62 秒，或用「注入 `startAt` 在数分钟前的运行态 + `forceSettle()`」。
+3. **`backup.ts` 的 `pomodoro` 默认值直接引用 `DEFAULT_SETTINGS.pomodoro`**，不手抄第二份：手抄就必须与 `defaults.ts` 逐字段深相等，否则 `backup.test.ts` 那条 `toEqual(DEFAULT_SETTINGS)` 会失败。顺手也给 `SettingsRepo.get()` 加了 `pomodoro` 的深合并（与 `ganttView` 同款），老 settings 行缺字段时自动补齐。
+
+**浏览器实测（本机 dev）**：
+- **Dexie v1 → v2 迁移决定性验证**：用 Dexie 自己按 v1 原始 schema 建库 → 写入 goal/checkIn/settings → 换新 schema 打开 ⇒ `verno` 1→2、老 7 表与数据全部保留、`settings.value` 完好、新表 5 个索引（`goalId/taskId/date/updatedAt/[goalId+date]`）全部可查。
+- **落库 / undo 链路**：注入 5 分钟前的运行态 → `forceSettle()` ⇒ 恰好 1 条 Dexie 行、undo 栈 **+1 格**、label「记录专注 5 分钟（未归类）」、`outcome: 'stopped'`、运行态 key 已清、**节律计数未递增**（stopped 不算）；连调两次 `forceSettle()` 无重复写入；`Ctrl+Z` 后内存移除且 Dexie 留墓碑（供同步传播删除）、redo 栈保留。
+- **`replaceAllData` 七键路径**：载入示例数据后内存与 Dexie 逐表完全一致（103 打卡 / 12 任务 / 5 目标…），无分叉；空 `sessions` 下 `monthlyGoalStats.minutes` 与纯手填累加**逐分钟相等**（225 == 225）。
+- 设置页「数据」区已多出「专注会话 N」，且计数改为直接数 Dexie（容量红线的观测手段不会被将来的窗口化封顶）。
+
+**S4 起注意**：内核已在 `App.tsx` 的 `hydrated` 之后 `initPomodoro()` 一次；`window.__pomodoro = {store, remainingMs, start, forceSettle}`（DEV）。响铃/通知走 `setChimeHandler(fn)` 注入，**排在落库之后**（音频异常绝不阻断数据写入）。v1 没有任何路径会进入休息阶段（自动休息是 P1），休息态代码只为「残留态清理 + 将来升级」存在。
 
 ### S2 产出（2026-08-13）：两名评审员对抗证伪 → 规格定稿
 
 方式：数据正确性视角 + 手感/性能/平台视角各一名 agent 并发，纪律是「每条断言回到真实代码核 `path:line`，禁止『看起来合理所以通过』」。规格从 757 行增至 983 行，**新增 §十五 评审留档**（含被裁决为不改的 3 条与「初稿是对的、不必再纠结」的 12 条，S3 不要重复论证）。
 
 **9 条致命问题（都已回填规格）**：
-1. 忘执行 0002 时 `pullAll` 先抛错 ⇒ **六张老表也停止同步**（不是初稿说的「只有新表不同步」）。⇒ S3 必须同时改同步引擎为「单表失败不中断整轮」，这对既有 6 表也是净收益
+1. 忘执行 0002 时 `pullAll` 先抛错 ⇒ **六张老表也停止同步**（不是初稿说的「只有新表不同步」）。⚠️ **诊断成立但处方在 S3 被否决**（吞掉单表异常会让该表永久漏推，见上「S3 产出」第 1 条）
 2. 第 4 处无编译护栏 `replaceAllData` 的 `set()`（见上）
 3. `deleteTasks` 批量删除是独立路径，级联漏改 ⇒ 孤儿会话仍计入统计且 UI 无法清理
 4. `clockAnchor` 持久化 ⇒ 刷新一次就 `needsReview`，徽标沦为噪音

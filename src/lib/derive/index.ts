@@ -24,6 +24,25 @@ export {
   type MonthGoalStats,
 } from './review';
 export {
+  isCountedSession,
+  netFocusMs,
+  pausedTotalMs,
+  plannedEndOf,
+  isPaused,
+  settleSession,
+  planRecovery,
+  shouldLongBreak,
+  focusMsByTaskDate,
+  todayFocusMs,
+  unassignedSessions,
+  effectiveMsByGoalPrefix,
+  effectiveMsByGoalDate,
+  effectiveMsByGoalByYear,
+  type RecoveryKind,
+  type RecoveryPlan,
+  type SettleOpts,
+} from './focus';
+export {
   buildTracks,
   aggregateTrackProgress,
   memberAtDate,
