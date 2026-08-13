@@ -2,6 +2,13 @@
  * 打卡点阵（月/周档，SPEC 4.4）：bar 正下方对齐日期列中心，只渲染应打卡日。
  * done=实心目标色 / partial=左半实心 / skipped=空心灰圈 / missed=淡红 /
  * 未来应打卡=8% 占位；今天的点外加一圈主色描边。列虚拟化：只画可视日期范围。
+ *
+ * 「有专注·未打卡」中间态（番茄钟规格 §8.6）：给 missed 与占位两种底态**加一圈 --warning 描边**。
+ * 为什么是描边而不是「点内小竖线」：这两种底态恰好是全部五态里仅有的没有 stroke 的，描边是空闲
+ * 维度；而 7px 直径里的 1px 竖线配上浮点 cx 必然落在半像素上，抗锯齿会把它糊成两列灰。
+ * 今日环半径 4.5 > 点半径 3.5，两者本就分离、可以共存。
+ * ⚠️ 该标记在 year / quarter 两档看不见 —— 日宽低于 HEAT_MODE_THRESHOLD 时点阵整体退化为
+ * 热度条，这两档由打卡页补卡建议与 bar tooltip 兜底。
  */
 import { memo } from 'react';
 import type { TaskGantt } from '../lib/derive';
@@ -22,8 +29,15 @@ interface Props {
   visStartDate: string;
   visEndDate: string;
   taskId: string;
+  /** 该任务当年有专注会话的日期（番茄钟 §8.6 中间态）；引用稳定，来自 GanttView 的单个 useMemo */
+  focusDays?: Set<string>;
   /** 点击打卡点（≤今天）→ 就地 popover（SPEC 4.4）；未传则不可交互 */
   onDotClick?: (taskId: string, date: string, e: React.MouseEvent) => void;
+}
+
+/** 中间态描边（底态无 stroke 的两个分支才调用）；无专注时展开为空对象，零属性差异 */
+function focusStroke(focusDays: Set<string> | undefined, date: string) {
+  return focusDays?.has(date) ? { stroke: 'var(--warning)', strokeWidth: 1 } : {};
 }
 
 export const CheckinDots = memo(function CheckinDots({
@@ -37,6 +51,7 @@ export const CheckinDots = memo(function CheckinDots({
   visStartDate,
   visEndDate,
   taskId,
+  focusDays,
   onDotClick,
 }: Props) {
   const solid = goalColor(color);
@@ -67,11 +82,19 @@ export const CheckinDots = memo(function CheckinDots({
         <circle key={d} cx={cx} cy={cy} r={r} fill="none" stroke="var(--border-strong)" strokeWidth={1} />,
       );
     } else if (tg.missedSet.has(d)) {
-      dots.push(<circle key={d} cx={cx} cy={cy} r={r} fill="var(--missed-dot)" />);
+      // 走到这两个分支即「该任务该日没有打卡记录」⇒ 有专注就是中间态，无需再算一次「无打卡」
+      dots.push(<circle key={d} cx={cx} cy={cy} r={r} fill="var(--missed-dot)" {...focusStroke(focusDays, d)} />);
     } else {
       // 今天未打 / 未来应打卡：占位点
       dots.push(
-        <circle key={d} cx={cx} cy={cy} r={r} fill={goalColorAlpha(color, DOT_FUTURE_ALPHA)} />,
+        <circle
+          key={d}
+          cx={cx}
+          cy={cy}
+          r={r}
+          fill={goalColorAlpha(color, DOT_FUTURE_ALPHA)}
+          {...focusStroke(focusDays, d)}
+        />,
       );
     }
     if (isToday) {

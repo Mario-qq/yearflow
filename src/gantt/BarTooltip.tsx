@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom';
 import type { Task } from '../types/domain';
 import { baselineDrift, type StreakResult, type TaskGantt } from '../lib/derive';
 import { diffDays, toDay } from '../lib/date';
+import { humanMs } from '../pomodoro/format';
 import type { TooltipAnchor } from './hooks/useBarTooltip';
 import { TOOLTIP_OFFSET as TIP_OFFSET, TOOLTIP_W as TIP_W } from './constants';
 
@@ -27,9 +28,15 @@ interface Props {
   task: Task;
   tg: TaskGantt;
   streak: StreakResult;
+  /**
+   * 该任务当年的番茄实测毫秒（0 则不显示这一行）。
+   * ⚠️ 走独立 prop 而不是塞进 TaskGantt：TaskGantt 产自 useGanttDerive，扩它等于把
+   * focusSessions 塞进那个 hook 的输入 —— 正是规格 §七「性能约定」明令禁止的。
+   */
+  focusMs?: number;
 }
 
-export const BarTooltip = memo(function BarTooltip({ anchor, task, tg, streak }: Props) {
+export const BarTooltip = memo(function BarTooltip({ anchor, task, tg, streak, focusMs = 0 }: Props) {
   const days = diffDays(task.endDate, task.startDate) + 1;
   const drift = baselineDrift(task);
   const left = Math.min(anchor.x + TIP_OFFSET, window.innerWidth - TIP_W - TIP_OFFSET);
@@ -41,6 +48,7 @@ export const BarTooltip = memo(function BarTooltip({ anchor, task, tg, streak }:
     ['打卡', `应打卡 ${tg.counts.scheduled} · 已打卡 ${tg.counts.checked} · 缺卡 ${tg.counts.missed}`],
     ['连续', `${streak.current} 天（最长 ${streak.longest} 天）`],
   ];
+  if (focusMs > 0) rows.push(['专注', humanMs(focusMs)]);
   if (drift) {
     const n = drift.endDriftDays;
     rows.push(['偏移', n === 0 ? '与基线一致' : `${n > 0 ? '+' : ''}${n} 天`]);

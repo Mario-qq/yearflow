@@ -2,13 +2,15 @@
  * 打卡点就地 popover（SPEC 4.4）：状态按钮 + 分钟 chips + 一行备注 + 删除记录。
  * 点外部即关、Esc 即关（capture 拦截，不触发甘特的清除多选），操作即存。
  */
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { CheckIn, CheckInStatus } from '../types/domain';
 import { useStore } from '../store/useStore';
 import { goalColor } from '../lib/colors';
 import { toDay } from '../lib/date';
 import { patchCheckIn, removeCheckIn, setCheckIn } from '../store/actions';
+import { focusMsByTaskDate } from '../lib/derive';
+import { toMinutes } from '../pomodoro/format';
 import { useGanttUi } from './uiStore';
 
 const MINUTE_CHIPS = [10, 15, 30, 60];
@@ -25,10 +27,17 @@ export function CheckinPopover() {
   const checkIns = useStore((s) => s.checkIns);
   const goals = useStore((s) => s.goals);
   const tasks = useStore((s) => s.tasks);
+  const focusSessions = useStore((s) => s.focusSessions);
   const ref = useRef<HTMLDivElement>(null);
   const noteRef = useRef<HTMLInputElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const [customMin, setCustomMin] = useState('');
+
+  // 当日各任务的番茄实测时长：只在锚点这一天上算，闭合的一次小遍历
+  const focusMsByTask = useMemo(
+    () => focusMsByTaskDate(Object.values(focusSessions), anchor?.date ?? ''),
+    [focusSessions, anchor?.date],
+  );
 
   // 当前记录：同目标同任务同日取最强（任务级口径；未分任务的旧记录仅当锚点也未指定任务时匹配）
   let record: CheckIn | undefined;
@@ -88,6 +97,8 @@ export function CheckinPopover() {
   if (!goal) return null;
   const task = anchor.taskId ? tasks[anchor.taskId] : undefined;
   const d = toDay(anchor.date);
+  const autoMs = focusMsByTask.get(anchor.taskId ?? '') ?? 0;
+  const autoMin = toMinutes(autoMs);
 
   const pick = (status: CheckInStatus) => {
     if (record && record.status === status) removeCheckIn(record.id);
@@ -147,6 +158,40 @@ export function CheckinPopover() {
           {task ? ` · ${task.name}` : ''}
         </span>
       </div>
+
+      {/* 有专注·未打卡的中间态点就是从这里被点开的：把实测时长摆出来，并给一键补卡 */}
+      {autoMin > 0 && (
+        <div className="flex items-center gap-2" style={{ fontSize: 'var(--font-12)' }}>
+          <span className="tnum" style={{ color: 'var(--accent)' }} title="番茄钟实测时长">
+            专注 {autoMin} 分
+          </span>
+          {!record && (
+            <button
+              type="button"
+              onClick={() =>
+                setCheckIn({
+                  goalId: anchor.goalId,
+                  date: anchor.date,
+                  status: 'done',
+                  taskId: anchor.taskId,
+                  minutes: autoMin,
+                })
+              }
+              className="cursor-pointer px-2 py-0.5"
+              style={{
+                fontSize: 'var(--font-11)',
+                border: '1px solid var(--accent)',
+                borderRadius: 999,
+                background: 'var(--accent-soft)',
+                color: 'var(--accent)',
+              }}
+              title={`这天你专注了 ${autoMin} 分钟，一键记为完成并写入时长`}
+            >
+              一键补卡
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-1.5">
         {STATUS_BUTTONS.map(({ status, icon, label, color }) => {

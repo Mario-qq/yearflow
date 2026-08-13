@@ -5,7 +5,7 @@
  */
 import { memo, useMemo, useRef } from 'react';
 import type { Goal, Milestone, Task } from '../types/domain';
-import type { GoalGantt, TrackIndex } from '../lib/derive';
+import type { GanttFocusIndex, GoalGantt, TrackIndex } from '../lib/derive';
 import type { RowLayout } from './rowLayout';
 import { dateToX, type TimeScale } from './timeScale';
 import { diffDays, fmtDay, toDay } from '../lib/date';
@@ -38,6 +38,11 @@ interface Props {
   collapsedGoalIds: string[];
   /** 显示基线对比（bar 下 4px 灰色原计划条） */
   showBaseline: boolean;
+  /**
+   * 番茄索引（点阵中间态）。⚠️ 绝不塞进 useGanttDerive 的输入：那个 hook 的第 1 层是
+   * 「6 个输入引用全等则直接返回上一轮」，多一个会变的 map 就是顶层短路每次失效。
+   */
+  focusIndex: GanttFocusIndex;
   /** 筛选淡出集合（hideOthers 时为空集） */
   dimTaskIds: Set<string>;
   dimGoalIds: Set<string>;
@@ -65,6 +70,7 @@ export const BarsLayer = memo(function BarsLayer({
   today,
   collapsedGoalIds,
   showBaseline,
+  focusIndex,
   dimTaskIds,
   dimGoalIds,
   onBarHover,
@@ -203,6 +209,7 @@ export const BarsLayer = memo(function BarsLayer({
                 visStartDate={visStartDate}
                 visEndDate={visEndDate}
                 taskId={r.id}
+                focusDays={focusIndex.focusDaysByTask.get(r.id)}
                 onDotClick={onDotClick}
               />
             )}

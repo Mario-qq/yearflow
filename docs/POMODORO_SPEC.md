@@ -595,9 +595,9 @@ effectiveMsByGoalDate(checkIns, sessions, goalId, date):
 | `effectiveMsByGoalByYear(checkIns, sessions, year)` | → `Map<month(1-12), Map<goalId, ms>>` | **与既有 `minutesByGoalByMonth(checkIns, year)` 的形状同构**（`review.ts:97-100` 是按年一次算完 12 个月，`AnnualOverview.tsx:99` 一次性消费），一次遍历。⚠️ **goalId 键集合 = checkIns ∪ sessions**：现行实现的键全来自 checkIns，只有番茄没打卡的目标会整个缺键 |
 | `todayFocusMs(sessions, date)` | → `number`（ms） | 面板「今日已专注」 |
 | `unassignedSessions(sessions)` | → `FocusSession[]` | `goalId` 缺省者，供「N 段未归类」清理入口 |
-| `focusIndexForGantt(checkIns, sessions, year)` | → `{ noCheckInDaysByGoal: Map<goalId, Set<date>>, msByTask: Map<taskId, ms> }` | §6.3 甘特中间态 + §8.6 bar tooltip **共用同一次 `useMemo`**（避免两次全表扫）。⚠️ **`range` 参数必须是「当前 `yearInView` 全年」，绝不能是可视日期范围**——甘特图到处是 `visStartDate/visEndDate` 的列虚拟化，依赖里带上它就是每帧全表扫 8000 行会话 + 全量 checkIns，滚动直接掉帧，比初稿担心的 `useGanttDerive` 失效更严重。依赖仅 `[checkIns, focusSessions, year]` |
+| `focusIndexForGantt(sessions, year)` | → `{ focusDaysByTask: Map<taskId, Set<date>>, msByTask: Map<taskId, ms> }` | §6.3 甘特中间态 + §8.6 bar tooltip **共用同一次 `useMemo`**（避免两次全表扫）。⚠️ **`range` 必须是「当前 `yearInView` 全年」，绝不能是可视日期范围**——甘特图到处是 `visStartDate/visEndDate` 的列虚拟化，依赖里带上它就是每帧全表扫 8000 行会话，滚动直接掉帧，比初稿担心的 `useGanttDerive` 失效更严重。依赖仅 `[focusSessions, year]`<br>**S5 实现期改签名**（初稿是 `(checkIns, sessions, year)` → `noCheckInDaysByGoal`）：① 「无打卡」在渲染侧本来就成立——`CheckinDots` 只在 missed / 占位两个分支上加描边，这两个分支的定义就是「该任务该日没有打卡记录」；② goal 粒度会串味——目标 G 下任务 A 已打卡、任务 B 只跑了番茄时，goal 级取交集会把 B 的标记整个抹掉，恰恰是 §6.3 要解决的场景。⇒ 收成 task 粒度、不吃 `checkIns`，顺带消掉了「每次打卡编辑全表重扫」那笔已知代价 |
 
-**已知代价（写在这里免得将来被当 bug 查）**：任何一次打卡编辑都会让 `checkIns` 换引用 ⇒ `focusIndexForGantt` 全表重扫一次（8000 行 + 打卡数，一次性百微秒级，可接受）。
+**已知代价（初稿写在这里的那条已在 S5 消失）**：初稿的 `focusIndexForGantt` 吃 `checkIns`，任何一次打卡编辑都会触发全表重扫；S5 改成 task 粒度、不吃 `checkIns` 后，只有会话写入或换年份才重扫。
 
 **未归类会话不进任何 goal 级统计**（所有聚合入口都带 `goalId`；`ReviewPage.tsx:60-66` 与 `AnnualOverview` 只遍历 `goals` 列表，且 `:63` 还过滤了 `archived`）。⇒ 面板「今日 1 小时 25 分」与复盘的数可能对不上，正是 §十四 说的「两套投入数字是可信度杀手」。**因此 §8.2 的「N 段未归类」入口必须常驻可见，且复盘页要加一行灰字**：`另有 N 段未归类（M 分）未计入`。归档目标的会话同理不进复盘。
 
@@ -897,16 +897,17 @@ effectiveMsByGoalDate(checkIns, sessions, goalId, date):
 - [x] **§5.6 第 3 条实现约束**（S4 实测发现的 leader 门禁缺陷，见该节）
 - [x] 验证：`tsc -b` + oxlint + vitest 178 全绿；§11.2 主要项实测（见 PROGRESS）；主包增量 **+8.9KB gzip**（178.81 → 187.75，门槛 ≤15KB，无需把面板拆 `lazy()`）；`scripts/capture-pomodoro.mjs` 14 张截图（胶囊三态 × 面板/选择器/结果卡 × 深浅）
 
-### S5 — 统计可视化 + 打磨验收
+### S5 — 统计可视化 + 打磨验收 【已完成 2026-08-13】
 
-- [ ] 甘特点阵「有专注·未打卡」中间态（**点描边**，month/week 两档可见）+ bar tooltip 加行（走 `focusIndexForGantt` 的新 prop，**不进 `useGanttDerive`**，`range = 全年`）
-- [ ] 复盘页「另有 N 段未归类（M 分）未计入」灰字
-- [ ] 打卡页「这天你专注了 N 分钟 → 一键补卡」建议（**year/quarter 档看不到点阵中间态，这条是主要补偿手段**）
-- [ ] 打卡 popover 显示当日该任务专注时长
-- [ ] 会话历史 / 编辑 / 手动补录界面
-- [ ] 复盘页专注指标（若额度允许：专注段数 / 平均段长 / 被打断率，只进 review 分包）
-- [ ] 性能实测（§10.1 全部指标）+ `scripts/capture-pomodoro.mjs` 截图门槛
-- [ ] §11.3 人工清单逐项过 + `docs/PROGRESS.md` 定稿 → commit
+- [x] 甘特点阵「有专注·未打卡」中间态（**点描边**，month/week 两档可见）+ bar tooltip 加行（走 `focusIndexForGantt` 的新 prop，**不进 `useGanttDerive`**，`range = 全年`）
+- [x] 复盘页「另有 N 段未归类（M 分）未计入」灰字（顺带把「归档目标的会话同样不计入」也说出来）
+- [x] 打卡页「这天你专注了 N 分钟 → 一键补卡」建议（页头一行汇总 + 行内「补卡」按钮，三处展示位共用 `FocusAutoBadge`）
+- [x] 打卡 popover 显示当日该任务专注时长（并给一键补卡——中间态的点正是从这里点开的）
+- [x] 会话历史 / 编辑 / 手动补录界面（`SessionHistory.tsx`，从面板「专注记录」进）
+- [x] 复盘页专注指标（专注段数 / 平均段长 / 被打断率 / 专注总时长，纯文本卡，不引 recharts）
+- [x] 性能实测（§10.1 全部指标，含「清空会话」对照组）+ `scripts/capture-pomodoro.mjs` 扩到 28 张
+- [x] §11.2 相关项自动化实测；**§11.3 六条人工清单仍需用户本人过**（响铃音色 / 系统通知 / 后台准点 / 合盖 30 分 / 双标签 / 连续 4 段长休息——都要真实硬件与真实等待，无自动路径）
+- [x] `docs/PROGRESS.md` 定稿 → commit
 
 ---
 

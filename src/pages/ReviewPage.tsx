@@ -7,7 +7,8 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { fmtDay, toDay, todayStr } from '../lib/date';
-import { calcStreak, monthlyGoalStats } from '../lib/derive';
+import { calcStreak, focusStats, isCountedSession, monthlyGoalStats } from '../lib/derive';
+import { humanMs } from '../pomodoro/format';
 import { goalColor } from '../lib/colors';
 import { AnnualOverview } from '../review/AnnualOverview';
 import { MiniMonthGantt } from '../review/MiniMonthGantt';
@@ -31,6 +32,33 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
       </h2>
       {children}
     </section>
+  );
+}
+
+/** 单个指标：大数 + 小标签（数字一律 tabular-nums） */
+function Stat({
+  label,
+  value,
+  unit,
+  hint,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  hint?: string;
+}) {
+  return (
+    <div title={hint}>
+      <div className="flex items-baseline gap-1">
+        <span className="tnum font-medium" style={{ fontSize: 'var(--font-20)' }}>
+          {value}
+        </span>
+        {unit && (
+          <span style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}>{unit}</span>
+        )}
+      </div>
+      <div style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}>{label}</div>
+    </div>
   );
 }
 
@@ -109,6 +137,35 @@ export default function ReviewPage() {
     [goalList, taskList, checkInList, exemptionList, today],
   );
 
+  // 当前视图的日期前缀：月度 'YYYY-MM' / 年度 'YYYY-'
+  const prefix = view === 'month' ? month : `${year}-`;
+
+  /**
+   * 未计入的会话（规格 §七）：所有 goal 级聚合都要求 goalId 且只遍历未归档目标，
+   * 所以「未归类」与「归档目标」的会话在复盘里是隐形的 —— 面板「今日已专注」与这里的
+   * 投入数字对不上，正是可信度杀手。用一行灰字把差额说清楚。
+   */
+  const uncounted = useMemo(() => {
+    const alive = new Set(goalList.map((g) => g.id));
+    let unassignedCount = 0;
+    let unassignedMs = 0;
+    let archivedCount = 0;
+    let archivedMs = 0;
+    for (const s of sessionList) {
+      if (!isCountedSession(s) || !s.date.startsWith(prefix)) continue;
+      if (!s.goalId) {
+        unassignedCount += 1;
+        unassignedMs += s.focusMs;
+      } else if (!alive.has(s.goalId)) {
+        archivedCount += 1;
+        archivedMs += s.focusMs;
+      }
+    }
+    return { unassignedCount, unassignedMs, archivedCount, archivedMs };
+  }, [sessionList, goalList, prefix]);
+
+  const focus = useMemo(() => focusStats(sessionList, prefix), [sessionList, prefix]);
+
   const shiftMonth = (delta: number) => {
     setMonth(fmtDay(toDay(`${month}-01`).add(delta, 'month')).slice(0, 7));
   };
@@ -168,6 +225,24 @@ export default function ReviewPage() {
           )}
         </div>
       </div>
+
+      {(uncounted.unassignedCount > 0 || uncounted.archivedCount > 0) && (
+        <p className="-mt-1" style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}>
+          {uncounted.unassignedCount > 0 && (
+            <>
+              另有 <span className="tnum">{uncounted.unassignedCount}</span> 段未归类（
+              <span className="tnum">{humanMs(uncounted.unassignedMs)}</span>）未计入，可在番茄钟面板里归类。
+            </>
+          )}
+          {uncounted.archivedCount > 0 && (
+            <>
+              {' '}
+              归档目标另有 <span className="tnum">{uncounted.archivedCount}</span> 段（
+              <span className="tnum">{humanMs(uncounted.archivedMs)}</span>）同样不计入。
+            </>
+          )}
+        </p>
+      )}
 
       {view === 'year' ? (
         <AnnualOverview
@@ -273,6 +348,23 @@ export default function ReviewPage() {
             <NotesEditor month={month} />
           </Card>
         </>
+      )}
+
+      {/* 专注指标：只放 CheckIn 给不了的三个数；投入时长的权威口径仍是上面的 effectiveMinutes */}
+      {focus.count > 0 && (
+        <Card title={`专注指标 · ${view === 'month' ? '本月' : '全年'}`}>
+          <div className="flex flex-wrap gap-x-8 gap-y-3">
+            <Stat label="专注段数" value={String(focus.count)} unit="段" />
+            <Stat label="平均段长" value={humanMs(focus.avgMs)} />
+            <Stat
+              label="被打断率"
+              value={`${Math.round(focus.interruptedRate * 100)}`}
+              unit="%"
+              hint="提前按停止的段数占比（丢弃的段不计）"
+            />
+            <Stat label="专注总时长" value={humanMs(focus.totalMs)} />
+          </div>
+        </Card>
       )}
     </div>
   );

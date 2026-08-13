@@ -3,7 +3,9 @@ import type { CheckIn, FocusSession, RunningState } from '../../types/domain';
 import {
   effectiveMsByGoalByYear,
   effectiveMsByGoalDate,
+  focusIndexForGantt,
   focusMsByTaskDate,
+  focusStats,
   isPaused,
   netFocusMs,
   planRecovery,
@@ -395,6 +397,69 @@ describe('effectiveMsByGoalByYear', () => {
     );
     expect(byMonth.get(7)?.get('g1')).toBe(25 * MIN);
     expect(byMonth.get(8)).toBeUndefined();
+  });
+});
+
+describe('focusIndexForGantt', () => {
+  const sessions = [
+    session({ id: 's1', date: '2026-03-02', taskId: 't1', focusMs: 25 * MIN }),
+    session({ id: 's2', date: '2026-03-02', taskId: 't1', focusMs: 20 * MIN }),
+    session({ id: 's3', date: '2026-03-05', taskId: 't2', focusMs: 50 * MIN }),
+    session({ id: 's4', date: '2025-12-31', taskId: 't1', focusMs: 30 * MIN }), // 去年
+    session({ id: 's5', date: '2026-03-06', taskId: undefined, focusMs: 40 * MIN }), // 未归类
+    session({ id: 's6', date: '2026-03-07', taskId: 't1', focusMs: 15 * MIN, outcome: 'discarded' }),
+    session({ id: 's7', date: '2026-03-08', taskId: 't1', focusMs: 15 * MIN, deletedAt: new Date(T0).toISOString() }),
+  ];
+  const idx = focusIndexForGantt(sessions, 2026);
+
+  it('同日多段合并成一个日期，且毫秒累加', () => {
+    expect([...(idx.focusDaysByTask.get('t1') ?? [])]).toEqual(['2026-03-02']);
+    expect(idx.msByTask.get('t1')).toBe(45 * MIN);
+  });
+
+  it('按 task 分桶，不与同目标的其它任务串味', () => {
+    expect(idx.focusDaysByTask.get('t2')?.has('2026-03-05')).toBe(true);
+    expect(idx.focusDaysByTask.get('t2')?.has('2026-03-02')).toBe(false);
+  });
+
+  it('只吃当年；丢弃 / 软删 / 未归类都不进甘特', () => {
+    expect(idx.focusDaysByTask.get('t1')?.has('2025-12-31')).toBe(false);
+    expect(idx.focusDaysByTask.get('t1')?.has('2026-03-07')).toBe(false);
+    expect(idx.focusDaysByTask.get('t1')?.has('2026-03-08')).toBe(false);
+    expect(idx.focusDaysByTask.has('')).toBe(false);
+    expect(idx.msByTask.get('t1')).toBe(45 * MIN); // 去年那 30 分没混进来
+  });
+
+  it('空输入返回空索引（无会话的用户不该看到任何中间态）', () => {
+    const empty = focusIndexForGantt([], 2026);
+    expect(empty.focusDaysByTask.size).toBe(0);
+    expect(empty.msByTask.size).toBe(0);
+  });
+});
+
+describe('focusStats', () => {
+  const sessions = [
+    session({ id: 's1', date: '2026-08-01', focusMs: 25 * MIN, outcome: 'completed' }),
+    session({ id: 's2', date: '2026-08-02', focusMs: 15 * MIN, outcome: 'stopped' }),
+    session({ id: 's3', date: '2026-08-03', focusMs: 20 * MIN, outcome: 'completed' }),
+    session({ id: 's4', date: '2026-08-04', focusMs: 10 * MIN, outcome: 'discarded' }),
+    session({ id: 's5', date: '2026-07-31', focusMs: 60 * MIN, outcome: 'completed' }),
+  ];
+
+  it('按月前缀统计段数 / 总时长 / 平均段长 / 被打断率（丢弃不计）', () => {
+    const s = focusStats(sessions, '2026-08');
+    expect(s.count).toBe(3);
+    expect(s.totalMs).toBe(60 * MIN);
+    expect(s.avgMs).toBe(20 * MIN);
+    expect(s.interruptedRate).toBeCloseTo(1 / 3, 6);
+  });
+
+  it('年前缀把 7 月那段也算进来', () => {
+    expect(focusStats(sessions, '2026-').count).toBe(4);
+  });
+
+  it('无会话时全零且不除零', () => {
+    expect(focusStats([], '2026-08')).toEqual({ count: 0, totalMs: 0, avgMs: 0, interruptedRate: 0 });
   });
 });
 

@@ -6,7 +6,15 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { fmtDay, toDay, todayStr } from '../lib/date';
-import { adhocEntries, calcStreak, dayCompletionRate, dayEntries, focusMsByTaskDate } from '../lib/derive';
+import {
+  adhocEntries,
+  calcStreak,
+  dayCompletionRate,
+  dayEntries,
+  focusMsByTaskDate,
+  isCountedSession,
+} from '../lib/derive';
+import { humanMs } from '../pomodoro/format';
 import { AdhocSection } from '../checkin/AdhocSection';
 import { BackfillDialog } from '../checkin/BackfillDialog';
 import { DayStrip, type StripDay } from '../checkin/DayStrip';
@@ -96,6 +104,13 @@ export default function CheckInPage() {
     () => focusMsByTaskDate(Object.values(focusSessions), selectedDate),
     [focusSessions, selectedDate],
   );
+  // 当日专注总量：year/quarter 档看不到甘特点阵的中间态，这行与各行的「补卡」是主要补偿手段
+  const dayFocus = useMemo(() => {
+    const list = Object.values(focusSessions).filter(
+      (s) => isCountedSession(s) && s.date === selectedDate,
+    );
+    return { ms: list.reduce((sum, s) => sum + s.focusMs, 0), count: list.length };
+  }, [focusSessions, selectedDate]);
 
   const yesterday = fmtDay(toDay(today).subtract(1, 'day'));
   const yesterdayMissed = useMemo(
@@ -187,6 +202,17 @@ export default function CheckInPage() {
       </div>
 
       <DayStrip days={stripDays} selected={selectedDate} today={today} onSelect={setSelectedDate} />
+
+      {dayFocus.ms > 0 && (
+        <p className="mt-3" style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}>
+          这天你专注了{' '}
+          <span className="tnum" style={{ color: 'var(--accent)' }}>
+            {humanMs(dayFocus.ms)}
+          </span>
+          <span className="tnum"> · {dayFocus.count} 段</span>
+          {' — 下面带「补卡」的行是有专注但还没打卡的。'}
+        </p>
+      )}
 
       {entries.length === 0 ? (
         adhoc.length === 0 && (

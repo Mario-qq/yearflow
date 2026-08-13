@@ -286,9 +286,39 @@
 - **S2 对抗评审 + 规格定稿** 【已完成】
 - **S3 数据层 + 计时内核** 【已完成】：§四 21 项 + `0002` SQL + `derive/focus.ts`（47 条单测）+ `src/pomodoro/` 内核
 - **S4 桌面 UI 完全体** 【已完成】：顶栏胶囊 + 面板 + 结果卡 + 结算对话 + 声音/通知/title + `P`/`Shift+P` + 设置区 + 打卡页入口
-- **S5 统计可视化 + 打磨验收**：甘特中间态 + 补卡建议 + 会话历史/补录 + 性能实测 + 截图门槛 + 人工验收
+- **S5 统计可视化 + 打磨验收** 【已完成】：甘特中间态 + 补卡建议 + 会话历史/补录 + 复盘专注指标 + 性能实测 + 截图门槛
 
 纪律（额度保护）：每会话开头读 CLAUDE.md → 本文件 → POMODORO_SPEC.md；除 S2 外不用 agent；到 85% 额度无条件收手并留交接；结尾 `tsc -b` + oxlint + vitest 全绿再 commit。
+
+### S5 产出（2026-08-13）：统计可视化 + 打磨验收（番茄钟模块收尾）
+
+`tsc -b` + oxlint + vitest **185 通过 / 11 文件**（既有 131 条仍一行未改 ⇒ 回归护栏依然成立）。主包 **187.75 → 190.21 KB gzip（S5 +2.46KB；番茄钟全模块累计 +11.4KB，门槛 ≤15KB）**，recharts 仍只在 review 分包（107.01KB gzip），新增依赖 0 个。
+
+**新增/改动**：`derive/focus.ts` 加 `focusIndexForGantt` 与 `focusStats`（+7 条单测）；`CheckinDots`（中间态描边）、`BarsLayer`/`GanttView`（`focusIndex` 独立 `useMemo`，与 `useGanttDerive` 平行）、`BarTooltip`（「专注」行走新 prop）；`CheckinPopover`（专注时长 + 一键补卡）；`GoalCheckCard` 新增导出组件 `FocusAutoBadge`（自动值徽标 + 补卡，**替掉了三处重复的展示 span**）；`CheckinPage`（「这天你专注了 X · N 段」）；`ReviewPage`（未归类灰字 + 专注指标卡 + `Stat` 小组件）；新文件 `src/pomodoro/SessionHistory.tsx`；`scripts/capture-pomodoro.mjs` 扩到 **28 张**（S4 14 张 + S5 14 张）。
+
+**一处对规格签名的修改（已回填 SPEC §七）**：`focusIndexForGantt` 初稿是 `(checkIns, sessions, year) → noCheckInDaysByGoal`。实现时发现两点：① 「无打卡」在渲染侧本来就成立——`CheckinDots` 只给 missed 与占位两个分支加描边，而这两个分支的定义就是「该任务该日没有打卡记录」，派生层再算一遍是重复且更弱的判断；② goal 粒度会串味——目标下任务 A 已打卡、任务 B 只跑了番茄时，goal 级交集会把 B 的标记整个抹掉，**恰恰是 §6.3 要解决的那个场景**。⇒ 改成 `(sessions, year) → { focusDaysByTask, msByTask }`，依赖收窄为 `[focusSessions, year]`，顺带消掉了「每次打卡编辑全表重扫」那笔已知代价。
+
+**一处实现期发现的缺陷（写代码时就修了，值得记住）**：`SessionHistory` 起初 `createPortal` 到 body —— 胶囊的「点外部关闭」是 `rootRef.contains(e.target)` 的 DOM 包含判断，portal 出去的节点不在 rootRef 里，**点对话框任何一处都会把面板连同对话框一起卸载**（表现为「点一下就消失」）。改成与 `AskDialog` 一样挂在胶囊的 relative 容器内（`fixed` 相对视口，父容器不影响定位）。
+
+**§11.2 自动化实测（Playwright + 系统 Chrome，本机 dev）**：
+- 中间态：删掉某任务最近 3 天打卡 + 注入 3 段会话 ⇒ month 档 `circle[stroke="var(--warning)"]` 恰好 3 个；4x 放大自查（深浅两主题）与「纯 missed 点」「今日环」三者清晰可分
+- bar tooltip：`专注 1 小时 40 分`（25+25+50），且 hover 期间 `__ganttDeriveComputes` 增量 **0**（没把 `focusSessions` 拖进那个 hook）
+- 打卡点 popover：`专注 50 分` + `一键补卡` ⇒ 写出 `status: done, minutes: 50`
+- 打卡页：切到有会话的日期 ⇒ 「这天你专注了 1 小时 20 分 · 2 段」+ 行内「补卡」按钮 1 个，点击后打卡数 100 → 101
+- 复盘页：`另有 1 段未归类（30 分）未计入` + 专注指标卡（4 段 / 平均 33 分 / 被打断率 25% / 合计 2 小时 10 分）
+- 专注记录对话框：列出 4 段、改时长 25 → 42 落库且 undo 栈恰好 +1、**点对话框不会把面板关掉**、补录一段写出 `source: 'manual'`
+- 移动端 375×812：番茄入口零节点
+
+**§10.1 性能实测（800 段会话 + 番茄钟运行中，并做「清空会话」对照组）**：
+| 指标 | 实测 | 门槛 |
+|---|---|---|
+| 首屏（生产构建 `vite preview`，导航 → 首根 bar） | **269ms**（dev server 下 959ms，是 Vite 未打包模块图的成本） | <1s |
+| 缩放四档收敛（含 150ms 插值动画 + 3 帧稳定判定） | 199~278ms／对照组 198~329ms（**开会话反而略快 ⇒ 差异是噪音**） | 切换 <150ms |
+| 拖 bar 帧间隔 | 中位 **16.7ms**、p95 16.9ms、>32ms 帧 1 个／对照组 0 个 | 60fps |
+| 拖拽期间 `__ganttDeriveComputes` 增量 | **1**（落手提交那一次，与不开番茄一致） | 不额外触发 |
+| 番茄跑 3 秒期间派生重算 | **0** | 每秒 0 次重渲 |
+
+**§11.3 六条人工清单仍待用户本人过**（无自动路径，需真实硬件与真实等待）：到点提示音音色、系统通知弹出与点击回焦、后台标签跑满 25 分是否准点、合盖休眠 30 分后的结算对话、双标签只响一声、连续 4 段确认长休息节律。
 
 ### S4 产出（2026-08-13）：桌面 UI 完全体
 

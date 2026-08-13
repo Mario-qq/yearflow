@@ -38,7 +38,16 @@ const primaryBtn: React.CSSProperties = {
   color: 'var(--text-on-accent)',
 };
 
-export function PomodoroPanel({ sel, onSel }: { sel: FocusSel; onSel: (next: FocusSel) => void }) {
+export function PomodoroPanel({
+  sel,
+  onSel,
+  onOpenHistory,
+}: {
+  sel: FocusSel;
+  onSel: (next: FocusSel) => void;
+  /** 打开「专注记录」对话框。状态放在胶囊里：对话框必须与面板同属 rootRef，否则点它就关面板 */
+  onOpenHistory: () => void;
+}) {
   const running = usePomodoroStore((s) => s.running);
   const cycleCompleted = usePomodoroStore((s) => s.cycleCompleted);
   const lastResult = usePomodoroStore((s) => s.lastResult);
@@ -184,12 +193,23 @@ export function PomodoroPanel({ sel, onSel }: { sel: FocusSel; onSel: (next: Foc
 
       {lastResult && !running && <ResultCard sessionId={lastResult.id} />}
 
-      <div style={{ fontSize: 'var(--font-12)', color: 'var(--text-secondary)' }}>
-        今日 <span className="tnum">{todayMs > 0 ? humanMs(todayMs) : '0 分'}</span>
-        <span style={{ color: 'var(--text-tertiary)' }}>
-          {' '}
-          · <span className="tnum">{todayCount}</span> 段
+      <div className="flex items-center gap-2" style={{ fontSize: 'var(--font-12)', color: 'var(--text-secondary)' }}>
+        <span>
+          今日 <span className="tnum">{todayMs > 0 ? humanMs(todayMs) : '0 分'}</span>
+          <span style={{ color: 'var(--text-tertiary)' }}>
+            {' '}
+            · <span className="tnum">{todayCount}</span> 段
+          </span>
         </span>
+        <button
+          type="button"
+          onClick={onOpenHistory}
+          className="ml-auto cursor-pointer"
+          style={{ fontSize: 'var(--font-12)', color: 'var(--accent)' }}
+          title="回看 / 编辑 / 补录专注记录"
+        >
+          专注记录
+        </button>
       </div>
 
       {unassigned.length > 0 && (

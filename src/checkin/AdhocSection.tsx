@@ -7,9 +7,8 @@ import { useState } from 'react';
 import type { AdhocEntry, DayTaskEntry } from '../lib/derive';
 import type { Goal } from '../types/domain';
 import { goalColor } from '../lib/colors';
-import { ExpandChevron, StatusButtons, TaskEditor } from './GoalCheckCard';
+import { ExpandChevron, FocusAutoBadge, StatusButtons, TaskEditor } from './GoalCheckCard';
 import { StartFocusButton } from '../pomodoro/StartFocusButton';
-import { toMinutes } from '../pomodoro/format';
 
 function AdhocRow({
   goal,
@@ -44,15 +43,7 @@ function AdhocRow({
             {entry.record.minutes}分
           </span>
         ) : null}
-        {autoMs > 0 && (
-          <span
-            className="tnum shrink-0"
-            style={{ fontSize: 'var(--font-12)', color: 'var(--accent)' }}
-            title="番茄钟实测时长（统计里与手填取更完整的那个）"
-          >
-            {toMinutes(autoMs)} 分（自动）
-          </span>
-        )}
+        <FocusAutoBadge goalId={entry.goalId} date={date} te={te} autoMs={autoMs} />
         {isToday && <StartFocusButton goalId={entry.goalId} taskId={entry.taskId} />}
         <StatusButtons goalId={entry.goalId} date={date} te={te} compact statuses={['done', 'partial']} />
         <ExpandChevron open={open} onClick={() => setOpen((v) => !v)} title={open ? '收起' : '展开分钟与备注'} />

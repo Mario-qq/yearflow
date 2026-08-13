@@ -23,6 +23,7 @@ import {
 } from './kernel';
 import { togglePomodoroFromGesture } from './api';
 import { PomodoroPanel } from './PomodoroPanel';
+import { SessionHistory } from './SessionHistory';
 import { readLastTask } from './running';
 import { usePomodoroStore, type AskState } from './store';
 import { subscribeTick } from './ticker';
@@ -110,6 +111,7 @@ function PomodoroCapsule() {
   const ask = usePomodoroStore((s) => s.ask);
   const lastResult = usePomodoroStore((s) => s.lastResult);
   const [open, setOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [sel, setSel] = useState<FocusSel>(() => readLastTask() ?? {});
   const rootRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -220,7 +222,8 @@ function PomodoroCapsule() {
         {/* 空元素：文本只由 ticker 经 ref 写入，React 从不渲染它的 children */}
         {running && <span ref={tickRef} className="tnum" />}
       </button>
-      {open && <PomodoroPanel sel={sel} onSel={setSel} />}
+      {open && <PomodoroPanel sel={sel} onSel={setSel} onOpenHistory={() => setHistoryOpen(true)} />}
+      <SessionHistory open={historyOpen} onClose={() => setHistoryOpen(false)} />
       {ask && <AskDialog ask={ask} />}
     </div>
   );

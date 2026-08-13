@@ -29,7 +29,7 @@ import { exportGanttPng } from './lib/exportPng';
 import { ZOOM_DAY_WIDTH } from './constants';
 import type { GanttZoom } from '../types/domain';
 import { buildRowLayout, rowAtY, visibleRowRange, type RowLayout } from './rowLayout';
-import { buildTracks, memberAtDate } from '../lib/derive';
+import { buildTracks, focusIndexForGantt, memberAtDate } from '../lib/derive';
 import { useViewport } from './hooks/useViewport';
 import { useZoomAnimation } from './hooks/useZoomAnimation';
 import { useGanttDerive } from './hooks/useGanttDerive';
@@ -67,6 +67,7 @@ export default function GanttView() {
   const milestones = useStore((s) => s.milestones);
   const checkIns = useStore((s) => s.checkIns);
   const exemptions = useStore((s) => s.exemptions);
+  const focusSessions = useStore((s) => s.focusSessions);
   const year = useStore((s) => s.settings.yearInView);
   const zoom = useStore((s) => s.settings.ganttView.zoom);
   const collapsedGoalIds = useStore((s) => s.settings.ganttView.collapsedGoalIds);
@@ -172,6 +173,12 @@ export default function GanttView() {
 
   const today = todayStr();
   const derive = useGanttDerive(goals, tasks, checkIns, exemptions, today, weekStartsOn);
+  // 番茄索引与 useGanttDerive **平行**、绝不并进它的输入（依赖只有会话与年份，
+  // 尤其不能带 visStartDate/visEndDate —— 那等于每帧全表扫会话，滚动直接掉帧）
+  const focusIndex = useMemo(
+    () => focusIndexForGantt(Object.values(focusSessions), year),
+    [focusSessions, year],
+  );
   const { anchor, onBarHover } = useBarTooltip();
   const { onBarDragStart, ghost } = useBarDrag({ scrollerRef, bodyRef, scaleRef, layoutRef, leftW });
   const { onBodyPointerDown: onCreateDown, preview, pending, clearPending } = useCreateDrag({ bodyRef, scaleRef, layoutRef });
@@ -663,6 +670,7 @@ export default function GanttView() {
                   today={today}
                   collapsedGoalIds={collapsedGoalIds}
                   showBaseline={showBaseline}
+                  focusIndex={focusIndex}
                   dimTaskIds={dimTaskIds}
                   dimGoalIds={dimGoalIds}
                   onBarHover={onBarHover}
@@ -761,7 +769,13 @@ export default function GanttView() {
         leftW={leftW}
       />
       {anchor && hoverTask && hoverTg && hoverGg && (
-        <BarTooltip anchor={anchor} task={hoverTask} tg={hoverTg} streak={hoverGg.streak} />
+        <BarTooltip
+          anchor={anchor}
+          task={hoverTask}
+          tg={hoverTg}
+          streak={hoverGg.streak}
+          focusMs={focusIndex.msByTask.get(hoverTask.id) ?? 0}
+        />
       )}
       <GanttContextMenu />
       <GoalIconPicker />

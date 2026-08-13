@@ -298,6 +298,77 @@ export function effectiveMsByGoalDate(
 }
 
 /**
+ * 甘特图专用索引（规格 §8.6）：点阵「有专注·未打卡」中间态 + bar tooltip「专注 X」，
+ * 两处共用同一次遍历（GanttView 里一个 useMemo，避免全表扫两遍）。
+ *
+ * ⚠️ range 必须是「当前 yearInView 全年」，绝不能是可视日期范围：甘特图到处是
+ * visStartDate/visEndDate 的列虚拟化，依赖里带上它就是每帧全表扫会话，滚动直接掉帧。
+ *
+ * ⚠️ 与规格初稿签名的一处偏离（S5 实现期裁决，理由写在这里免得将来被当成漏做）：
+ * 初稿返回 `noCheckInDaysByGoal: Map<goalId, Set<date>>` 且入参含 checkIns。实现时发现
+ * ① 「无打卡」这个条件在渲染侧本来就成立 —— CheckinDots 只在 missed / 占位点两个分支上加
+ *    描边，而这两个分支的定义就是「该任务该日没有打卡记录」，在派生层再算一遍是重复且更弱的
+ *    判断（派生层只能算到 goal 粒度）；
+ * ② goal 粒度会串味：目标 G 下任务 A 已打卡、任务 B 只跑了番茄，按 goal 取交集会把 B 的标记
+ *    整个抹掉 —— 恰恰是 §6.3 要解决的那个场景。
+ * ⇒ 改为 taskId 粒度、不吃 checkIns，依赖收窄为 [focusSessions, year]（打卡编辑不再触发重扫）。
+ * 未归类会话（无 taskId）不进甘特，由面板「N 段未归类」入口负责，与统计口径一致。
+ */
+export interface GanttFocusIndex {
+  /** taskId → 该年有计入会话的日期集合（点阵中间态） */
+  focusDaysByTask: Map<string, Set<string>>;
+  /** taskId → 该年专注总毫秒（bar tooltip） */
+  msByTask: Map<string, number>;
+}
+
+export function focusIndexForGantt(sessions: FocusSession[], year: number): GanttFocusIndex {
+  const prefix = `${year}-`;
+  const focusDaysByTask = new Map<string, Set<string>>();
+  const msByTask = new Map<string, number>();
+  for (const s of sessions) {
+    if (!isCountedSession(s) || !s.taskId || !s.date.startsWith(prefix)) continue;
+    let days = focusDaysByTask.get(s.taskId);
+    if (!days) {
+      days = new Set();
+      focusDaysByTask.set(s.taskId, days);
+    }
+    days.add(s.date);
+    msByTask.set(s.taskId, (msByTask.get(s.taskId) ?? 0) + s.focusMs);
+  }
+  return { focusDaysByTask, msByTask };
+}
+
+/** 复盘页「专注指标」卡：只放 CheckIn 给不了的指标，投入时长的权威口径仍是 effectiveMs */
+export interface FocusStats {
+  /** 计入的段数（软删与丢弃不算） */
+  count: number;
+  totalMs: number;
+  /** 平均段长；count = 0 时为 0 */
+  avgMs: number;
+  /** 被打断率 = 提前停止段数 / 总段数（0~1）；count = 0 时为 0 */
+  interruptedRate: number;
+}
+
+/** prefix 可以是 'YYYY-MM-DD' / 'YYYY-MM' / 'YYYY-' */
+export function focusStats(sessions: FocusSession[], prefix: string): FocusStats {
+  let count = 0;
+  let totalMs = 0;
+  let stopped = 0;
+  for (const s of sessions) {
+    if (!isCountedSession(s) || !s.date.startsWith(prefix)) continue;
+    count += 1;
+    totalMs += s.focusMs;
+    if (s.outcome === 'stopped') stopped += 1;
+  }
+  return {
+    count,
+    totalMs,
+    avgMs: count > 0 ? totalMs / count : 0,
+    interruptedRate: count > 0 ? stopped / count : 0,
+  };
+}
+
+/**
  * 按月×目标投入毫秒（年度堆叠面积图 + 投入总时长卡的共同数据源）。
  * 形状与旧的 minutesByGoalByMonth 同构：一次遍历算完 12 个月。
  * ⚠️ goalId 键集合 = checkIns ∪ sessions —— 只跑了番茄没打卡的目标不能整个缺键。

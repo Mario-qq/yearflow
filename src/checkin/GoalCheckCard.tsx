@@ -90,6 +90,56 @@ export function StatusButtons({
   );
 }
 
+/**
+ * 番茄实测时长徽标 +「一键补卡」（番茄钟规格 §6.3）。
+ *
+ * 自动值与手填值**并列可见、不合并成一个数**，用户才分辨得出哪个是实测。
+ * 还没有打卡记录时才给「补卡」：一次点击写 done + 该分钟数，是显式动作，
+ * 绝不自动写入 —— §6.1 三条禁令的第 1、2 条。
+ */
+export function FocusAutoBadge({
+  goalId,
+  date,
+  te,
+  autoMs,
+}: {
+  goalId: string;
+  date: string;
+  te: DayTaskEntry;
+  autoMs: number;
+}) {
+  if (autoMs <= 0) return null;
+  const min = toMinutes(autoMs);
+  return (
+    <>
+      <span
+        className="tnum shrink-0"
+        style={{ fontSize: 'var(--font-12)', color: 'var(--accent)' }}
+        title="番茄钟实测时长（统计里与手填取更完整的那个）"
+      >
+        {min} 分（自动）
+      </span>
+      {!te.record && (
+        <button
+          type="button"
+          onClick={() => setCheckIn({ goalId, date, status: 'done', taskId: te.taskId, minutes: min })}
+          className="shrink-0 cursor-pointer px-2 py-0.5 transition-colors"
+          style={{
+            fontSize: 'var(--font-12)',
+            border: '1px solid var(--accent)',
+            borderRadius: 999,
+            background: 'var(--accent-soft)',
+            color: 'var(--accent)',
+          }}
+          title={`这天你专注了 ${min} 分钟，一键记为完成并写入时长`}
+        >
+          补卡
+        </button>
+      )}
+    </>
+  );
+}
+
 /** 某任务的分钟 chips + 一句话备注编辑区（展开态显示）。 */
 export function TaskEditor({
   goalId,
@@ -250,16 +300,7 @@ function TaskRow({
             {te.record.minutes}分
           </span>
         ) : null}
-        {/* 自动值与手填值并列可见：不合并成一个数，用户才能分辨哪个是实测 */}
-        {autoMs > 0 && (
-          <span
-            className="tnum shrink-0"
-            style={{ fontSize: 'var(--font-12)', color: 'var(--accent)' }}
-            title="番茄钟实测时长（统计里与手填取更完整的那个）"
-          >
-            {toMinutes(autoMs)} 分（自动）
-          </span>
-        )}
+        <FocusAutoBadge goalId={goalId} date={date} te={te} autoMs={autoMs} />
         {canStart && <StartFocusButton goalId={goalId} taskId={te.taskId} />}
         <StatusButtons goalId={goalId} date={date} te={te} compact />
         <ExpandChevron open={open} onClick={() => setOpen((v) => !v)} title={open ? '收起' : '展开分钟与备注'} />
@@ -355,15 +396,7 @@ export function GoalCheckCard({
           // 单任务：状态键在卡头 + 展开分钟/备注；多任务：卡头不放键，逐任务成行
           single && (
             <div className="flex shrink-0 items-center gap-1.5">
-              {autoOf(single.taskId) > 0 && (
-                <span
-                  className="tnum"
-                  style={{ fontSize: 'var(--font-12)', color: 'var(--accent)' }}
-                  title="番茄钟实测时长（统计里与手填取更完整的那个）"
-                >
-                  {toMinutes(autoOf(single.taskId))} 分（自动）
-                </span>
-              )}
+              <FocusAutoBadge goalId={goal.id} date={date} te={single} autoMs={autoOf(single.taskId)} />
               {isToday && <StartFocusButton goalId={goal.id} taskId={single.taskId} />}
               <StatusButtons goalId={goal.id} date={date} te={single} />
               <ExpandChevron open={expanded} onClick={onToggleExpand} title={expanded ? '收起' : '展开分钟与备注'} />
