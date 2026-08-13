@@ -8,6 +8,8 @@ import type { CheckInStatus, Goal } from '../types/domain';
 import type { DayGoalEntry, DayTaskEntry } from '../lib/derive';
 import { goalColor } from '../lib/colors';
 import { patchCheckIn, removeCheckIn, setCheckIn } from '../store/actions';
+import { StartFocusButton } from '../pomodoro/StartFocusButton';
+import { toMinutes } from '../pomodoro/format';
 
 const MINUTE_CHIPS = [10, 15, 30, 60];
 
@@ -89,7 +91,18 @@ export function StatusButtons({
 }
 
 /** 某任务的分钟 chips + 一句话备注编辑区（展开态显示）。 */
-export function TaskEditor({ goalId, date, te }: { goalId: string; date: string; te: DayTaskEntry }) {
+export function TaskEditor({
+  goalId,
+  date,
+  te,
+  autoMs = 0,
+}: {
+  goalId: string;
+  date: string;
+  te: DayTaskEntry;
+  /** 当日该任务的番茄自动时长（只做 placeholder 提示，绝不预填、绝不覆盖手填） */
+  autoMs?: number;
+}) {
   const [customMin, setCustomMin] = useState('');
   const noteRef = useRef<HTMLInputElement>(null);
   const record = te.record;
@@ -160,7 +173,13 @@ export function TaskEditor({ goalId, date, te }: { goalId: string; date: string;
             setCustomMin('');
           }
         }}
-        placeholder={record?.minutes && !MINUTE_CHIPS.includes(record.minutes) ? `${record.minutes}分` : '自定义'}
+        placeholder={
+          record?.minutes && !MINUTE_CHIPS.includes(record.minutes)
+            ? `${record.minutes}分`
+            : autoMs > 0
+              ? `自动 ${toMinutes(autoMs)} 分`
+              : '自定义'
+        }
         className="tnum w-16 px-2 py-0.5 outline-none"
         style={{
           fontSize: 'var(--font-12)',
@@ -206,7 +225,19 @@ export function ExpandChevron({ open, onClick, title }: { open: boolean; onClick
 }
 
 /** 多任务目标：单个任务一行（名称 + 状态键 + 展开分钟/备注）。 */
-function TaskRow({ goalId, date, te }: { goalId: string; date: string; te: DayTaskEntry }) {
+function TaskRow({
+  goalId,
+  date,
+  te,
+  autoMs = 0,
+  canStart,
+}: {
+  goalId: string;
+  date: string;
+  te: DayTaskEntry;
+  autoMs?: number;
+  canStart?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <div className="border-t" style={{ borderColor: 'var(--border-subtle)' }}>
@@ -219,12 +250,23 @@ function TaskRow({ goalId, date, te }: { goalId: string; date: string; te: DayTa
             {te.record.minutes}分
           </span>
         ) : null}
+        {/* 自动值与手填值并列可见：不合并成一个数，用户才能分辨哪个是实测 */}
+        {autoMs > 0 && (
+          <span
+            className="tnum shrink-0"
+            style={{ fontSize: 'var(--font-12)', color: 'var(--accent)' }}
+            title="番茄钟实测时长（统计里与手填取更完整的那个）"
+          >
+            {toMinutes(autoMs)} 分（自动）
+          </span>
+        )}
+        {canStart && <StartFocusButton goalId={goalId} taskId={te.taskId} />}
         <StatusButtons goalId={goalId} date={date} te={te} compact />
         <ExpandChevron open={open} onClick={() => setOpen((v) => !v)} title={open ? '收起' : '展开分钟与备注'} />
       </div>
       {open && (
         <div className="px-3 pb-2.5">
-          <TaskEditor goalId={goalId} date={date} te={te} />
+          <TaskEditor goalId={goalId} date={date} te={te} autoMs={autoMs} />
         </div>
       )}
     </div>
@@ -237,14 +279,28 @@ interface Props {
   /** 当前 streak（仅今天显示 🔥） */
   streak?: number;
   date: string;
+  /** 当日各任务的番茄自动时长（taskId → ms），供分钟框提示与并列展示 */
+  focusMsByTask?: Map<string, number>;
+  /** 所看日期是今天（补卡历史日期不渲染番茄启动入口） */
+  isToday?: boolean;
   /** 单任务目标：展开分钟/备注（多任务目标各行自管展开，忽略此项） */
   expanded: boolean;
   onToggleExpand: () => void;
 }
 
-export function GoalCheckCard({ goal, entry, streak, date, expanded, onToggleExpand }: Props) {
+export function GoalCheckCard({
+  goal,
+  entry,
+  streak,
+  date,
+  focusMsByTask,
+  isToday,
+  expanded,
+  onToggleExpand,
+}: Props) {
   const single = entry.taskEntries.length === 1 ? entry.taskEntries[0] : undefined;
   const multi = entry.taskEntries.length > 1;
+  const autoOf = (taskId: string) => focusMsByTask?.get(taskId) ?? 0;
 
   const clearLegacy = () => {
     if (entry.legacyRecord) removeCheckIn(entry.legacyRecord.id);
@@ -299,6 +355,16 @@ export function GoalCheckCard({ goal, entry, streak, date, expanded, onToggleExp
           // 单任务：状态键在卡头 + 展开分钟/备注；多任务：卡头不放键，逐任务成行
           single && (
             <div className="flex shrink-0 items-center gap-1.5">
+              {autoOf(single.taskId) > 0 && (
+                <span
+                  className="tnum"
+                  style={{ fontSize: 'var(--font-12)', color: 'var(--accent)' }}
+                  title="番茄钟实测时长（统计里与手填取更完整的那个）"
+                >
+                  {toMinutes(autoOf(single.taskId))} 分（自动）
+                </span>
+              )}
+              {isToday && <StartFocusButton goalId={goal.id} taskId={single.taskId} />}
               <StatusButtons goalId={goal.id} date={date} te={single} />
               <ExpandChevron open={expanded} onClick={onToggleExpand} title={expanded ? '收起' : '展开分钟与备注'} />
             </div>
@@ -308,13 +374,22 @@ export function GoalCheckCard({ goal, entry, streak, date, expanded, onToggleExp
 
       {single && expanded && !entry.exempt && (
         <div className="border-t px-3 py-2.5" style={{ borderColor: 'var(--border-subtle)' }}>
-          <TaskEditor goalId={goal.id} date={date} te={single} />
+          <TaskEditor goalId={goal.id} date={date} te={single} autoMs={autoOf(single.taskId)} />
         </div>
       )}
 
       {multi &&
         !entry.exempt &&
-        entry.taskEntries.map((te) => <TaskRow key={te.taskId} goalId={goal.id} date={date} te={te} />)}
+        entry.taskEntries.map((te) => (
+          <TaskRow
+            key={te.taskId}
+            goalId={goal.id}
+            date={date}
+            te={te}
+            autoMs={autoOf(te.taskId)}
+            canStart={isToday}
+          />
+        ))}
 
       {entry.legacyRecord && !entry.exempt && (
         <div

@@ -45,7 +45,19 @@ let alarmToken = 0;
 let heartbeatHandle: ReturnType<typeof setInterval> | null = null;
 /** 已结算的 sessionId：幂等 id 只能保住 Dexie 行数，保不住 undo 栈格数 */
 const settledIds = new Set<string>();
-/** 是否已经选出过 leader（Web Locks 不可用时恒为 false ⇒ 各标签各自负责） */
+/**
+ * 本文档是否知道「有 leader 存在」。
+ *
+ * ⚠️ S4 实测修正：这个标记必须在**拿到锁之前**就为 true（只要 Web Locks 可用），
+ * 不能等自己被授予锁才置位 —— 后者是从 leader 视角看的，而它真正的消费者是
+ * **follower**（`onAlarm` 的 `!isLeader && leaderKnown` 门禁）。等自己拿到锁才置位 ⇒
+ * 排队中的 follower 永远 `leaderKnown === false` ⇒ **每个标签都会自己结算、自己响铃**：
+ * 两个标签开着时实测由 follower 抢先落库（leader 反被 storage 事件挡回），结果卡与响铃
+ * 出现在用户没在看的那个标签，声音还会响两遍。Dexie 行数靠预生成 id 仍是 1，所以这个
+ * 缺陷不会丢数、也不报错，只会「响两声、卡片跑错标签」。
+ * 置位后的剩余风险窗口是「锁还没授予就到点」——规格已明确接受（窗口只有几毫秒，
+ * 且 catchUp/initPomodoro 的恢复路径不受 leader 门禁约束，时长不会丢）。
+ */
 let leaderKnown = false;
 let initialized = false;
 
@@ -443,9 +455,10 @@ if (isBrowser) {
   window.addEventListener('pagehide', () => beat());
 
   if (navigator.locks?.request) {
+    // 选主机制可用即认为「会有 leader」（见 leaderKnown 的注释：这一行决定 follower 是否闭嘴）
+    leaderKnown = true;
     void navigator.locks
       .request(LOCK_NAME, { mode: 'exclusive' }, () => {
-        leaderKnown = true;
         usePomodoroStore.setState({ isLeader: true });
         // 上一任 leader 关闭后新 leader 才上位，此前作为 follower 没有闹钟 ⇒ 立即重下
         const r = readRunning();

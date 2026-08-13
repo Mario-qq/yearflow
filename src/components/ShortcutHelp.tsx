@@ -30,6 +30,8 @@ const GROUPS: { title: string; rows: [string, string][] }[] = [
     rows: [
       ['/ 或 Ctrl+K', '命令面板'],
       ['D', '今日打卡面板'],
+      ['P', '开始 / 暂停番茄钟'],
+      ['Shift+P', '停止番茄钟并记账'],
       ['?', '本速查表'],
     ],
   },

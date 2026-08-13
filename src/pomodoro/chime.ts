@@ -1,0 +1,115 @@
+/**
+ * 到点提醒：合成提示音 + 系统通知 + 标题闪烁降级（番茄钟规格 §5.7）。
+ *
+ * 三条硬性约定：
+ * · AudioContext **必须在「开始专注」的手势回调里创建并 resume()** —— autoplay policy 下
+ *   手势之前创建出来的上下文是 suspended，25 分钟后想响也响不了。
+ * · **播放前必须重新检查 ctx.state**：创建到响铃隔着 25 分钟，页面进过 bfcache/frozen
+ *   会让上下文被 suspend；resume() 失败一律**静默降级**（通知/标题闪烁），绝不 toast 报错。
+ * · 通知只在**页面隐藏**时发，且必须带 tag —— 零成本的双弹去重兜底，Web Locks 选主失效时
+ *   唯一的防线。权限只在用户主动打开开关时请求（页面加载即请求会招来更安静的权限 UI 惩罚）。
+ */
+import { useStore } from '../store/useStore';
+import { CHIME_FREQS, CHIME_GAIN, CHIME_NOTE_MS } from './constants';
+import type { ChimeKind } from './kernel';
+import { flashTitle } from './title';
+
+const NOTIFY_TAG = 'yearflow-pomodoro';
+
+let ctx: AudioContext | null = null;
+
+type Ctor = typeof AudioContext;
+function audioCtor(): Ctor | null {
+  const w = window as unknown as { AudioContext?: Ctor; webkitAudioContext?: Ctor };
+  return w.AudioContext ?? w.webkitAudioContext ?? null;
+}
+
+/** 在「开始专注」的手势回调里调用（同步创建 + resume，之后全程复用同一实例） */
+export function unlockAudio(): void {
+  try {
+    const Ctor = audioCtor();
+    if (!Ctor) return;
+    ctx ??= new Ctor();
+    if (ctx.state !== 'running') void ctx.resume();
+  } catch {
+    ctx = null; // 拿不到音频上下文就静默走通知/标题降级
+  }
+}
+
+/** 两声短促柔和音（880Hz → 1174Hz，各 90ms，指数衰减）。不引入音频文件 */
+async function playChime(): Promise<boolean> {
+  try {
+    const Ctor = audioCtor();
+    if (!Ctor) return false;
+    ctx ??= new Ctor();
+    if (ctx.state !== 'running') await ctx.resume();
+    if (ctx.state !== 'running') return false;
+    const note = CHIME_NOTE_MS / 1000;
+    CHIME_FREQS.forEach((freq, i) => {
+      const at = ctx!.currentTime + i * note;
+      const osc = ctx!.createOscillator();
+      const gain = ctx!.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, at);
+      gain.gain.setValueAtTime(CHIME_GAIN, at);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + note);
+      osc.connect(gain).connect(ctx!.destination);
+      osc.start(at);
+      osc.stop(at + note);
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function notifySupported(): boolean {
+  return typeof Notification !== 'undefined';
+}
+
+export function notifyPermission(): NotificationPermission | 'unsupported' {
+  return notifySupported() ? Notification.permission : 'unsupported';
+}
+
+/** 只在用户主动打开「到点通知」开关时调用 */
+export async function requestNotifyPermission(): Promise<boolean> {
+  if (!notifySupported()) return false;
+  if (Notification.permission === 'granted') return true;
+  if (Notification.permission === 'denied') return false;
+  try {
+    return (await Notification.requestPermission()) === 'granted';
+  } catch {
+    return false;
+  }
+}
+
+function showNotification(body: string): boolean {
+  if (!notifySupported() || Notification.permission !== 'granted') return false;
+  try {
+    const n = new Notification('YearFlow 番茄钟', { body, tag: NOTIFY_TAG });
+    n.onclick = () => {
+      window.focus();
+      n.close();
+    };
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const TEXT: Record<ChimeKind, string> = {
+  focusEnd: '这段专注到点了，休息一下',
+  breakEnd: '休息结束，可以再来一段',
+};
+
+/**
+ * 内核在**落库之后**调用（音频异常绝不允许阻断数据写入）。
+ * 前台：声音 + 页内结果卡即可，弹系统通知是最差选择；隐藏：声音 + 通知，通知发不出去则闪标题。
+ */
+export function handleChime(kind: ChimeKind): void {
+  const { sound, notify } = useStore.getState().settings.pomodoro;
+  if (sound) void playChime();
+  if (!document.hidden) return;
+  if (!notify) return; // 用户显式关掉了到点通知，不该改用闪标题绕过这个选择
+  if (!showNotification(TEXT[kind])) flashTitle(`⏰ ${TEXT[kind]}`);
+}

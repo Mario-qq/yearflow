@@ -9,6 +9,7 @@ import { Celebration } from './components/Celebration';
 import { SyncIndicator } from './components/SyncIndicator';
 import { initSync } from './db/sync/syncApi';
 import { initPomodoro } from './pomodoro/kernel';
+import { PomodoroWidget } from './pomodoro/PomodoroWidget';
 import { CommandPalette } from './components/CommandPalette';
 import { ShortcutHelp } from './components/ShortcutHelp';
 import { GanttToolbar } from './gantt/GanttToolbar';
@@ -113,7 +114,7 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return;
       const t = e.target as HTMLElement;
-      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable) return;
       const key = e.key.toLowerCase();
       if (key === 'z' && !e.shiftKey) {
         e.preventDefault();
@@ -133,7 +134,8 @@ export default function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
-      const typing = t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable;
+      // SELECT 也要挡：在下拉里按字母做 type-ahead 不该触发全局快捷键（D / / / ? / P 同理）
+      const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPaletteOpen((v) => !v);
@@ -187,6 +189,7 @@ export default function App() {
             <GanttToolbarSlot />
           </div>
           <div className="flex items-center gap-2">
+            <PomodoroWidget />
             <SyncIndicator />
             <button
               type="button"

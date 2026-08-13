@@ -450,7 +450,10 @@ S2 评审指出：§5.6 的「预生成 `sessionId` 幂等」只保证 **Dexie �
 - **两条实现约束**（S2 评审）：
   1. **锁请求必须在模块顶层、全文档只执行一次**。放进 React `useEffect` 会被 StrictMode 的 dev 双调用发出第二次 request，而 `() => new Promise(() => {})` 的回调**永不 resolve、锁永不释放**，`AbortSignal` 在授予之后也无法回收 ⇒ 第二个请求永久排队且卸载时无法清理，属结构性泄漏。
   2. **拿到锁不是同步的**：回调只在轮到本标签时才执行 ⇒ `isLeader` 初值必须是 `false`，并显式定义「尚未选出 leader 时到点了」= 所有标签都不响铃（可接受，窗口极短）。**leader 换人时（原 leader 关闭、新 leader 上位）新 leader 必须立即重下闹钟**——它此前作为 follower 没有 timeout。
+  3. ⚠️ **「有没有 leader」这个标记必须在拿到锁之前就置位**（S4 实测新增，`kernel.ts` 的 `leaderKnown`）。S3 实现把它写在授予回调里 —— 那是 leader 视角，而它真正的消费者是 **follower**（`onAlarm` 的 `!isLeader && leaderKnown` 门禁）。等自己拿到锁才置位 ⇒ 排队中的 follower 永远认为「还没选出 leader」⇒ **每个标签都自己结算、自己响铃**。S4 双标签实测：**follower 抢先落库**（leader 反被自己的 `storage` 事件挡回 `settledIds`），于是结果卡与响铃出现在用户没在看的那个标签，声音响两遍。Dexie 行数靠预生成 id 仍是 1 ⇒ 不丢数、不报错，纯粹是「响两声 + 卡片跑错标签」，正是最容易被当成玄学的一类缺陷。
+     ⇒ **只要 `navigator.locks.request` 存在就立刻 `leaderKnown = true`**，只有 request 本身 reject（API 不可用）才降级回 `false`（此时各标签各自负责，靠幂等 id 保住行数）。修正后复测：leader 落库 + 结果卡 + 节律 +1，follower 零写入、零 undo、干净回 idle。
 - 非 leader 标签：照常显示倒计时、照常可操作（操作会写 localStorage，leader 通过 `storage` 事件感知），但**不响铃、不弹通知、不执行结算落库**。
+  例外（有意如此）：`catchUp` / `initPomodoro` 的**恢复结算不受 leader 门禁约束** —— leader 恰好是被冻结的那个标签时，只有前台标签能救回这段时长；重复由 `settledIds` + 幂等 id 兜住。
 - 落库幂等兜底：结算用预生成的 `sessionId` 作为 id ⇒ 即使出现双写也只是同一行被覆盖两次，不会产生两条。
 - 不引入 BroadcastChannel：`storage` 事件已经免费提供跨标签通知（运行状态本来就存在 localStorage）。
 
@@ -881,16 +884,18 @@ effectiveMsByGoalDate(checkIns, sessions, goalId, date):
 - [ ] `docs/SPEC.md` §三/§十 补第 7 张表；`docs/PROGRESS.md` 记录
 - [ ] 验证：`tsc -b` + oxlint + vitest 全绿 → commit
 
-### S4 — 桌面 UI 完全体
+### S4 — 桌面 UI 完全体 【已完成 2026-08-13】
 
-- [ ] `--font-32` 令牌；顶栏胶囊（**空元素 + ref 直写**，只显示时间）；320px 面板（hero 倒计时 + 进度环，**两者同走那一个单例 ticker**）+ 任务选择器 + 操作 + 今日已专注 + 未归类入口
-- [ ] 结果卡（含 `[✓ 记为完成]` 独立命令、「计入 X 月 X 日」、`needsReview` 徽标 + **`[知道了]` 清除路径**、`< 60s` 丢弃 toast）
-- [ ] 声音（OscillatorNode 合成，**播放前查 `ctx.state`**）、通知（`new Notification` + `tag`，开关时才请求权限）、`document.title`（仅隐藏时 1/s，`restoreTitle()` 五处调用）
-- [ ] `P` / `Shift+P` 快捷键（typing 守卫补 `SELECT`）+ 补 `ShortcutHelp` GROUPS
-- [ ] 设置页「番茄钟」区 6 项 + 诚实说明文案
-- [ ] 打卡页 ▶ 入口 + 分钟框自动值 placeholder
-- [ ] 移动端隐藏全部入口
-- [ ] 验证：`tsc -b` + oxlint + vitest 全绿 + §11.2 主要项 → commit
+- [x] `--font-32` 令牌；顶栏胶囊（**空元素 + ref 直写**，只显示时间）；320px 面板（hero 倒计时 + 进度环，**两者同走那一个单例 ticker**，`ticker.ts`）+ 任务选择器 + 操作 + 今日已专注 + 未归类入口
+- [x] 结果卡（含 `[✓ 记为完成]` 独立命令、「计入 X 月 X 日」+ 改归相邻日、`needsReview` 徽标 + **`[知道了]` 清除路径**、`< 60s` 丢弃 toast）
+- [x] 声音（OscillatorNode 合成，**播放前查 `ctx.state`**）、通知（`new Notification` + `tag`，开关时才请求权限）、`document.title`（仅隐藏时 1/s，`restoreTitle()` 五处调用）
+- [x] `P` / `Shift+P` 快捷键（typing 守卫补 `SELECT`，顺手修好既有的 `D` / `/` / `?` 与甘特 `t/b/n/m`）+ 补 `ShortcutHelp` GROUPS
+- [x] 设置页「番茄钟」区 6 项（onBlur clamp 并回显）+ 诚实说明文案
+- [x] 打卡页 ▶ 入口（`TaskRow` / 单任务卡头 / 随缘区三处）+ 分钟框自动值 placeholder + 自动值与手填值并列展示（**两处展示位都改了**）
+- [x] 移动端隐藏全部入口（`useIsMobile` 卸载 + `max-md:hidden` 双保险；计时照常跑）
+- [x] 失联结算对话（§5.5 第 4 行）落地为唯一会打扰用户的模态
+- [x] **§5.6 第 3 条实现约束**（S4 实测发现的 leader 门禁缺陷，见该节）
+- [x] 验证：`tsc -b` + oxlint + vitest 178 全绿；§11.2 主要项实测（见 PROGRESS）；主包增量 **+8.9KB gzip**（178.81 → 187.75，门槛 ≤15KB，无需把面板拆 `lazy()`）；`scripts/capture-pomodoro.mjs` 14 张截图（胶囊三态 × 面板/选择器/结果卡 × 深浅）
 
 ### S5 — 统计可视化 + 打磨验收
 

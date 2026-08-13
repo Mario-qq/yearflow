@@ -274,7 +274,7 @@
 - **`buildRowLayout` 加可选参数而非改签名**：缺省等价于改造前，旧测试即回归护栏
 - 截图脚本两处坑：`updateSettings/execute` 落库防抖 500ms，写完立刻 `page.goto` 会丢改动（主题不生效、轨道消失），须 `waitForTimeout(700)`；缩放档位是 `role="radio"` 不是 button
 
-## 番茄钟模块 —— 专注计时与真实投入统计 【S1+S2+S3 完成 2026-08-13，待 S4 实施 UI】
+## 番茄钟模块 —— 专注计时与真实投入统计 【S1~S4 完成 2026-08-13，待 S5 统计可视化与验收】
 
 起因：现有 `CheckIn.minutes` 是手填估算（chips 10/15/30/60），只能表达「这天这个任务大概花了多久」，无法回答「实际专注了多少、什么时段、被打断几次」。加一个番茄钟：日常工作时集中注意力，并把年度总览的「投入时长」从估算升级为实测。
 
@@ -285,10 +285,41 @@
 - **S1 抢救落盘 + 规格书初稿** 【已完成】
 - **S2 对抗评审 + 规格定稿** 【已完成】
 - **S3 数据层 + 计时内核** 【已完成】：§四 21 项 + `0002` SQL + `derive/focus.ts`（47 条单测）+ `src/pomodoro/` 内核
-- **S4 桌面 UI 完全体**：顶栏胶囊 + 面板 + 结果卡 + 声音/通知/title + `P` 键 + 设置区 + 打卡页入口
+- **S4 桌面 UI 完全体** 【已完成】：顶栏胶囊 + 面板 + 结果卡 + 结算对话 + 声音/通知/title + `P`/`Shift+P` + 设置区 + 打卡页入口
 - **S5 统计可视化 + 打磨验收**：甘特中间态 + 补卡建议 + 会话历史/补录 + 性能实测 + 截图门槛 + 人工验收
 
 纪律（额度保护）：每会话开头读 CLAUDE.md → 本文件 → POMODORO_SPEC.md；除 S2 外不用 agent；到 85% 额度无条件收手并留交接；结尾 `tsc -b` + oxlint + vitest 全绿再 commit。
+
+### S4 产出（2026-08-13）：桌面 UI 完全体
+
+`tsc -b` + oxlint + vitest **178 通过 / 11 文件**（一条既有测试未改）。主包 **178.81 → 187.75 KB gzip（+8.9KB）**，门槛 ≤15KB ⇒ 面板不必拆 `lazy()`。新增依赖 **0 个**（Web Locks / AudioContext / Notification 全是平台 API）。
+
+**新增文件**：`src/pomodoro/` 下 `ticker.ts`（1s 单例 ticker）、`format.ts`（mmss / 中文时长）、`title.ts`（隐藏时倒计时 + 闪烁降级 + 幂等 `restoreTitle`）、`chime.ts`（OscillatorNode 合成 + 通知 + 权限请求）、`api.ts`（所有「开始」手势的统一入口，保证 AudioContext 在手势里解锁）、`useSelLabel.ts`、`TaskPicker.tsx`、`PomodoroPanel.tsx`、`ResultCard.tsx`、`PomodoroWidget.tsx`（胶囊 + 结算对话 + 快捷键）、`PomodoroSettings.tsx`、`StartFocusButton.tsx`；`scripts/capture-pomodoro.mjs`（14 张截图 → `docs/screenshots/pomodoro/`）。
+**改动点**：`tokens.css` 只加 `--font-32`；`App.tsx` 插胶囊 + typing 守卫补 `SELECT`；`GanttView.tsx` 同款守卫；`ShortcutHelp` 加 `P` / `Shift+P`；`SettingsPage` 加「番茄钟」区；`CheckInPage` / `GoalCheckCard` / `AdhocSection` 接自动值与 ▶ 入口。
+
+**性能门槛实测（甘特页 + 面板打开态，6 秒 MutationObserver）**：DOM 变更 18 次**全部**是倒计时/进度环/title 的 ref 直写，**其它变更 0 次** ⇒ React 重渲每秒 0 次；`window.__ganttDeriveComputes` 15 → 15（开着番茄钟不触发任何额外派生）。
+
+**§11.2 主要项实测（本机 dev + 双标签）**：
+- 暂停：剩余量冻结、胶囊转 `⏸`、**暂停期间心跳照写**（否则「暂停去开会」回来必弹一次无谓对话）
+- 停止：恰好 1 行、undo **+1 格**、`outcome: 'stopped'`、`pauses` 1 段、运行态 key 已清、title 已恢复
+- **终止竞态**：`plannedMs` 1.5s 后立刻停止 ⇒ 仍只 1 行 / 只 +1 格，`stopped` 没被随后的 timeout 改写成 `completed`
+- 恢复：刷新无缝续跑（含移动端宽度下）；`gap > 90s` ⇒ 结算对话，`算到刚才 5 分` 落库正好 300000ms（走 `netFocusMs`，暂停未被重复扣）
+- `> 4h` ⇒ `hardCut`：`focusMs` clamp 到 `plannedMs`、`needsReview` 徽标出现，`[知道了]` 清掉徽标且**不动时长、不置 `source:'manual'`**
+- `< 60s` ⇒ 不落库 + 轻 toast「这段不足 1 分钟，未记录」
+- 未归类 → 面板「N 段未归类 · 去归类」→ 选任务 ⇒ `改归属为「…」` 一条 undo，计数归零
+- 「✓ 记为完成」是**独立一条 undo**（`打卡「SAP系统」完成`），按钮即时回显「已完成 ✓」；未归类时禁用并说明原因
+- 打卡页：▶ 起跑归属正确带 `taskId`，行内并列显示「25 分（自动）」，分钟框 placeholder「自动 25 分」且**不预填**；运行中该行图标转 🍅
+- 设置页数字框 clamp：`999 → 180`、`0 → 1`，都写回并回显
+- 移动端 375×812 冷启动：番茄入口**零节点**，但计时照常跑（拉宽即无缝接上）
+- 双标签：显示天然一致（follower 也走 `Date.now()` 现算）；**修正后**只有 leader 落库/响铃，follower 零写入零 undo
+
+**一条 S4 实测发现并修正的缺陷（已回填规格 §5.6 第 3 条）**：`kernel.ts` 的 `leaderKnown` 原本写在 Web Locks 授予回调里 —— 那是 leader 视角，而消费者是 follower 的门禁。结果排队中的 follower 永远认为「还没选出 leader」⇒ 每个标签各自结算各自响铃；双标签实测**由 follower 抢先落库**，结果卡与响铃跑到用户没在看的标签，声音响两遍（Dexie 行数靠幂等 id 仍是 1，所以不丢数、不报错，极易被当成玄学）。改为「只要 `navigator.locks.request` 存在就立刻置位，request reject 才降级」。
+
+**两条实现细节值得记住**：
+- 胶囊/hero/环的文本都由 ticker 经 ref 写，但**额外挂了一个每次重渲后补写的 `useLayoutEffect`**：状态迁移（开始/暂停/结算）与设置改动要立刻反映，否则最长会空着一整秒才刷新。
+- 任何来源起的一段专注都把选择同步回面板 `sel`（`running.sessionId` 变化时）。少了它：从打卡页 ▶ 起跑，这段结束后面板回显「暂不归类」，用户接着按 `P` 就起了一段没归属的会话。
+
+**本机环境两个坑（下次别再踩）**：① Playwright 里 `getByRole('button', {name})` 匹配的是**可及名**，任务选择器的可及名来自「目标 · 任务」文本会随数据变，要按 `title` 定位；② 用 `dispatchEvent(new Event('blur'))` 验不了 React 的 `onBlur`（React 走 `focusout`），必须真实点走焦点。
 
 ### S3 产出（2026-08-13）：数据层 + 计时内核落地（UI 留给 S4）
 

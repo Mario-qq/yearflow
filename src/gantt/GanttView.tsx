@@ -451,7 +451,8 @@ export default function GanttView() {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const t = e.target as HTMLElement;
-      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
+      // SELECT 一并挡掉：在下拉里按字母做 type-ahead 不该触发 t/b/n/m 等全局键
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable) return;
       const el = scrollerRef.current;
       const { settings, updateGanttView } = useStore.getState();
       switch (e.key) {

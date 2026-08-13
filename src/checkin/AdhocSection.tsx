@@ -8,8 +8,22 @@ import type { AdhocEntry, DayTaskEntry } from '../lib/derive';
 import type { Goal } from '../types/domain';
 import { goalColor } from '../lib/colors';
 import { ExpandChevron, StatusButtons, TaskEditor } from './GoalCheckCard';
+import { StartFocusButton } from '../pomodoro/StartFocusButton';
+import { toMinutes } from '../pomodoro/format';
 
-function AdhocRow({ goal, entry, date }: { goal: Goal; entry: AdhocEntry; date: string }) {
+function AdhocRow({
+  goal,
+  entry,
+  date,
+  autoMs = 0,
+  isToday,
+}: {
+  goal: Goal;
+  entry: AdhocEntry;
+  date: string;
+  autoMs?: number;
+  isToday?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   // AdhocEntry 与 DayTaskEntry 同形，直接复用打卡键/编辑器
   const te: DayTaskEntry = { taskId: entry.taskId, name: entry.name, status: entry.status, record: entry.record };
@@ -30,12 +44,22 @@ function AdhocRow({ goal, entry, date }: { goal: Goal; entry: AdhocEntry; date: 
             {entry.record.minutes}分
           </span>
         ) : null}
+        {autoMs > 0 && (
+          <span
+            className="tnum shrink-0"
+            style={{ fontSize: 'var(--font-12)', color: 'var(--accent)' }}
+            title="番茄钟实测时长（统计里与手填取更完整的那个）"
+          >
+            {toMinutes(autoMs)} 分（自动）
+          </span>
+        )}
+        {isToday && <StartFocusButton goalId={entry.goalId} taskId={entry.taskId} />}
         <StatusButtons goalId={entry.goalId} date={date} te={te} compact statuses={['done', 'partial']} />
         <ExpandChevron open={open} onClick={() => setOpen((v) => !v)} title={open ? '收起' : '展开分钟与备注'} />
       </div>
       {open && (
         <div className="px-3 pb-2.5">
-          <TaskEditor goalId={entry.goalId} date={date} te={te} />
+          <TaskEditor goalId={entry.goalId} date={date} te={te} autoMs={autoMs} />
         </div>
       )}
     </div>
@@ -46,10 +70,15 @@ export function AdhocSection({
   entries,
   goals,
   date,
+  focusMsByTask,
+  isToday,
 }: {
   entries: AdhocEntry[];
   goals: Record<string, Goal>;
   date: string;
+  /** 当日各任务的番茄自动时长（taskId → ms） */
+  focusMsByTask?: Map<string, number>;
+  isToday?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   if (entries.length === 0) return null;
@@ -84,7 +113,16 @@ export function AdhocSection({
       {open &&
         entries.map((e) => {
           const goal = goals[e.goalId];
-          return goal ? <AdhocRow key={e.taskId} goal={goal} entry={e} date={date} /> : null;
+          return goal ? (
+            <AdhocRow
+              key={e.taskId}
+              goal={goal}
+              entry={e}
+              date={date}
+              autoMs={focusMsByTask?.get(e.taskId) ?? 0}
+              isToday={isToday}
+            />
+          ) : null;
         })}
     </div>
   );

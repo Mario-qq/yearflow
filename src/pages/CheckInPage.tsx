@@ -6,7 +6,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { fmtDay, toDay, todayStr } from '../lib/date';
-import { adhocEntries, calcStreak, dayCompletionRate, dayEntries } from '../lib/derive';
+import { adhocEntries, calcStreak, dayCompletionRate, dayEntries, focusMsByTaskDate } from '../lib/derive';
 import { AdhocSection } from '../checkin/AdhocSection';
 import { BackfillDialog } from '../checkin/BackfillDialog';
 import { DayStrip, type StripDay } from '../checkin/DayStrip';
@@ -39,6 +39,7 @@ export default function CheckInPage() {
   const tasks = useStore((s) => s.tasks);
   const checkIns = useStore((s) => s.checkIns);
   const exemptions = useStore((s) => s.exemptions);
+  const focusSessions = useStore((s) => s.focusSessions);
 
   const today = todayStr();
   const [selectedDate, setSelectedDate] = useState(today);
@@ -90,6 +91,12 @@ export default function CheckInPage() {
     return map;
   }, [entries, taskList, checkInList, exemptionList, today]);
 
+  // 所看日期各任务的番茄实测时长：只做提示与并列展示，绝不预填分钟框（手填永远是显式动作）
+  const focusMsByTask = useMemo(
+    () => focusMsByTaskDate(Object.values(focusSessions), selectedDate),
+    [focusSessions, selectedDate],
+  );
+
   const yesterday = fmtDay(toDay(today).subtract(1, 'day'));
   const yesterdayMissed = useMemo(
     () => entriesOf(yesterday).filter((e) => !e.exempt && !e.allRecorded).length,
@@ -126,6 +133,8 @@ export default function CheckInPage() {
         entry={e}
         streak={isToday ? streakByGoal.get(e.goalId) : undefined}
         date={selectedDate}
+        focusMsByTask={focusMsByTask}
+        isToday={isToday}
         expanded={expandedGoalId === e.goalId}
         onToggleExpand={() => setExpandedGoalId((v) => (v === e.goalId ? null : e.goalId))}
       />
@@ -222,7 +231,13 @@ export default function CheckInPage() {
         </div>
       )}
 
-      <AdhocSection entries={adhoc} goals={goals} date={selectedDate} />
+      <AdhocSection
+        entries={adhoc}
+        goals={goals}
+        date={selectedDate}
+        focusMsByTask={focusMsByTask}
+        isToday={isToday}
+      />
 
       {isToday && yesterdayMissed > 0 && (
         <button

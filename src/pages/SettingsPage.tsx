@@ -4,6 +4,7 @@ import { db } from '../db/schema';
 import { flushNow } from '../store/persist';
 import { ExemptionManager } from '../checkin/ExemptionManager';
 import { SyncSection } from '../components/SyncSection';
+import { PomodoroSettings } from '../pomodoro/PomodoroSettings';
 import { buildBackupJSON, parseBackupJSON } from '../lib/backup';
 import { buildSeedBundle } from '../seed/seedData';
 import { todayStr } from '../lib/date';
@@ -172,6 +173,11 @@ export default function SettingsPage() {
             开始
           </label>
         </div>
+      </Section>
+
+      {/* 番茄钟与外观同属设备本地偏好（settings 不同步），紧挨着放 */}
+      <Section title="番茄钟">
+        <PomodoroSettings />
       </Section>
 
       <Section title="数据">
