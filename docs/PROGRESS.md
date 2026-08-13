@@ -273,3 +273,40 @@
 - **展开后保留轨道汇总行**：折叠按钮位置不跳、可对照总路径看具体步骤，代价是每条轨道多占 40px
 - **`buildRowLayout` 加可选参数而非改签名**：缺省等价于改造前，旧测试即回归护栏
 - 截图脚本两处坑：`updateSettings/execute` 落库防抖 500ms，写完立刻 `page.goto` 会丢改动（主题不生效、轨道消失），须 `waitForTimeout(700)`；缩放档位是 `role="radio"` 不是 button
+
+## 番茄钟模块 —— 专注计时与真实投入统计 【设计中，S1 已完成 2026-08-13】
+
+起因：现有 `CheckIn.minutes` 是手填估算（chips 10/15/30/60），只能表达「这天这个任务大概花了多久」，无法回答「实际专注了多少、什么时段、被打断几次」。加一个番茄钟：日常工作时集中注意力，并把年度总览的「投入时长」从估算升级为实测。
+
+规格书：**`docs/POMODORO_SPEC.md`（757 行，SPEC 扩展，番茄钟范围内以它为准）**
+前置事实依据：`docs/pomodoro/01~04-facts-*.md`（4 份勘察/研究报告，共 ~10 万字符，区分【读码确认】与【推断】）
+
+### 会话规划（5 个会话，每个独立可提交）
+- **S1 抢救落盘 + 规格书初稿** 【已完成】
+- **S2 对抗评审 + 规格定稿**：唯一用 agent 的会话（2 个并发上限）——数据正确性视角 + 手感/性能/平台视角各一，对抗式证伪后改规格、冻结
+- **S3 数据层 + 计时内核**：SPEC §四 20 项 + `0002` SQL + `derive/focus.ts` + `src/pomodoro/` 内核 + 单测
+- **S4 桌面 UI 完全体**：顶栏胶囊 + 面板 + 结果卡 + 声音/通知/title + `P` 键 + 设置区 + 打卡页入口
+- **S5 统计可视化 + 打磨验收**：甘特中间态 + 补卡建议 + 会话历史/补录 + 性能实测 + 截图门槛 + 人工验收
+
+纪律（额度保护）：每会话开头读 CLAUDE.md → 本文件 → POMODORO_SPEC.md；除 S2 外不用 agent；到 85% 额度无条件收手并留交接；结尾 `tsc -b` + oxlint + vitest 全绿再 commit。
+
+### S1 产出与已拍板的核心决策
+- [x] 4 份事实包从 workflow journal 抢救进 `docs/pomodoro/`（上一轮 workflow 跑完前 2 阶段后额度中断，结果只存在于临时 journal，仓库零文件）
+- [x] `docs/POMODORO_SPEC.md` 全 14 章（领域模型 / 存储同步备份改动清单含完整 SQL / 计时内核状态机 / 与打卡口径 / 派生统计 / UI 逐界面规格 / 边界故障表 / 性能与容量红线 / 测试清单 / S3-S5 批次 / 局限与升级路径 / 被否决方案附录）
+- [x] 用户拍板三项：范围 = 规格定稿 + 全部实现；打卡耦合 = 独立新表 + 人确认打卡；**v1 纯桌面（移动端不做）**
+
+**核心决策（S3 起直接执行，不再重新论证）**
+- **新增第 7 张实体表 `focusSessions`**（远端 `focus_sessions`）。一条记录 = 一次专注会话（`startAt/endAt/pauses[]` + 结算后的 `focusMs`），**不含任何需要累加的字段** —— 这是 append-only 行在整行 LWW 下天然安全的原因。塞 `CheckIn.minutes`（LWW + 累加 = 静默丢数）与塞 `AppSettings`（永不同步）都已被结构性否决，理由见 SPEC §十四
+- **运行中状态存 localStorage，不入库不同步不进 undo**；只有「已结束的会话」走一次 `execute`。心跳绝不走 `persist`——否则 `emitLocalWrite` 会不断重置同步的 3 秒防抖，番茄运行期间云同步被无限推迟
+- **时长唯一权威 = `Date.now()` 差值**；`performance.now()` 只用于探测时钟跳变与动画；闹钟用**单根长 `setTimeout`**（链长 1 ⇒ 结构上免疫 Chrome intensive throttling 的 1/min 档）；绝不 tick 累加、绝不用 rAF
+- **到点自动结算**是消灭「忘记停」的主手段；页面被冻结时按计划终点结算；`focusMs` 无条件 clamp 到 `plannedMs` ⇒ 休眠 3 小时结构上不可能记成 3 小时；4h 硬截断 + `gap > 90s` 结算对话 + 跳变标 `needsReview`
+- **打卡 `status`/streak/热度/点阵/自动进度全部不动**（既有事实：`streak.ts`/`heat.ts`/`scheduled.ts`/`dayPanel.ts`/`derive/gantt.ts`/`tracks.ts` 全部只看 `status`、不消费 `minutes`）⇒ 131 个既有测试零风险。唯一连接点是结果卡上的 `[✓ 记为完成]` 独立命令
+- **统计层一处收口 `effectiveMinutes`**：在 `(goal, task, date)` 粒度取 `max(自动, 手填)` 再求和（按任务分桶是关键：目标级取 max 会丢掉「A 手填 60 + B 番茄 25」里的 25）。消费端只有 3 处（`review.ts` 两处 + `AnnualOverview` 一处），新增 `sessions` 参数缺省 ⇒ 既有 review 单测一行不改即回归护栏
+- **多标签用 Web Locks 选主**（永不释放的 exclusive 锁；标签崩溃锁自动释放，无需心跳超时，胜过 BroadcastChannel）；显示一致性免费（剩余时间 = f(记录, `Date.now()`)）；结算用预生成 id 幂等兜底
+- **v1 不碰 Service Worker / PWA 配置**：纯桌面用 `new Notification()` 即可，从而避开「改 SW → 已 code-split 的懒加载 chunk 部署后 404」风险区。已核实全仓零 `virtual:pwa-register` 引用 ⇒ SW 更新不会自动 reload，不会打断运行中的计时（若将来有人加 `registerSW({immediate:true})`，此结论失效）
+- **顶栏胶囊是主形态**，倒计时**直写 DOM（零 React 重渲）**——照 `dragHint` 单例样板。若每秒 setState，甘特页每秒重渲会直接违反「拖拽 60fps」门槛
+- 快捷键 **`P`**（已核实空闲）；**不抢空格、不用 Esc**（Esc 全仓 9 个消费者）；必须补进 `ShortcutHelp` GROUPS
+- **唯一令牌缺口**：`tokens.css` 字号封顶 `--font-20`，面板 hero 倒计时需新增 **`--font-32`**；进度环几何落新建的 `src/pomodoro/constants.ts`（仓内已有两处手写环，不塞 `gantt/constants.ts`）
+- **容量红线 8000 行**（约 1.5-2 年）：v1 全量 hydrate（与既有 7 表一致、零特例），越线后启用「近 400 天窗口化 hydrate + `exportBundle` 该表改读 Dexie + 往年 async 补载」。`date` 索引在 v1 一次建好 ⇒ 将来切换无需再升 Dexie 版本
+- ⚠️ **同步游标的坑**：推送游标是**全局单值**，`updatedAt` 早于游标的行永不推送 ⇒ 约定「`updatedAt` 永远是最后写入的真实时刻，业务时间只放 `startAt`/`date`」；补录 1 月的会话，`updatedAt` 也是今天
+- ⚠️ **加表的 3 处无编译护栏**（漏改静默出错）：`TABLE_NAMES`（漏 = 新表永不同步/不导出，最危险）、`hydrate` 的 `set({...})`（漏 = 表在但内存永远空）、`SettingsPage.TABLE_LABEL`（漏 = 界面渲染 undefined）
