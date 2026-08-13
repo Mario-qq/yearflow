@@ -290,6 +290,18 @@
 
 纪律（额度保护）：每会话开头读 CLAUDE.md → 本文件 → POMODORO_SPEC.md；除 S2 外不用 agent；到 85% 额度无条件收手并留交接；结尾 `tsc -b` + oxlint + vitest 全绿再 commit。
 
+### 修复（2026-08-13）：任务选择器长列表被压扁 + 下拉顶出视口
+
+用户报告：番茄钟选任务时「任务太多会被截断」。实测下来不是数据被截断，是**每一行都在、但被压扁到 13px 且滚不动**。
+
+**根因**：`TaskPicker` 的列表是 `flex flex-col overflow-y-auto`，而每个选项行自带 `truncate`（即 `overflow: hidden`）。CSS 规范里 flex item 的 `min-height: auto` 只有在 `overflow: visible` 时才解析为内容高度；子项一旦 `overflow: hidden`，自动最小尺寸退化为 **0** ⇒ 16 行被硬塞进 `max-h-56`（224px），每行压到 ~13px 文字上下削平，且因为「内容装得下」滚动条根本不出现。
+
+**修复**：
+1. 列表内所有 flex 子项（选项行 / 分组标题 / 空态 / 搜索框 / 底部「暂不归类」）一律 `shrink-0` ⇒ 行高恢复 26px、溢出、滚动条正常工作。
+2. 下拉改为**打开时量视口**（`useLayoutEffect` + resize 监听）：下方装不下且上方更宽裕 ⇒ 翻到上方开；否则就地把列表高度压到 `min(224, 可用空间 - chrome)`，但不低于 96px。几何常量进 `pomodoro/constants.ts`（`PICKER_*`），不散落魔数。面板底部那批 compact 选择器（未归类归类行、`SessionHistory` 补录行）以前展开会直接顶出屏幕，现在必定完整可见。
+
+**实测**（`scripts/capture-picker.mjs`，注入 24 个每日任务撑爆列表，系统 Chrome）：行高最小 26px（修复前 13px）、`scrollHeight 203 > clientHeight 96` 且能滚到底；视口压到 620px 时补录选择器 `flippedUp: true` 且完整落在视口内；深浅两主题各 3 张图 → `docs/screenshots/pomodoro/picker-*.png`。`tsc -b` + oxlint + vitest 185 通过。
+
 ### S5 产出（2026-08-13）：统计可视化 + 打磨验收（番茄钟模块收尾）
 
 `tsc -b` + oxlint + vitest **185 通过 / 11 文件**（既有 131 条仍一行未改 ⇒ 回归护栏依然成立）。主包 **187.75 → 190.21 KB gzip（S5 +2.46KB；番茄钟全模块累计 +11.4KB，门槛 ≤15KB）**，recharts 仍只在 review 分包（107.01KB gzip），新增依赖 0 个。

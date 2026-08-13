@@ -35,6 +35,18 @@ export const RING_STROKE = 3;
 export const RING_R = (RING_SIZE - RING_STROKE) / 2;
 export const RING_CIRCUM = 2 * Math.PI * RING_R;
 
+// ── 任务选择器下拉几何（TaskPicker：面板底部那批 compact 选择器离视口下沿很近） ──
+/** 选项列表理想高度（原 max-h-56） */
+export const PICKER_LIST_MAX = 224;
+/** 列表再挤也不低于这个高度，否则宁可翻到上方开 */
+export const PICKER_LIST_MIN = 96;
+/** 下拉框除列表外的固定高度：搜索框 + 分组标题 + 底部「暂不归类」+ 内边距 */
+export const PICKER_CHROME_H = 104;
+/** 下拉框与触发按钮的间距（等价 mt-1） */
+export const PICKER_GAP = 4;
+/** 下拉框与视口边沿的安全距离 */
+export const PICKER_VIEWPORT_MARGIN = 12;
+
 // ── 提示音（OscillatorNode 现场合成，不引入音频文件） ─────────────────
 export const CHIME_FREQS = [880, 1174] as const; // A5 → D6
 export const CHIME_NOTE_MS = 90;

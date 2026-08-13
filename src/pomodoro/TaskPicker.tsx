@@ -8,11 +8,18 @@
  * · 选中日期范围外 / 已完成的任务：**提示但不阻止**（任务延期是真实情况），
  *   并顺手给一个「延长任务到今天」的快捷动作。
  */
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { adhocEntries, dayEntries } from '../lib/derive';
 import { patchTask } from '../store/actions';
 import { todayStr } from '../lib/date';
+import {
+  PICKER_CHROME_H,
+  PICKER_GAP,
+  PICKER_LIST_MAX,
+  PICKER_LIST_MIN,
+  PICKER_VIEWPORT_MARGIN,
+} from './constants';
 import { useSelLabel, type FocusSel } from './useSelLabel';
 
 interface Option {
@@ -48,6 +55,9 @@ export function TaskPicker({
   const exemptions = useStore((s) => s.exemptions);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const anchorRef = useRef<HTMLButtonElement>(null);
+  /** 打开方向与列表高度：面板底部那批 compact 选择器若一律向下开会顶出视口 */
+  const [drop, setDrop] = useState({ up: false, listMax: PICKER_LIST_MAX });
   const today = todayStr();
   const label = useSelLabel(value);
 
@@ -106,6 +116,25 @@ export function TaskPicker({
   const notStarted = picked && !picked.deletedAt && picked.startDate > today;
   const isDone = picked?.status === 'done';
 
+  // 打开瞬间（以及视口变化时）量一次上下空间：下方装不下且上方更宽裕就翻上去开，
+  // 否则就地压缩列表高度 —— 但压不到 PICKER_LIST_MIN 以下，那种高度已经不能用了。
+  useLayoutEffect(() => {
+    if (!open) return;
+    const measure = (): void => {
+      const r = anchorRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const below = window.innerHeight - r.bottom - PICKER_GAP - PICKER_VIEWPORT_MARGIN;
+      const above = r.top - PICKER_GAP - PICKER_VIEWPORT_MARGIN;
+      const wanted = PICKER_LIST_MAX + PICKER_CHROME_H;
+      const up = below < wanted && above > below;
+      const space = (up ? above : below) - PICKER_CHROME_H;
+      setDrop({ up, listMax: Math.max(PICKER_LIST_MIN, Math.min(PICKER_LIST_MAX, space)) });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [open]);
+
   const choose = (sel: FocusSel) => {
     onPick(sel);
     setOpen(false);
@@ -115,6 +144,7 @@ export function TaskPicker({
   return (
     <div className="relative">
       <button
+        ref={anchorRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="flex w-full cursor-pointer items-center gap-1 text-left"
@@ -149,9 +179,12 @@ export function TaskPicker({
 
       {open && (
         <div
-          className="absolute right-0 left-0 z-50 mt-1 flex flex-col border p-2"
+          className="absolute right-0 left-0 z-50 flex flex-col border p-2"
           style={{
-            top: '100%',
+            top: drop.up ? undefined : '100%',
+            bottom: drop.up ? '100%' : undefined,
+            marginTop: drop.up ? undefined : PICKER_GAP,
+            marginBottom: drop.up ? PICKER_GAP : undefined,
             borderColor: 'var(--border-default)',
             borderRadius: 'var(--radius-md)',
             background: 'var(--bg-raised)',
@@ -163,7 +196,7 @@ export function TaskPicker({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="搜索全部任务…"
-            className="mb-1.5 px-2 py-1 outline-none"
+            className="mb-1.5 shrink-0 px-2 py-1 outline-none"
             style={{
               fontSize: 'var(--font-12)',
               border: '1px solid var(--border-default)',
@@ -172,12 +205,20 @@ export function TaskPicker({
               color: 'var(--text-primary)',
             }}
           />
-          <div className="flex max-h-56 flex-col overflow-y-auto">
-            <span className="px-1 py-0.5" style={{ fontSize: 'var(--font-11)', color: 'var(--text-tertiary)' }}>
+          {/* 每一行都必须 shrink-0：行自带 truncate（overflow:hidden），
+              flex item 的自动最小尺寸随之退化为 0，不加就会被压扁成一叠、还挤不出滚动条 */}
+          <div className="flex flex-col overflow-y-auto" style={{ maxHeight: drop.listMax }}>
+            <span
+              className="shrink-0 px-1 py-0.5"
+              style={{ fontSize: 'var(--font-11)', color: 'var(--text-tertiary)' }}
+            >
               {q ? `搜索结果 ${list.length}` : '今日在办'}
             </span>
             {list.length === 0 && (
-              <span className="px-1 py-1" style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}>
+              <span
+                className="shrink-0 px-1 py-1"
+                style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}
+              >
                 {q ? '没有匹配的任务' : '今天没有在办任务，可搜索或暂不归类'}
               </span>
             )}
@@ -186,7 +227,7 @@ export function TaskPicker({
                 key={o.taskId}
                 type="button"
                 onClick={() => choose({ goalId: o.goalId, taskId: o.taskId })}
-                className="cursor-pointer truncate px-1 py-1 text-left"
+                className="shrink-0 cursor-pointer truncate px-1 py-1 text-left"
                 style={{
                   fontSize: 'var(--font-12)',
                   color: o.taskId === value.taskId ? 'var(--accent)' : 'var(--text-primary)',
@@ -202,7 +243,7 @@ export function TaskPicker({
           <button
             type="button"
             onClick={() => choose({})}
-            className="mt-1.5 cursor-pointer border-t px-1 pt-1.5 text-left"
+            className="mt-1.5 shrink-0 cursor-pointer border-t px-1 pt-1.5 text-left"
             style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)', borderColor: 'var(--border-subtle)' }}
           >
             暂不归类（先开始，事后再归）
