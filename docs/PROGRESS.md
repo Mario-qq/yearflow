@@ -463,3 +463,34 @@
 **一处实现期发现**：`streak.ts` 的 `calcStreak` 只给 `{current, longest}`，拿不到"最长那段在哪、被什么打断"——beat 5 的全部叙事价值都在后者。解法是在 `annual.ts` 里重走同一个 `expandScheduledDays` 并集 + `bestStatusByDate`，用上面那条相等断言锁死口径，而不是去改 `streak.ts`（它有 6 个消费者）。免打卡日不在应打卡并集里 ⇒ 天然不会被判为打断，故 `breakKind` v1 只有 `'missed'`。
 
 **Y2 起注意**：页面**只调 `annualIndex` 一次**（一个 `useMemo`），禁止每个 beat 组件各自调派生扫全表；`/year` 必须走 `lazy()`（主包 gzip 增量目标 0）；**报告一个 recharts 都不引**（全仓唯一 import 点必须仍只有 `AnnualOverview.tsx`），图全部自绘 SVG，坐标系可借 `gantt/timeScale.ts`；唯一新令牌是 `--font-48`。
+
+### Y2 产出（2026-08-14）：页面骨架 + beat 0–5
+
+`tsc -b` + oxlint（0 warning）+ vitest **225 通过 / 12 文件**（派生层一行未改 ⇒ 全绿）。Playwright + 系统 Chrome 14 条断言全过。新增依赖 **0 个**。
+
+**11 个 beat 的编号在这一批定稿**（规格只点名了 3/4/5/6/8/9，其余是本批按 `AnnualIndex` 字段补齐的，Y3 直接沿用）：
+`0` 封面（区间进度）· `1` 投入（目标分布）· `2` 节奏（逐月合计完成率）· `3` 错配镜 · `4` 最强月 vs 最弱月 · `5` 最长连续 —— 以上 Y2 完成；
+`6` 漂移排行 · `7` 里程碑 · `8` 停滞与放弃 · `9` 节律画像 · `10` 收尾 —— Y3。
+
+**新增文件**：`src/annual/`（`constants.ts` 几何与阈值 / `annual.css` 揭示与打印 / `format.ts` 文案 / `Beat.tsx` 外壳+HeroNumber+ChartBox+LookButton / `useLocate.ts` / `AnnualTopBar.tsx` / `BeatCover` `BeatInvested` `BeatCadence` `BeatMismatch` `BeatBestWorst` `BeatStreak`）、`src/pages/YearReportPage.tsx`、`scripts/capture-annual.mjs`、`docs/screenshots/annual/*`（17 张）。
+**改动既有文件 3 个**：`App.tsx`（NAV 加「年报」+ 一条 lazy 路由，移动 tab 4→5 格）、`tokens.css`（`+ --font-48`）、`lib/derive/index.ts`（**移除** annual 的 barrel 再导出，见下）。`actions.ts` / `store/*` / `db/*` / `gantt/*` / `review/*` / `checkin/*` / `pomodoro/*` **一行未改**。
+
+**包体：主包 gzip 增量 0.2kB（≈0），annual 全落 lazy chunk**
+实测 baseline `index` 619.44kB/gzip 190.42 → 现 619.97kB/gzip 190.63（+0.53/+0.21kB，就是 NAV 项与 lazy 路由本身）；`YearReportPage` chunk 30.67kB/gzip 10.30 + 0.37kB CSS。
+⚠️ **过程中的真坑**：Y1 给 `lib/derive/index.ts` 加的 annual barrel 再导出，在 Y1 时被 tree-shake 掉了（baseline 主包里搜不到 `plannedTaskDays`），但 Y2 一旦有 lazy chunk 引用它，`annual.ts` 就同时被「主包里的 barrel」与「lazy chunk」引用 ⇒ Rolldown 只能把它提到共享的 index chunk，主包 **+6.4kB / gzip +2.2kB**。仅把 import 改成直连 `derive/annual` **无效**（barrel 那条引用边还在，chunk 哈希一字未变）。唯一解是**把 annual 从 barrel 移出**，代价是年报违反「派生统一走 barrel」的仓内惯例 —— 已在 `index.ts` 原地写明原因，避免将来被人「顺手修回去」。**Y3 加 beat 6–10 时不要再往 barrel 里加年报导出。**
+
+**Y2 期间踩到并已固化的 4 条实现约束**
+1. **揭示用 ref 对象，绝不用内联 ref 回调**：内联回调每次渲染换身份 ⇒ React detach/attach 一轮 ⇒ 回调里 `setState` 就是「Maximum update depth exceeded」。实测炸过一次，`Beat.tsx` 里已写死注释。
+2. **截图不能用 `fullPage`，也不能整列一张**：滚动容器是 App 的 `<main>`（body 自身不滚），`fullPage` 只截视口那一屏；叙事列高 2300+px 时 `captureBeyondViewport` 会把 sticky 顶栏错位、并把视口外的 beat 截成**空白**（曾误判成「揭示失败」）。**逐 beat 截元素**是唯一可靠做法，正好对应规格 §7.3 的分组方式。
+3. **验证脚本注入的会话是纯内存的**，任何 `page.goto` reload 都会丢；改主题/切区间走 SPA 内交互即可，不要 goto。新建 browser context = 独立 IndexedDB，得各自种一遍数据。
+4. **SVG 的 `rx` 不接受 `var()`**（几何属性），故 `constants.ts` 里有 `SVG_RADIUS_SM = 4`，**必须与 `--radius-sm` 同值**。
+
+**三处口径/文案取舍（Y3 沿用，不再重新论证）**
+- **归档目标照常进年报**：年报是历史，`annualIndex` 的分母也含它们，从这一年抹掉会让百分比加不到 100。只有软删的才真正不算。（beat 8 的 `goalOutcomes` 排除归档，那是它自己的语义，不冲突。）
+- **beat 1 的 hero、工作日折算、目标条三者同底**（都只含已归类到目标的投入）。初版把未归类混进折算，出现「103.7 小时 ≈ 13.7 个工作日」这种读者一算就发现对不上的数字；未归类改为只在脚注披露。
+- **beat 4 的两种颜色只区分月份（accent / warning），不表达好坏**：被打断率是越低越好，把强月一律涂绿会在那一行说反话。语义色只留给真正有方向的量。
+- beat 2 结论句在「一个月都没过 80%」时改说最高的那个月 ——「0 个月做到了 80%」是句废话。
+
+**实测数字（dev server + 系统 Chrome，1440×1000）**：`/year` 首屏含 lazy chunk 载入 539–562ms。规格 §六 门槛是 <500ms，**但这是 dev 未压缩 + 冷加载 chunk 的读数，不是结论**；Y4 用生产构建 + 10 目标×8 任务×全年打卡×800 会话的压力数据正式复测，届时若真超，处方仍是给 `focus.ts` 加导出的 ms 版聚合（规格 §九-1），不是在年报里抄第二份分桶。
+
+**Y3 起注意**：beat 6–10 的数据在 `AnnualIndex` 里已经齐了（`drift` / `milestones` / `outcomes` / `rhythm`），照样只读 props，不许新调派生；`annual.css` 里已备好 `@media print` 的揭示覆盖（没滚到的 beat 不会在长图里留白），Y3 补其余打印规则即可；导出长图必须用 Playwright + 系统 Chrome 验证（`html-to-image` 的 resolve 包在 rAF 里，本机浏览器面板 `document.hidden=true` 下永挂）。

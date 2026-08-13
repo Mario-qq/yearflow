@@ -19,15 +19,18 @@ import SettingsPage from './pages/SettingsPage';
 
 // 复盘页含 recharts，路由级代码分割避免拖慢甘特首屏
 const ReviewPage = lazy(() => import('./pages/ReviewPage'));
+// 年报是低频叙事长页，同样走 lazy ⇒ 主包 gzip 增量目标 0（ANNUAL_SPEC §五 / §六）
+const YearReportPage = lazy(() => import('./pages/YearReportPage'));
 
 const NAV = [
   { to: '/gantt', label: '甘特图', icon: '📊' },
   { to: '/checkin', label: '打卡', icon: '✓' },
   { to: '/review', label: '复盘', icon: '📈' },
+  { to: '/year', label: '年报', icon: '📖' },
   { to: '/settings', label: '设置', icon: '⚙' },
 ];
 
-/** 移动端底部 tab 导航（SPEC 第五节）：打卡 / 甘特图 / 复盘 / 设置，≥44px 触达 */
+/** 移动端底部 tab 导航（SPEC 第五节）：甘特图 / 打卡 / 复盘 / 年报 / 设置，5 格各 20%，≥44px 触达 */
 function MobileTabBar() {
   return (
     <nav
@@ -233,6 +236,14 @@ export default function App() {
               element={
                 <Suspense fallback={<div className="p-6 text-tertiary">载入中…</div>}>
                   <ReviewPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/year"
+              element={
+                <Suspense fallback={<div className="p-6 text-tertiary">载入中…</div>}>
+                  <YearReportPage />
                 </Suspense>
               }
             />

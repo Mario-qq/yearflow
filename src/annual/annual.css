@@ -1,0 +1,40 @@
+/**
+ * 年报私有样式：只放「用内联 style 表达不了」的三件事 —— 滚动揭示、
+ * reduced-motion 静态直出、打印覆盖。随 /year 的 lazy chunk 一起载入，
+ * 主包零增量（规格 §六）。颜色/尺寸一律仍走 tokens.css 与 annual/constants.ts。
+ */
+
+.annual-beat {
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity 420ms var(--ease),
+    transform 420ms var(--ease);
+}
+
+.annual-beat.is-shown {
+  opacity: 1;
+  transform: none;
+}
+
+/* 规格 §4.3：reduced-motion 下静态直出，不做淡入也不做位移 */
+@media (prefers-reduced-motion: reduce) {
+  .annual-beat,
+  .annual-beat.is-shown {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/*
+ * 打印与长图导出（Y3 补全其余打印规则）：没滚到的 beat 若停在 opacity 0，
+ * 导出的长图就会有整块空白 —— 这里用 !important 压过 class 状态。
+ */
+@media print {
+  .annual-beat,
+  .annual-beat.is-shown {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
