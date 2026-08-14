@@ -32,11 +32,22 @@ export async function exportGanttPng(scroller: HTMLDivElement): Promise<void> {
   if (corner) corner.style.transform = `translateX(${sl}px)`;
   if (leftGrid) leftGrid.style.transform = `translateX(${sl}px)`;
 
-  const stage = document.createElement('div');
-  Object.assign(stage.style, {
+  // ⚠️ 交给 toCanvas 的节点自身不能是 position:fixed 的离屏节点，否则整张图全白：
+  // html-to-image 把节点连同计算样式塞进 SVG <foreignObject>，`left:-100000px` 在那个
+  // 坐标系里照样生效 ⇒ 内容被推出画布，只剩背景色（同 annual/exportLong.ts 的 makeStage）。
+  // 所以外壳 host 负责离屏，内层 stage 只做定位上下文（无偏移）负责被截。
+  const host = document.createElement('div');
+  Object.assign(host.style, {
     position: 'fixed',
     left: '-100000px',
     top: '0',
+    width: `${vw}px`,
+    height: `${vh}px`,
+    zIndex: '-1',
+  } satisfies Partial<CSSStyleDeclaration>);
+  const stage = document.createElement('div');
+  Object.assign(stage.style, {
+    position: 'relative',
     width: `${vw}px`,
     height: `${vh}px`,
     overflow: 'hidden',
@@ -50,7 +61,8 @@ export async function exportGanttPng(scroller: HTMLDivElement): Promise<void> {
   } satisfies Partial<CSSStyleDeclaration>);
   inner.appendChild(clone);
   stage.appendChild(inner);
-  document.body.appendChild(stage);
+  host.appendChild(stage);
+  document.body.appendChild(host);
 
   try {
     const canvas = await toCanvas(stage, { pixelRatio: PIXEL_RATIO, backgroundColor: bg });
@@ -65,6 +77,6 @@ export async function exportGanttPng(scroller: HTMLDivElement): Promise<void> {
       }, 'image/png');
     });
   } finally {
-    stage.remove();
+    host.remove();
   }
 }
