@@ -12,6 +12,7 @@
 import { useStore } from '../store/useStore';
 import { CHIME_FREQS, CHIME_GAIN, CHIME_NOTE_MS } from './constants';
 import type { ChimeKind } from './kernel';
+import { usePomodoroStore } from './store';
 import { flashTitle } from './title';
 
 const NOTIFY_TAG = 'yearflow-pomodoro';
@@ -97,6 +98,17 @@ function showNotification(body: string): boolean {
   }
 }
 
+/** 发一条测试通知：把「Chrome 站点权限 / 系统通知设置 / 专注助手」三层问题一次性分离出来 */
+export async function sendTestNotification(): Promise<string> {
+  if (!notifySupported()) return '这个浏览器不支持系统通知';
+  if (Notification.permission === 'denied') return '浏览器已拒绝通知权限，可在地址栏左侧站点设置里恢复';
+  if (Notification.permission !== 'granted' && !(await requestNotifyPermission()))
+    return '未获得通知权限';
+  return showNotification('这是一条测试通知。看不到它就说明系统层面拦住了：查 Windows 通知设置与专注助手')
+    ? '已发出。若屏幕上没看到，问题在系统通知设置或专注助手，不在本站'
+    : '发送失败，浏览器拒绝了这次通知';
+}
+
 const TEXT: Record<ChimeKind, string> = {
   focusEnd: '这段专注到点了，休息一下',
   breakEnd: '休息结束，可以再来一段',
@@ -104,10 +116,15 @@ const TEXT: Record<ChimeKind, string> = {
 
 /**
  * 内核在**落库之后**调用（音频异常绝不允许阻断数据写入）。
- * 前台：声音 + 页内结果卡即可，弹系统通知是最差选择；隐藏：声音 + 通知，通知发不出去则闪标题。
+ *
+ * ⚠️ `alert` 必须在 `document.hidden` 判断**之前**置位。原先这里前台直接 return，
+ * 于是「页面被冻结 → 到点时闹钟没跑 → 切回来 catchUp 补算结算」这条路径上
+ * 页面已经 visible，用户只听到一声铃，面板不点开就什么都看不见 —— 这正是
+ * 「明明开了通知却毫无提醒」的真实成因。alert 是那条路径唯一的可见出口。
  */
 export function handleChime(kind: ChimeKind): void {
   const { sound, notify } = useStore.getState().settings.pomodoro;
+  usePomodoroStore.setState({ alert: { kind, text: TEXT[kind], at: Date.now() } });
   if (sound) void playChime();
   if (!document.hidden) return;
   if (!notify) return; // 用户显式关掉了到点通知，不该改用闪标题绕过这个选择

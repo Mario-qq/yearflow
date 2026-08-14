@@ -11,6 +11,7 @@
  * 挂载/卸载无关（窗口被拖窄再拉宽能无缝接上，不会弹莫名的结算对话）。
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useIsMobile } from '../lib/useIsMobile';
 import { showToast } from '../lib/toast';
 import { handleChime } from './chime';
@@ -22,6 +23,7 @@ import {
   stopFocus,
 } from './kernel';
 import { togglePomodoroFromGesture } from './api';
+import { PipView } from './PipView';
 import { PomodoroPanel } from './PomodoroPanel';
 import { SessionHistory } from './SessionHistory';
 import { readLastTask } from './running';
@@ -110,6 +112,7 @@ function PomodoroCapsule() {
   const notice = usePomodoroStore((s) => s.notice);
   const ask = usePomodoroStore((s) => s.ask);
   const lastResult = usePomodoroStore((s) => s.lastResult);
+  const pipHost = usePomodoroStore((s) => s.pipHost);
   const [open, setOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [sel, setSel] = useState<FocusSel>(() => readLastTask() ?? {});
@@ -225,6 +228,8 @@ function PomodoroCapsule() {
       {open && <PomodoroPanel sel={sel} onSel={setSel} onOpenHistory={() => setHistoryOpen(true)} />}
       <SessionHistory open={historyOpen} onClose={() => setHistoryOpen(false)} />
       {ask && <AskDialog ask={ask} />}
+      {/* 悬浮小窗：内容在另一个系统窗口里，但仍是同一棵 React 树（Document PiP 同 realm） */}
+      {pipHost && createPortal(<PipView />, pipHost)}
     </div>
   );
 }

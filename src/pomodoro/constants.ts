@@ -7,6 +7,7 @@
 export const RUNNING_KEY = 'yearflow:pomodoro:running';
 export const CYCLE_KEY = 'yearflow:pomodoro:cycle';
 export const LAST_TASK_KEY = 'yearflow:pomodoro:lastTask';
+export const RECENT_TASKS_KEY = 'yearflow:pomodoro:recentTasks';
 
 /** Web Locks 选主锁名：请求一把永不释放的锁，拿到者即 leader（标签崩溃自动释放） */
 export const LOCK_NAME = 'yearflow-pomodoro';
@@ -28,6 +29,17 @@ export const CYCLE_IDLE_RESET_MS = 2 * 60 * 60 * 1000;
 export const CLOCK_JUMP_MS = 2_000;
 /** 休息段错过多久就不补响铃了 */
 export const BREAK_CHIME_GRACE_MS = 60_000;
+/**
+ * 自动开始休息的新鲜度窗口：只有「刚刚才到点」的结算才自动进休息。
+ * 合盖两小时后回来补算的那一段，休息时间早就过去了，再弹一段休息倒计时是纯噪音。
+ */
+export const AUTO_BREAK_FRESH_MS = 60_000;
+/**
+ * follower 兜底结算的等待时长。leader 恰好是被冻结的后台标签时，
+ * 它的闹钟根本不会触发 ⇒ 到点后没有任何标签结算、响铃。follower 等这么久后复查，
+ * 运行态还在就自己接手（重复由预生成 sessionId + settledIds + storage 事件三重兜住）。
+ */
+export const ALARM_FALLBACK_MS = 3_000;
 
 // ── 进度环几何（仓内第三处手写进度环，前两处：LeftGrid MonthRing、DayStrip） ──
 export const RING_SIZE = 48; // 直径 px
@@ -46,6 +58,15 @@ export const PICKER_CHROME_H = 104;
 export const PICKER_GAP = 4;
 /** 下拉框与视口边沿的安全距离 */
 export const PICKER_VIEWPORT_MARGIN = 12;
+/** 「最近」分组保留多少条（队列上限），以及下拉里最多显示几条 */
+export const RECENT_TASKS_LIMIT = 8;
+export const PICKER_RECENT_SHOWN = 5;
+
+// ── 悬浮小窗（Document PiP）几何 ────────────────────────────────────────
+export const PIP_W = 260;
+export const PIP_H = 172;
+/** 到点提醒态自动消退时长（照 title 闪烁的同一口径） */
+export const ALERT_TTL_MS = 30_000;
 
 // ── 提示音（OscillatorNode 现场合成，不引入音频文件） ─────────────────
 export const CHIME_FREQS = [880, 1174] as const; // A5 → D6

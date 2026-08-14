@@ -48,6 +48,11 @@ export interface Task {
    * 显式字段而非从 dependsOn 推导：依赖表达时序，轨道表达项目归属，二者不等价。
    */
   trackId?: string;
+  /**
+   * 不需要专注计时：番茄钟任务选择器默认不列出它（仍可搜索到，仍可手动选）。
+   * 反向存储（缺省 = 参与）⇒ 老数据零迁移。只影响选择器的默认可见性，不影响任何统计口径。
+   */
+  noFocus?: boolean;
   dependsOn?: string[]; // 轻量依赖（仅可视化连线与冲突提示，不做自动重排）
   baseline?: { startDate: string; endDate: string }; // 基线快照（原计划）
   updatedAt: string;
@@ -202,6 +207,13 @@ export interface PomodoroSettings {
   longBreakEvery: number; // 默认 4，取值 [1, 12]（每 4 段专注后进长休息）
   sound: boolean; // 默认 true
   notify: boolean; // 默认 false（需浏览器授权，开启时才请求权限）
+  /**
+   * 专注到点后自动进入短/长休息倒计时，默认 true。
+   * 只自动开休息，不自动开下一段专注 —— 自动续开 × 忘记停 = 整夜假记录。
+   */
+  autoBreak: boolean;
+  /** 开始专注时自动弹出悬浮小窗（Document PiP），默认 false */
+  pipAuto: boolean;
 }
 
 export interface AppSettings {

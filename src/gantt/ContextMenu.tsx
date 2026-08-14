@@ -121,6 +121,21 @@ function buildItems(menu: ContextMenuState): Entry[] {
           ),
       },
       {
+        // 只影响番茄钟选择器的默认可见性；多选时按第一个任务的状态整批翻转
+        label: task.noFocus ? '恢复列入专注' : multi ? `不列入专注（${n} 个）` : '不列入专注',
+        onClick: () =>
+          patchTasks(
+            selected.map((id) => ({ id, patch: { noFocus: task.noFocus ? undefined : true } })),
+            task.noFocus
+              ? multi
+                ? `${n} 个任务恢复列入专注`
+                : `「${task.name}」恢复列入专注`
+              : multi
+                ? `${n} 个任务不再列入专注`
+                : `「${task.name}」不再列入专注`,
+          ),
+      },
+      {
         label: '复制并顺延',
         onClick: () => {
           const id = duplicateTaskAfter(task.id);

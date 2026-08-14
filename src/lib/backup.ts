@@ -42,6 +42,7 @@ const taskSchema = z.object({
   recurrence: recurrenceSchema.optional(),
   order: z.number(),
   trackId: z.string().optional(),
+  noFocus: z.boolean().optional(),
   dependsOn: z.array(z.string()).optional(),
   baseline: z.object({ startDate: dateStr, endDate: dateStr }).optional(),
   updatedAt: z.string(),
@@ -150,6 +151,8 @@ const pomodoroSchema = z
     longBreakEvery: z.number().int().min(1).max(12).default(4),
     sound: z.boolean().default(true),
     notify: z.boolean().default(false),
+    autoBreak: z.boolean().default(true),
+    pipAuto: z.boolean().default(false),
   })
   .default(() => ({ ...DEFAULT_SETTINGS.pomodoro }));
 

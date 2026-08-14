@@ -27,5 +27,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     longBreakEvery: 4,
     sound: true,
     notify: false,
+    autoBreak: true,
+    pipAuto: false,
   },
 };

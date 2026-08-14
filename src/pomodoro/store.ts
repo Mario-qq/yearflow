@@ -34,6 +34,16 @@ export interface AskState {
   needsReview: boolean;
 }
 
+/**
+ * 到点提醒态：悬浮小窗切成整窗醒目形态的依据（也是「页面在前台时到点了怎么办」的答案）。
+ * 迁移时才变，符合本文件的铁律。`at` 用于 30 秒自动消退。
+ */
+export interface AlertState {
+  kind: 'focusEnd' | 'breakEnd';
+  text: string;
+  at: number;
+}
+
 export interface PomodoroState {
   running: RunningView | null;
   /** 今日已完成的专注段数（节律计数，读独立 localStorage 键） */
@@ -45,6 +55,10 @@ export interface PomodoroState {
   ask: AskState | null;
   /** 一句轻提示（如「这段不足 1 分钟，未记录」），UI 消费后清空 */
   notice: string | null;
+  /** 到点提醒（悬浮小窗的醒目态）；点任一按钮 / 开始新一段 / 30 秒超时后清空 */
+  alert: AlertState | null;
+  /** 悬浮小窗的 portal 宿主（开/关时才变，不违反本文件铁律）；null = 小窗未开 */
+  pipHost: HTMLElement | null;
 }
 
 export const usePomodoroStore = create<PomodoroState>()(() => ({
@@ -54,4 +68,6 @@ export const usePomodoroStore = create<PomodoroState>()(() => ({
   lastResult: null,
   ask: null,
   notice: null,
+  alert: null,
+  pipHost: null,
 }));

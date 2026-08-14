@@ -10,7 +10,14 @@
  */
 import type { CycleState, RunningState } from '../types/domain';
 import { todayStr } from '../lib/date';
-import { CYCLE_IDLE_RESET_MS, CYCLE_KEY, LAST_TASK_KEY, RUNNING_KEY } from './constants';
+import {
+  CYCLE_IDLE_RESET_MS,
+  CYCLE_KEY,
+  LAST_TASK_KEY,
+  RECENT_TASKS_KEY,
+  RECENT_TASKS_LIMIT,
+  RUNNING_KEY,
+} from './constants';
 
 const hasStorage = (): boolean => typeof localStorage !== 'undefined';
 
@@ -82,4 +89,29 @@ export function readLastTask(): { goalId?: string; taskId?: string } | null {
 
 export function writeLastTask(sel: { goalId?: string; taskId?: string }): void {
   writeJson(LAST_TASK_KEY, sel);
+  pushRecentTask(sel);
+}
+
+export interface RecentTask {
+  goalId: string;
+  taskId: string;
+}
+
+/**
+ * 最近计时过的任务（选择器置顶分组）。设备本地、不同步、不入库 —— 与「上次使用的任务」同源，
+ * 只是从一个值扩成一个队列。「暂不归类」不入队（它本来就常驻在下拉底部）。
+ */
+export function readRecentTasks(): RecentTask[] {
+  const list = readJson<RecentTask[]>(RECENT_TASKS_KEY);
+  if (!Array.isArray(list)) return [];
+  return list.filter((r) => r && typeof r.taskId === 'string' && typeof r.goalId === 'string');
+}
+
+function pushRecentTask(sel: { goalId?: string; taskId?: string }): void {
+  if (!sel.goalId || !sel.taskId) return;
+  const next = [
+    { goalId: sel.goalId, taskId: sel.taskId },
+    ...readRecentTasks().filter((r) => r.taskId !== sel.taskId),
+  ].slice(0, RECENT_TASKS_LIMIT);
+  writeJson(RECENT_TASKS_KEY, next);
 }

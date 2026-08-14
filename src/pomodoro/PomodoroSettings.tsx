@@ -10,7 +10,15 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
 import type { PomodoroSettings as Prefs } from '../types/domain';
-import { notifyPermission, requestNotifyPermission } from './chime';
+import { notifyPermission, requestNotifyPermission, sendTestNotification } from './chime';
+import { isPipSupported } from './pip';
+
+const PERMISSION_TEXT: Record<NotificationPermission | 'unsupported', string> = {
+  granted: '已授权',
+  denied: '已拒绝（需在地址栏左侧站点设置里恢复）',
+  default: '未授权（打开「到点通知」时会请求）',
+  unsupported: '浏览器不支持',
+};
 
 interface NumField {
   key: 'focusMin' | 'shortBreakMin' | 'longBreakMin' | 'longBreakEvery';
@@ -92,11 +100,16 @@ export function PomodoroSettings() {
   const pomodoro = useStore((s) => s.settings.pomodoro);
   const updateSettings = useStore((s) => s.updateSettings);
   const [hint, setHint] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<string | null>(null);
+  // 权限可能被用户在浏览器设置里改掉，读一次不够；开关与测试按钮的每次操作都刷新
+  const [perm, setPerm] = useState(notifyPermission);
+  const pipSupported = isPipSupported();
 
   const write = (patch: Partial<Prefs>) => updateSettings({ pomodoro: { ...pomodoro, ...patch } });
 
   /** 通知权限只在用户主动打开开关时请求；被拒则开关回弹并说明恢复路径 */
   const toggleNotify = async () => {
+    setPerm(notifyPermission());
     if (pomodoro.notify) {
       write({ notify: false });
       setHint(null);
@@ -106,7 +119,9 @@ export function PomodoroSettings() {
       setHint('这个浏览器不支持系统通知，到点会用声音与标签页标题提醒');
       return;
     }
-    if (await requestNotifyPermission()) {
+    const ok = await requestNotifyPermission();
+    setPerm(notifyPermission());
+    if (ok) {
       write({ notify: true });
       setHint(null);
     } else {
@@ -128,10 +143,48 @@ export function PomodoroSettings() {
         ))}
         <Toggle on={pomodoro.sound} label="到点响铃" onClick={() => write({ sound: !pomodoro.sound })} />
         <Toggle on={pomodoro.notify} label="到点通知" onClick={() => void toggleNotify()} />
+        <Toggle
+          on={pomodoro.autoBreak}
+          label="自动开始休息"
+          onClick={() => write({ autoBreak: !pomodoro.autoBreak })}
+        />
+        {pipSupported && (
+          <Toggle
+            on={pomodoro.pipAuto}
+            label="开始专注时弹出悬浮小窗"
+            onClick={() => write({ pipAuto: !pomodoro.pipAuto })}
+          />
+        )}
       </div>
+
+      {/* 诊断：通知发不出来时，问题可能在三层里的任何一层，光看开关是「开」没有任何信息量 */}
+      <div className="flex flex-wrap items-center gap-2" style={{ fontSize: 'var(--font-12)' }}>
+        <span style={{ color: 'var(--text-tertiary)' }}>通知权限：{PERMISSION_TEXT[perm]}</span>
+        <button
+          type="button"
+          onClick={() =>
+            void sendTestNotification().then((r) => {
+              setTestResult(r);
+              setPerm(notifyPermission());
+            })
+          }
+          className="cursor-pointer"
+          style={{
+            color: 'var(--text-secondary)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 'var(--radius-sm)',
+            background: 'var(--bg-panel)',
+            padding: '3px 8px',
+          }}
+        >
+          发送测试通知
+        </button>
+        {testResult && <span style={{ color: 'var(--text-tertiary)' }}>{testResult}</span>}
+      </div>
+
       {hint && <p style={{ fontSize: 'var(--font-12)', color: 'var(--warning)' }}>{hint}</p>}
       <p style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}>
-        番茄钟仅在电脑端可用。切到后台或最小化时，到点提醒可能延迟；计时依赖页面存活，合盖休眠或关闭标签页后重新打开时会让你确认这段时间是否计入。
+        番茄钟仅在电脑端可用。系统通知只在页面被最小化或切到后台时发送，页面在前台时用页内提醒与声音；开着悬浮小窗时，提醒会直接显示在小窗里。切到后台或最小化时到点提醒可能延迟（浏览器会冻结后台页面的定时器）；计时依赖页面存活，合盖休眠或关闭标签页后重新打开时会让你确认这段时间是否计入。
       </p>
     </div>
   );

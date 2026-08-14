@@ -319,6 +319,25 @@ export function TaskDrawer() {
               })}
             </div>
           )}
+          {/* 番茄钟任务选择器默认列出「今日在办」，杂事太多时列表会长得没法用。
+              标了这个只影响那张列表的默认可见性，不影响打卡、统计与任何派生口径 */}
+          <button
+            type="button"
+            className="mt-2 flex cursor-pointer items-center gap-1.5"
+            style={{ fontSize: 'var(--font-11)', color: 'var(--text-tertiary)' }}
+            onClick={() =>
+              patchTask(
+                task.id,
+                { noFocus: task.noFocus ? undefined : true },
+                task.noFocus ? `「${task.name}」恢复列入专注` : `「${task.name}」不再列入专注`,
+              )
+            }
+          >
+            <span style={{ color: task.noFocus ? 'var(--accent)' : 'var(--text-tertiary)' }}>
+              {task.noFocus ? '☑' : '☐'}
+            </span>
+            不需要专注计时（番茄钟选择器里默认不列出）
+          </button>
         </div>
 
         <div>

@@ -274,6 +274,53 @@
 - **`buildRowLayout` 加可选参数而非改签名**：缺省等价于改造前，旧测试即回归护栏
 - 截图脚本两处坑：`updateSettings/execute` 落库防抖 500ms，写完立刻 `page.goto` 会丢改动（主题不生效、轨道消失），须 `waitForTimeout(700)`；缩放档位是 `role="radio"` 不是 button
 
+## 番茄钟 P1（2026-08-14）—— 自动休息循环 · 悬浮小窗 · 到点提醒可靠化 · 选择器收窄
+
+用户日用四条反馈，两条是真缺陷、两条是范围切错。`tsc -b` + oxlint + vitest **225 通过 / 12 文件** 全绿。
+
+### 一、休息循环从「空档」变成真能跑（缺陷）
+
+`shortBreakMin` / `longBreakMin` 在 domain、defaults、设置页 UI、backup zod 里全量存在，但全仓**唯一**的 `phase:` 赋值点是 `kernel.ts` 的 `phase: 'focus'` —— 没有任何代码路径能启动休息段。用户设了「短休息 5 分」得到的是**零行为**。
+
+**这次修的是规划错误，不只是代码**（复盘留档，别再犯）：
+- **表层**：规格 §二/§十三 把「自动开始休息」定为 P1，这个决定本身没错；错在同一份规格的 §三 又把三个休息设置项**全量写进 v1 设置页**。设置项是产品对用户的承诺。规矩应是**能力与其配置项同生同死**——要么一起做，要么一起不出现。
+- **中层**：范围裁剪的判据用了「哪些能省」，正确的判据是「去掉之后它还叫不叫这个东西」。「专注—休息交替」是番茄工作法的定义本身，`focusMin` 与 `shortBreakMin` 是同一机制的两半。可以砍全屏模式、砍成就系统，不能砍循环。
+- **底层（最值得记）**：§11.3 把「连续跑 4 段确认长休息节律」列为人工验收项，而 v1 **结构上永远走不到长休息**（§5.2b 自己论证过每段到点后 100% 回 `idle`）。这条验收项写下时就该炸出矛盾；它没炸，是因为那 6 条被整体标记为「待用户本人过」，于是永远没有执行者。⇒ **任何"推迟给人工"的验收项，落笔时必须先做一次纸面自查（这条在当前代码里走得到吗）**，否则等于没写。
+
+**实现**：新增 `kernel.startBreak(kind, owner)`（与 `startFocus` 同构，休息仍不落库）；接线点只有一处 —— `terminate()` 的末尾，三道闸缺一不可：① 只有 `outcome === 'completed'` 才进（`stopped`/`discarded` 是用户主动中断，此时弹休息是骚扰）；② 只有 `Date.now() - endAt < AUTO_BREAK_FRESH_MS`(60s) 才进（合盖两小时后回来补算的那段，休息早就过完了）；③ leader 门禁（其余标签靠 `storage` 事件同步）。新增设置项 `autoBreak`（默认开）。`startBreak` **不清 `lastResult`**（结果卡要继续留在面板上）。
+
+**实测（本机 Chrome，真实等待）**：`cycle` 预置 3 → 跑一段 61 秒专注 → 落库 `focusMs 61000 / completed`、`cycle` 3→4、**自动进入 `longBreak`（15 分）** + `alert: focusEnd`。这正是 v1 那条结构上无法通过的验收项，现在真跑通了。
+
+### 二、悬浮小窗（Document PiP）
+
+`documentPictureInPicture.requestWindow()`，Chrome/Edge 116+ 桌面。选它而不是自绘浮层：它是**真正的系统级窗口**，浮在所有窗口之上、最小化浏览器后依然可见 —— 这正是「到点了我在别的软件里，什么都看不到」的解药。小窗与主页面**同一个 JS realm**，kernel / ticker / store 直接可用，零跨窗通信。
+
+新文件 `src/pomodoro/pip.ts`（窗口生命周期 + 样式表搬运 + 主题 `MutationObserver` 跟随）与 `PipView.tsx`（portal 内容，倒计时仍走那一个 1s 单例 ticker + ref 直写，零每秒重渲）。入口：面板底部「悬浮小窗」按钮 + 设置项 `pipAuto`（默认关，「开始专注时弹出」）。⚠️ `requestWindow` 需要 transient user activation ⇒ 只有「开始专注」这类手势路径能自动开窗；自动进休息、恢复结算不是手势，那些路径只更新已开的小窗。不支持的浏览器**不渲染入口**（安静降级，不提示）。
+
+**实测（`scripts/check-pip.mjs`，系统 Chrome 有头）**：空闲 `25:00 | 待开始 | 开始` → 专注中 `0:03 | 专注 · 第 1/4 段 | 🧩 SAP系统 · … | 暂停 停止 丢弃` → 到点整窗醒目态 `这段专注到点了，休息一下 | 知道了`（此时 `phase` 已是 `shortBreak`）→ 点「知道了」回到 `4:59 | 短休息` → 切深色主题小窗背景 `#f7f7f8 → #101014` 跟随。
+⚠️ **本机浏览器面板建不出 PiP 窗口**（`InvalidStateError: Internal error: no window`，API 存在但宿主没有真实窗口）⇒ 这一条只能用系统 Chrome 有头模式验，已固化为 `scripts/check-pip.mjs`。
+
+### 三、到点提醒为什么「开了也没效果」（缺陷）
+
+三个独立成因，逐个修：
+
+1. **补算路径完全没有可见出口**（主因）。`chime.ts` 的 `if (!document.hidden) return` 之后什么都不做。而页面一旦被浏览器冻结（`frozen` 态下所有 timer 都不跑），到点时闹钟根本没触发，等用户切回来走 `catchUp()` 补算结算 —— **此刻页面已经 visible** ⇒ 只响一声铃，面板不点开就什么都看不见。⇒ 新增 `alert` 状态并把置位**挪到 `document.hidden` 判断之前**，小窗的醒目态与结果卡都挂在它上面。
+2. **多标签下 leader 被冻结 = 全员静默**。`onAlarm` 里 `!isLeader && leaderKnown` 让 follower 直接 return；leader 恰好是被冻结的后台标签时，没有任何标签会结算、响铃。⇒ follower 改为等 `ALARM_FALLBACK_MS`(3s) 后复查运行态，还在就自己接手（`terminate({forced:true})` 绕过 leader 门禁负责响铃与起休息）。重复由预生成 `sessionId` + `settledIds` + `storage` 事件三重兜住，最坏是响两声而不是丢数据。
+3. **权限层不可观测**。设置页只显示开关是「开」，而通知可能被 Chrome 站点权限、Windows 通知设置、专注助手任一层吞掉。⇒ 加「通知权限：未授权/已授权/已拒绝/不支持」实时状态 + **「发送测试通知」按钮**，一次点击就能把三层分离；诚实说明补上「只在最小化或切到后台时发送」与「后台可能延迟」。
+
+### 四、任务选择器收窄（`Task.noFocus` + 最近使用）
+
+- `Task` 加 `noFocus?: boolean`，**反向存储**（缺省 = 参与）⇒ 老数据零迁移；给现有实体加字段对 Supabase 透明，**零 SQL、零 Dexie 升版**。同步补进 `backup.ts` 的 `taskSchema`（zod 默认 strip 未声明键，漏了就是导入备份后标记被静默丢弃）。
+- 三个写入入口，全走现成的 `patchTask`/`patchTasks` ⇒ 自动进 undo：任务抽屉「打卡规则」区下方一行开关、甘特右键菜单一项（多选时整批翻转）、**选择器行内 hover 的 `⊘`**（在被打扰的当下就能清掉，下拉不关闭）。
+- 选择器改三段：`最近`（localStorage `yearflow:pomodoro:recentTasks`，上限 8 存 5 显，不受 `noFocus` 与「今日在办」约束）/ `今日在办`（过滤 `noFocus`）/ `显示全部（另有 N 个已标不计时）` 折叠区。**搜索模式不受任何过滤影响** —— 搜得到才叫逃生阀。`dayEntries + adhocEntries` 合并去重那三条规格铁律一行未动。
+- 实测：⊘ 一下 → 该任务移入折叠区、计数正确；`Ctrl+Z` 后 `noFocus` 计数归 0。
+
+**新增文件**：`src/pomodoro/pip.ts`、`src/pomodoro/PipView.tsx`、`scripts/check-pip.mjs`、`scripts/capture-pomodoro-p1.mjs`（4 张截图：休息中面板 × 选择器三段分组 × 深浅）。
+
+**仍待用户本人真机过**：① 最小化浏览器 25 分钟，看小窗倒计时是否卡住、到点提醒是否准时（**开着 PiP 小窗时 opener 大概率不被冻结，但这是行为观察不是规范承诺**，小窗倒计时卡住本身就是最好的自检信号）；② 设置页「发送测试通知」→ 若没弹，依次查 Chrome 站点权限 / Windows 通知设置 / 专注助手；③ 双标签只响一声。
+
+---
+
 ## 番茄钟模块 —— 专注计时与真实投入统计 【S1~S5 全部完成 2026-08-13】
 
 起因：现有 `CheckIn.minutes` 是手填估算（chips 10/15/30/60），只能表达「这天这个任务大概花了多久」，无法回答「实际专注了多少、什么时段、被打断几次」。加一个番茄钟：日常工作时集中注意力，并把年度总览的「投入时长」从估算升级为实测。

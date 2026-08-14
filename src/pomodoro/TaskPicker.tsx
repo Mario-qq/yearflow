@@ -8,7 +8,7 @@
  * · 选中日期范围外 / 已完成的任务：**提示但不阻止**（任务延期是真实情况），
  *   并顺手给一个「延长任务到今天」的快捷动作。
  */
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { adhocEntries, dayEntries } from '../lib/derive';
 import { patchTask } from '../store/actions';
@@ -18,8 +18,10 @@ import {
   PICKER_GAP,
   PICKER_LIST_MAX,
   PICKER_LIST_MIN,
+  PICKER_RECENT_SHOWN,
   PICKER_VIEWPORT_MARGIN,
 } from './constants';
+import { readRecentTasks } from './running';
 import { useSelLabel, type FocusSel } from './useSelLabel';
 
 interface Option {
@@ -40,6 +42,67 @@ const rowStyle: React.CSSProperties = {
   cursor: 'pointer',
 };
 
+function GroupLabel({ text }: { text: string }) {
+  return (
+    <span
+      className="shrink-0 px-1 py-0.5"
+      style={{ fontSize: 'var(--font-11)', color: 'var(--text-tertiary)' }}
+    >
+      {text}
+    </span>
+  );
+}
+
+/**
+ * 一行 = 选择按钮 + hover 才显形的「不计时 / 恢复」小按钮。
+ * 两个 button 并列而不是嵌套：按钮里套按钮是非法 HTML，点击行为也无法预期。
+ */
+function Row({
+  o,
+  value,
+  onChoose,
+  onExclude,
+  onInclude,
+}: {
+  o: Option;
+  value: FocusSel;
+  onChoose: (sel: FocusSel) => void;
+  onExclude?: (o: Option) => void;
+  onInclude?: (o: Option) => void;
+}) {
+  const toggle = onExclude ?? onInclude;
+  return (
+    <div className="group flex shrink-0 items-center gap-1">
+      <button
+        type="button"
+        onClick={() => onChoose({ goalId: o.goalId, taskId: o.taskId })}
+        className="min-w-0 flex-1 cursor-pointer truncate px-1 py-1 text-left"
+        style={{
+          fontSize: 'var(--font-12)',
+          color: o.taskId === value.taskId ? 'var(--accent)' : 'var(--text-primary)',
+        }}
+      >
+        <span style={{ color: 'var(--text-tertiary)' }}>
+          {o.goalIcon} {o.goalName} ·{' '}
+        </span>
+        {o.taskName}
+      </button>
+      {toggle && (
+        <button
+          type="button"
+          onClick={() => toggle(o)}
+          className="shrink-0 cursor-pointer px-1 opacity-0 transition-opacity group-hover:opacity-100"
+          style={{ fontSize: 'var(--font-11)', color: 'var(--text-tertiary)' }}
+          title={onExclude ? '以后不在这里列出这个任务（可撤销）' : '恢复列出'}
+          aria-label={onExclude ? '不计时' : '恢复列出'}
+        >
+          {onExclude ? '⊘' : '＋'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function TaskPicker({
   value,
   onPick,
@@ -55,13 +118,16 @@ export function TaskPicker({
   const exemptions = useStore((s) => s.exemptions);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [showHidden, setShowHidden] = useState(false);
+  /** 「最近」来自 localStorage（另一个标签、打卡页 ▶ 都会写它）⇒ 每次打开下拉重读一次 */
+  const [recentRaw, setRecentRaw] = useState(readRecentTasks);
   const anchorRef = useRef<HTMLButtonElement>(null);
   /** 打开方向与列表高度：面板底部那批 compact 选择器若一律向下开会顶出视口 */
   const [drop, setDrop] = useState({ up: false, listMax: PICKER_LIST_MAX });
   const today = todayStr();
   const label = useSelLabel(value);
 
-  const { todayOptions, allOptions } = useMemo(() => {
+  const { recentOptions, todayOptions, hiddenOptions, allOptions } = useMemo(() => {
     const goalList = Object.values(goals);
     const taskList = Object.values(tasks);
     const toOption = (goalId: string, taskId: string, taskName: string): Option | null => {
@@ -89,7 +155,7 @@ export function TaskPicker({
     }).map((e) => toOption(e.goalId, e.taskId, e.name));
 
     const seen = new Set<string>();
-    const todayOptions = [...due, ...adhoc].filter((o): o is Option => {
+    const todayAll = [...due, ...adhoc].filter((o): o is Option => {
       if (!o || seen.has(o.taskId)) return false;
       seen.add(o.taskId);
       return true;
@@ -101,15 +167,37 @@ export function TaskPicker({
       .map((t) => toOption(t.goalId, t.id, t.name))
       .filter((o): o is Option => o !== null);
 
-    return { todayOptions, allOptions };
-  }, [goals, tasks, checkIns, exemptions, today]);
+    // 「最近」不受 noFocus 与「今日在办」约束：手动选过一次就说明确实想给它计时。
+    // 脏 id（任务已删 / 目标已归档）在这里滤掉，别让它漏进 UI。
+    const recentOptions = recentRaw
+      .map((r) => {
+        const t = tasks[r.taskId];
+        if (!t || t.deletedAt) return null;
+        const g = goals[t.goalId];
+        if (!g || g.deletedAt || g.archived) return null;
+        return toOption(t.goalId, t.id, t.name);
+      })
+      .filter((o): o is Option => o !== null)
+      .slice(0, PICKER_RECENT_SHOWN);
+
+    const inRecent = new Set(recentOptions.map((o) => o.taskId));
+    const rest = todayAll.filter((o) => !inRecent.has(o.taskId));
+    return {
+      recentOptions,
+      todayOptions: rest.filter((o) => !tasks[o.taskId]?.noFocus),
+      hiddenOptions: rest.filter((o) => tasks[o.taskId]?.noFocus),
+      allOptions,
+    };
+  }, [goals, tasks, checkIns, exemptions, today, recentRaw]);
 
   const q = query.trim().toLowerCase();
-  const list = q
+  // 搜索模式不受任何过滤影响 —— 搜得到才叫逃生阀
+  const searchList = q
     ? allOptions.filter(
         (o) => o.taskName.toLowerCase().includes(q) || o.goalName.toLowerCase().includes(q),
       )
-    : todayOptions;
+    : [];
+  const empty = q ? searchList.length === 0 : recentOptions.length + todayOptions.length === 0;
 
   const picked = value.taskId ? tasks[value.taskId] : undefined;
   const overdue = picked && !picked.deletedAt && picked.endDate < today;
@@ -118,6 +206,10 @@ export function TaskPicker({
 
   // 打开瞬间（以及视口变化时）量一次上下空间：下方装不下且上方更宽裕就翻上去开，
   // 否则就地压缩列表高度 —— 但压不到 PICKER_LIST_MIN 以下，那种高度已经不能用了。
+  useEffect(() => {
+    if (open) setRecentRaw(readRecentTasks());
+  }, [open]);
+
   useLayoutEffect(() => {
     if (!open) return;
     const measure = (): void => {
@@ -140,6 +232,13 @@ export function TaskPicker({
     setOpen(false);
     setQuery('');
   };
+
+  // 行内一键排除/恢复：走 patchTask ⇒ 自动进 undo 栈，误点一次 Ctrl+Z 就回来了。
+  // 下拉不关闭 —— 用户此刻在做的是「清理这张列表」，关掉它等于每清一个都要重开
+  const exclude = (o: Option) =>
+    patchTask(o.taskId, { noFocus: true }, `「${o.taskName}」不再列入专注`);
+  const include = (o: Option) =>
+    patchTask(o.taskId, { noFocus: undefined }, `「${o.taskName}」恢复列入专注`);
 
   return (
     <div className="relative">
@@ -208,37 +307,53 @@ export function TaskPicker({
           {/* 每一行都必须 shrink-0：行自带 truncate（overflow:hidden），
               flex item 的自动最小尺寸随之退化为 0，不加就会被压扁成一叠、还挤不出滚动条 */}
           <div className="flex flex-col overflow-y-auto" style={{ maxHeight: drop.listMax }}>
-            <span
-              className="shrink-0 px-1 py-0.5"
-              style={{ fontSize: 'var(--font-11)', color: 'var(--text-tertiary)' }}
-            >
-              {q ? `搜索结果 ${list.length}` : '今日在办'}
-            </span>
-            {list.length === 0 && (
+            {empty && (
               <span
                 className="shrink-0 px-1 py-1"
                 style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}
               >
-                {q ? '没有匹配的任务' : '今天没有在办任务，可搜索或暂不归类'}
+                {q ? '没有匹配的任务' : '今天没有要计时的任务，可搜索或暂不归类'}
               </span>
             )}
-            {list.map((o) => (
-              <button
-                key={o.taskId}
-                type="button"
-                onClick={() => choose({ goalId: o.goalId, taskId: o.taskId })}
-                className="shrink-0 cursor-pointer truncate px-1 py-1 text-left"
-                style={{
-                  fontSize: 'var(--font-12)',
-                  color: o.taskId === value.taskId ? 'var(--accent)' : 'var(--text-primary)',
-                }}
-              >
-                <span style={{ color: 'var(--text-tertiary)' }}>
-                  {o.goalIcon} {o.goalName} ·{' '}
-                </span>
-                {o.taskName}
-              </button>
-            ))}
+            {q ? (
+              <>
+                <GroupLabel text={`搜索结果 ${searchList.length}`} />
+                {searchList.map((o) => (
+                  <Row key={o.taskId} o={o} value={value} onChoose={choose} />
+                ))}
+              </>
+            ) : (
+              <>
+                {recentOptions.length > 0 && <GroupLabel text="最近" />}
+                {recentOptions.map((o) => (
+                  <Row key={`r:${o.taskId}`} o={o} value={value} onChoose={choose} onExclude={exclude} />
+                ))}
+                {todayOptions.length > 0 && <GroupLabel text="今日在办" />}
+                {todayOptions.map((o) => (
+                  <Row key={o.taskId} o={o} value={value} onChoose={choose} onExclude={exclude} />
+                ))}
+                {hiddenOptions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowHidden((v) => !v)}
+                    className="shrink-0 cursor-pointer px-1 py-1 text-left"
+                    style={{ fontSize: 'var(--font-11)', color: 'var(--text-tertiary)' }}
+                  >
+                    {showHidden ? '收起' : `显示全部（另有 ${hiddenOptions.length} 个已标不计时）`}
+                  </button>
+                )}
+                {showHidden &&
+                  hiddenOptions.map((o) => (
+                    <Row
+                      key={`h:${o.taskId}`}
+                      o={o}
+                      value={value}
+                      onChoose={choose}
+                      onInclude={include}
+                    />
+                  ))}
+              </>
+            )}
           </div>
           <button
             type="button"

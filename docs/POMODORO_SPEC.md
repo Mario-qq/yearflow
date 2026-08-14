@@ -55,7 +55,8 @@
 | 动态 favicon 倒计时 | 会破坏 `index.html:5` 已有的 SVG 年度进度环图标（品牌一致性），且 Safari 对动态 favicon 支持历来不稳 |
 | 移动端任何入口（v1） | 见 §一「v1 范围」 |
 
-**留到 P1（本文档 §十三 升级路径）**：全屏专注模式、会话列表页与编辑界面、`自动开始休息`/`自动开始下一段`、日目标、`needsReview` 徽标确认流、复盘「专注段数/平均段长/被打断率」三指标、Screen Wake Lock。
+**留到 P1（本文档 §十三 升级路径）**：全屏专注模式、日目标、`自动开始下一段`、Screen Wake Lock。
+（会话列表页与编辑界面、`needsReview` 徽标确认流、复盘三指标已在 S5 落地；`自动开始休息`与悬浮小窗已在 P1-A/B 落地，见 §十六。）
 
 ---
 
@@ -126,6 +127,8 @@ pomodoro: {
   longBreakEvery: number; // 默认 4， 取值 [1, 12]（每 4 段专注后进长休息）
   sound: boolean;         // 默认 true
   notify: boolean;        // 默认 false（需浏览器授权，开启时才请求权限）
+  autoBreak: boolean;     // 默认 true（P1 新增，见 §十六）
+  pipAuto: boolean;       // 默认 false（P1 新增：开始专注时自动弹出悬浮小窗）
 };
 ```
 
@@ -134,7 +137,7 @@ pomodoro: {
 ② `backup.ts` 的 zod schema 用 `.int().min(x).max(y)`，否则导入一份畸形备份即中毒。
 漏了会怎样：`focusMin = 0` ⇒ `plannedMs = 0` ⇒ 每段都 clamp 成 0 且 `< 60s` 返回 `null`，计时器变成「永远记不上账」；`longBreakEvery = 0` ⇒ `completed % 0 = NaN`，长休息永不触发。两者都不报错。
 
-只此 6 项。**必须同步补进 `src/lib/backup.ts:112-117` 的 `settingsSchema`**，用 `.default(...)`（既有写法见 `backup.ts:97,101,102`）——zod 默认 strip 未声明键，漏了就是「导入备份后番茄设置被静默丢弃」，`AppSettings.colorNormalized` 已经是现成受害者（`01-facts` §0）。
+（v1 是前 6 项，P1 追加后两项。）**必须同步补进 `src/lib/backup.ts:112-117` 的 `settingsSchema`**，用 `.default(...)`（既有写法见 `backup.ts:97,101,102`）——zod 默认 strip 未声明键，漏了就是「导入备份后番茄设置被静默丢弃」，`AppSettings.colorNormalized` 已经是现成受害者（`01-facts` §0）。
 
 ---
 
@@ -360,7 +363,7 @@ S2 评审否掉了初稿的 `RunningState.cycleIndex`：`RunningState` 在每次
 | `idle` | 点「开始专注」/ 按 `P` | `focus` | 生成 `sessionId`；`startAt = Date.now()`；`plannedMs = focusMin × 60000`；解锁 AudioContext（必须在手势回调里 `resume()`）；下单根 `setTimeout(plannedMs)` |
 | `focus` | 按 `P` / 点「暂停」 | `focus(paused)` | `pauses.push({at: now})`；清除 timeout |
 | `focus(paused)` | 按 `P` / 点「继续」 | `focus` | 末条 `pauses.until = now`；按剩余时间重下单根 timeout |
-| `focus` | timeout 触发 或 回到前台发现 `now ≥ 计划终点` | `idle`（v1 恒定）| 走 §5.3b 终止序列：**按计划终点结算并落库**（一条 `execute`）；`completed++`（§5.2b）；响铃 + 通知；面板显示结果卡。（v1 无自动休息，故不进 break 阶段） |
+| `focus` | timeout 触发 或 回到前台发现 `now ≥ 计划终点` | `shortBreak`/`longBreak`（P1，`autoBreak` 开且「刚刚到点」）否则 `idle` | 走 §5.3b 终止序列：**按计划终点结算并落库**（一条 `execute`）；`completed++`（§5.2b）；响铃 + 通知；面板显示结果卡。**最后**按 §十六 三道闸决定是否 `startBreak` |
 | `focus` / `focus(paused)` | 点「停止」 | `idle` | 按实际净时长结算落库（`outcome: 'stopped'`） |
 | `focus` / `focus(paused)` | 点「丢弃」 | `idle` | `outcome: 'discarded'` 落库（`focusMs` 照实记但不计统计），或 `< 60s` 时直接不落库 |
 | `shortBreak/longBreak` | timeout / 点「跳过休息」 | `idle` | 响铃；不落库 |
@@ -952,7 +955,7 @@ effectiveMsByGoalDate(checkIns, sessions, goalId, date):
 | BroadcastChannel 选主 | 需要心跳超时判活，标签崩溃后有真空期。Web Locks 的锁在页面消失时自动释放，崩溃安全 |
 | 动态 favicon 进度环 | 会破坏 `index.html:5` 精心做的 SVG 年度进度环图标；Safari 支持不稳 |
 | 用 `Esc` 关面板 / 空格开始暂停 | 两个键都已有既定语义（9 个 Esc 消费者、空格=抓手平移） |
-| 改 Service Worker 发通知 | v1 纯桌面用不上；`generateSW` 下改 SW 会引入懒加载 chunk 部署后 404 的风险 |
+| 改 Service Worker 发通知 | v1 纯桌面用不上；`generateSW` 下改 SW 会引入懒加载 chunk 部署后 404 的风险（P1 的悬浮小窗从另一条路解决了「看不到提醒」，见 §十六） |
 | 番茄个数进复盘统计 | 权威口径只能有一个（专注分钟）。两套「投入」数字是可信度杀手 |
 
 ---
@@ -1000,3 +1003,65 @@ effectiveMsByGoalDate(checkIns, sessions, goalId, date):
 - §10.2 的量级算术无误（只有「8000 行 ≈ 1.5~2 年」改为 1.4~2.7 年）。
 
 
+
+---
+
+## 十六、P1 增补（2026-08-14）：自动休息 · 悬浮小窗 · 提醒可靠化 · 选择器收窄
+
+> 本节是 v1 之后的第一次增补。与前十五节冲突时，**在本节列出的四块范围内以本节为准**。
+> 实施记录与实测数据在 `docs/PROGRESS.md`「番茄钟 P1」。
+
+### 16.1 自动开始休息（`autoBreak`，默认开）
+
+口径：`专注到点 → 结算落库 → 响铃/通知 → 自动进入短/长休息倒计时 → 休息到点 → 响铃/通知 → 回 idle`。
+**仍不做「自动开始下一段专注」**（§十三 的警告成立：自动续开 × 忘记停 = 整夜假记录）。
+
+`kernel.startBreak(kind, owner)` 与 `startFocus` 同构；休息仍**永不落库**、不进 undo、不动统计。
+接线点唯一：`terminate()` 的**末尾**（落库 → 响铃 → 才起休息，顺序不可调换）。三道闸：
+
+| 闸 | 条件 | 漏掉的后果 |
+|---|---|---|
+| 结局 | `outcome === 'completed'` | `stopped`/`discarded` 是用户主动中断，此时弹一段休息是骚扰 |
+| 新鲜度 | `Date.now() - endAt < AUTO_BREAK_FRESH_MS`（60s） | 合盖两小时后回来补算的那段，休息早就过完了，再弹一段休息倒计时是纯噪音 |
+| leader | `isLeader \|\| !leaderKnown \|\| forced` | 每个标签各起一段休息 |
+
+两条实现约束：
+- **长休息判定必须在 `bumpCycleCompleted()` 之后**（`nextBreakIsLong()` 读的是刚更新的 `cycleCompleted`），顺序反了会永远晚一段。
+- **`startBreak` 不清 `lastResult`**（`startFocus` 会清，别照抄）：刚结算的结果卡要继续留在面板上。
+
+§5.5 的恢复判定**一行未改** —— 休息总闸（第 0 行）本来就为这一天准备好了。
+
+### 16.2 悬浮小窗（Document Picture-in-Picture）
+
+`documentPictureInPicture.requestWindow()`，Chrome/Edge 116+ 桌面。**这是「看不到到点提醒」的正解**：真正的系统级窗口，浮在所有窗口之上、最小化浏览器后依然可见；小窗与主页面同一个 JS realm ⇒ kernel/ticker/store 直接可用，零跨窗通信。
+
+- `src/pomodoro/pip.ts`：窗口生命周期 + **样式表整份搬运**（小窗不继承样式，否则是个无样式白窗）+ 主题 `MutationObserver` 跟随 `<html data-theme>` + opener `pagehide` 时关掉小窗（别留孤儿窗）。
+- `src/pomodoro/PipView.tsx`：`createPortal` 进小窗 body。三形态：空闲（`25:00 · 待开始 · [开始]`）／运行中（倒计时 + 阶段 + 任务名 + `[开始][暂停][停止]`+丢弃）／**到点醒目态**（整窗 `--accent`/`--success` 满底 + 一句话 + `[开始休息]`或`[开始下一段专注]` + `[知道了]`，30 秒自动消退）。
+- 倒计时仍走那一个 1s 单例 ticker + ref 直写；`usePomodoroStore` 新增的 `alert` / `pipHost` **都只在状态迁移时变**，不违反 store 铁律。
+- ⚠️ `requestWindow` 要 transient user activation ⇒ **只有手势路径能自动开窗**（`pipAuto` 挂在「开始专注」上）；自动进休息、恢复结算不是手势，只更新已开的小窗。
+- 不支持时**不渲染入口**（安静降级）。移动端同样不渲染。
+
+**与页面冻结的关系（诚实边界）**：开着小窗时 opener 承载用户可见内容，Chrome 大概率不冻结它 ⇒ 闹钟准点。但**这是行为观察不是规范承诺**；若真被冻结，小窗倒计时会肉眼可见地卡住 —— 那本身就是最好的自检信号。不为此追加任何保活手段（§十四 已否决静音音频等全部脏办法）。
+
+### 16.3 到点提醒可靠化
+
+| 成因 | 修法 |
+|---|---|
+| **补算路径没有可见出口**（主因）：页面被冻结 ⇒ 闹钟没触发 ⇒ 切回来 `catchUp` 补算时页面已 visible ⇒ `if (!document.hidden) return` 之后什么都不做，只响一声铃 | `alert` 置位**挪到 `document.hidden` 判断之前**，小窗醒目态与结果卡都挂它 |
+| **多标签下 leader 被冻结 = 全员静默**：`onAlarm` 的 `!isLeader && leaderKnown` 让 follower 直接 return | follower 等 `ALARM_FALLBACK_MS`(3s) 复查，运行态还在就 `terminate({forced:true})` 自己接手。重复由预生成 id + `settledIds` + `storage` 三重兜住，最坏是响两声而不是丢数据 |
+| **权限层不可观测**：Chrome 站点权限 / Windows 通知设置 / 专注助手任一层都能吞掉通知，而设置页只显示开关是「开」 | 设置页显示权限真值 + **「发送测试通知」按钮**（一次点击分离三层）+ 诚实说明补「只在最小化或切到后台时发送」「后台可能延迟」 |
+
+§5.7 的「只在页面隐藏时发系统通知」**不变**（前台弹系统通知仍是最差选择）；变的是前台/补算时**必须有页内出口**。
+
+### 16.4 任务选择器收窄
+
+- `Task.noFocus?: boolean`，**反向存储**（缺省 = 参与）⇒ 老数据零迁移；加字段对 Supabase 透明（`data jsonb`），**零 SQL、零 Dexie 升版**。必须同步补 `backup.ts` 的 `taskSchema`（zod 默认 strip 未声明键）。**只影响选择器的默认可见性，不影响任何统计口径。**
+- 三个入口全走 `patchTask`/`patchTasks`（自动进 undo）：任务抽屉、甘特右键菜单（多选整批翻转）、**选择器行内 hover 的 `⊘`**（下拉不关闭 —— 用户此刻在做的是「清理这张列表」）。
+- 三段分组：`最近`（localStorage `yearflow:pomodoro:recentTasks`，上限 8 存 5 显，**不受 `noFocus` 与「今日在办」约束**）/ `今日在办`（过滤 `noFocus`）/ `显示全部（另有 N 个已标不计时）` 折叠区。
+- **搜索模式不受任何过滤影响** —— 搜得到才叫逃生阀。`dayEntries + adhocEntries` 合并去重的三条铁律（§8.2）一行未动。
+
+### 16.5 §十三 局限清单的变化
+
+- 局限 1（不承诺后台准点）**仍然成立**，但有了新的缓解手段：悬浮小窗（16.2）+ follower 兜底（16.3）。
+- 新增局限 11：**悬浮小窗只有 Chrome/Edge 116+ 桌面有**；Firefox/Safari 无此 API，入口不渲染。
+- 新增局限 12：**`noFocus` 是任务级标记，不区分设备**（跟着 tasks 同步，这是有意的：「这个任务不需要计时」是任务属性，不是设备偏好）。

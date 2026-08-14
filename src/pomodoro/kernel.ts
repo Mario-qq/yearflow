@@ -25,7 +25,14 @@ import {
   shouldLongBreak,
   type RecoveryPlan,
 } from '../lib/derive/focus';
-import { CYCLE_KEY, HEARTBEAT_MS, LOCK_NAME, RUNNING_KEY } from './constants';
+import {
+  ALARM_FALLBACK_MS,
+  AUTO_BREAK_FRESH_MS,
+  CYCLE_KEY,
+  HEARTBEAT_MS,
+  LOCK_NAME,
+  RUNNING_KEY,
+} from './constants';
 import {
   bumpCycleCompleted,
   clearRunning,
@@ -142,12 +149,33 @@ function onAlarm(): void {
   if (!r) return;
   // hydrate 的 set() 会整体替换 focusSessions map，抢跑的 execute 会「进了库却不在内存」
   if (!useStore.getState().hydrated) return;
-  // 非 leader 且已经选出了 leader：由 leader 负责结算与响铃，本标签只等 storage 事件
-  if (!usePomodoroStore.getState().isLeader && leaderKnown) return;
+  // 非 leader 且已经选出了 leader：由 leader 负责结算与响铃，本标签只等 storage 事件。
+  // 但不能就此闭嘴 —— leader 恰好是被冻结的后台标签时它的闹钟根本不触发，
+  // 于是到点后没有任何标签结算、响铃（这个洞只在多标签下出现，但一出现就是「到点毫无动静」）。
+  // ⇒ 等 ALARM_FALLBACK_MS 复查，运行态还在就自己接手。重复由 settledIds + 幂等 id 兜住。
+  if (!usePomodoroStore.getState().isLeader && leaderKnown) {
+    const stuck = r.sessionId;
+    setTimeout(() => {
+      const still = readRunning();
+      if (still?.sessionId !== stuck || settledIds.has(stuck)) return;
+      if (Date.now() < plannedEndOf(still, Date.now())) return; // 已被暂停/延后，不该抢
+      takeover(still, true);
+    }, ALARM_FALLBACK_MS);
+    return;
+  }
+  takeover(r, false);
+}
+
+/**
+ * onAlarm 的实际动作（leader 直接走，follower 兜底复查后走）。
+ * `forced` = 本标签是接管方，必须自己负责响铃与起休息 —— 否则兜底只救回了数据，
+ * 用户依然「到点毫无动静」，等于没修。
+ */
+function takeover(r: RunningState, forced: boolean): void {
   if (r.phase === 'focus') {
-    terminate('completed', { endAt: plannedEndOf(r, Date.now()) });
+    terminate('completed', { endAt: plannedEndOf(r, Date.now()), forced });
   } else {
-    endBreak(true);
+    endBreak(true, forced);
   }
 }
 
@@ -184,6 +212,8 @@ interface TerminateOpts {
   endAt?: number;
   focusMs?: number;
   needsReview?: boolean;
+  /** 本标签是接管方（leader 被冻结时的兜底）：绕过 leader 门禁，自己负责响铃与起休息 */
+  forced?: boolean;
 }
 
 /**
@@ -223,11 +253,58 @@ function terminate(outcome: FocusSession['outcome'], opts: TerminateOpts = {}): 
     usePomodoroStore.setState({ notice: '这段不足 1 分钟，未记录' });
   }
 
-  if (usePomodoroStore.getState().isLeader || !leaderKnown) chimeHandler?.('focusEnd');
+  const owns = usePomodoroStore.getState().isLeader || !leaderKnown || Boolean(opts.forced);
+  if (owns) chimeHandler?.('focusEnd');
+
+  // 自动进入休息。三道闸缺一不可：
+  // · 只有 completed 才进 —— stopped/discarded 是用户主动中断，此时弹一段休息是骚扰；
+  // · 只有「刚刚到点」才进 —— 合盖两小时后回来补算的那段，休息早就过完了；
+  // · 只有 leader 起休息 —— 其余标签靠 storage 事件同步过来，否则每个标签各起一段。
+  const endedAt = opts.endAt ?? now;
+  if (
+    outcome === 'completed' &&
+    owns &&
+    useStore.getState().settings.pomodoro.autoBreak &&
+    Date.now() - endedAt < AUTO_BREAK_FRESH_MS
+  ) {
+    startBreak(nextBreakIsLong() ? 'longBreak' : 'shortBreak', { goalId: r.goalId, taskId: r.taskId });
+  }
 }
 
-/** 休息结束（v1 只有「跳过休息」与残留态清理会走到） */
-function endBreak(chime: boolean): void {
+/**
+ * 起一段休息。休息永不落库（不是投入，存了只污染统计与同步流量），
+ * 但仍走同一套 RunningState / 心跳 / 闹钟 —— 关页面再打开由 planRecovery 的休息总闸兜住。
+ *
+ * ⚠️ 不清 lastResult：刚结算的那张结果卡要继续留在面板上，用户得看见「这段记了多少」。
+ */
+export function startBreak(
+  kind: 'shortBreak' | 'longBreak',
+  owner: { goalId?: string; taskId?: string } = {},
+): void {
+  const existing = readRunning();
+  if (existing) terminate(existing.phase === 'focus' ? 'stopped' : 'discarded');
+
+  const { shortBreakMin, longBreakMin } = useStore.getState().settings.pomodoro;
+  const now = Date.now();
+  const r: RunningState = {
+    sessionId: nanoid(),
+    phase: kind,
+    goalId: owner.goalId,
+    taskId: owner.taskId,
+    startAt: now,
+    plannedMs: (kind === 'longBreak' ? longBreakMin : shortBreakMin) * 60_000,
+    pauses: [],
+    lastHeartbeatAt: now,
+  };
+  writeRunning(r);
+  usePomodoroStore.setState({ ask: null });
+  syncView(r);
+  startHeartbeat();
+  rearmAlarm(r);
+}
+
+/** 休息结束（到点 / 跳过休息 / 残留态清理） */
+function endBreak(chime: boolean, forced = false): void {
   clearAlarm();
   const r = readRunning();
   clearRunning();
@@ -237,7 +314,8 @@ function endBreak(chime: boolean): void {
     resetCycle(Date.now());
     usePomodoroStore.setState({ cycleCompleted: 0 });
   }
-  if (chime && (usePomodoroStore.getState().isLeader || !leaderKnown)) chimeHandler?.('breakEnd');
+  if (chime && (usePomodoroStore.getState().isLeader || !leaderKnown || forced))
+    chimeHandler?.('breakEnd');
 }
 
 // ── 对外操作 ────────────────────────────────────────────────────────────
@@ -269,7 +347,7 @@ export function startFocus(opts: StartOpts = {}): void {
   };
   writeRunning(r);
   writeLastTask({ goalId: opts.goalId, taskId: opts.taskId });
-  usePomodoroStore.setState({ lastResult: null, ask: null });
+  usePomodoroStore.setState({ lastResult: null, ask: null, alert: null });
   syncView(r);
   startHeartbeat();
   rearmAlarm(r);

@@ -14,6 +14,7 @@ import { RING_CIRCUM, RING_R, RING_SIZE, RING_STROKE } from './constants';
 import { humanMs, mmss } from './format';
 import { discardFocus, pauseFocus, remainingMs, resumeFocus, stopFocus } from './kernel';
 import { startPomodoro } from './api';
+import { isPipSupported, togglePip } from './pip';
 import { ResultCard } from './ResultCard';
 import { usePomodoroStore } from './store';
 import { subscribeTick } from './ticker';
@@ -21,6 +22,8 @@ import { TaskPicker } from './TaskPicker';
 import type { FocusSel } from './useSelLabel';
 
 const PANEL_W = 320;
+/** 模块加载时定一次即可：能力探测的结果在运行期不会变 */
+const pipSupported = isPipSupported();
 
 const btn: React.CSSProperties = {
   fontSize: 'var(--font-13)',
@@ -51,6 +54,7 @@ export function PomodoroPanel({
   const running = usePomodoroStore((s) => s.running);
   const cycleCompleted = usePomodoroStore((s) => s.cycleCompleted);
   const lastResult = usePomodoroStore((s) => s.lastResult);
+  const pipHost = usePomodoroStore((s) => s.pipHost);
   const pomodoro = useStore((s) => s.settings.pomodoro);
   const focusSessions = useStore((s) => s.focusSessions);
   const heroRef = useRef<HTMLSpanElement>(null);
@@ -201,10 +205,21 @@ export function PomodoroPanel({
             · <span className="tnum">{todayCount}</span> 段
           </span>
         </span>
+        {pipSupported && (
+          <button
+            type="button"
+            onClick={togglePip}
+            className="ml-auto cursor-pointer"
+            style={{ fontSize: 'var(--font-12)', color: pipHost ? 'var(--accent)' : 'var(--text-tertiary)' }}
+            title="一个浮在所有窗口之上的小窗，最小化浏览器后依然能看到倒计时与到点提醒"
+          >
+            {pipHost ? '关闭小窗' : '悬浮小窗'}
+          </button>
+        )}
         <button
           type="button"
           onClick={onOpenHistory}
-          className="ml-auto cursor-pointer"
+          className={pipSupported ? 'cursor-pointer' : 'ml-auto cursor-pointer'}
           style={{ fontSize: 'var(--font-12)', color: 'var(--accent)' }}
           title="回看 / 编辑 / 补录专注记录"
         >

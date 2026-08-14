@@ -67,6 +67,7 @@ interface Task {
   recurrence?: Recurrence;
   order: number;
   trackId?: string;      // 执行轨道归属：同 goal 内 trackId 相同的任务收成一条可折叠的轨道（见 4.3.1）
+  noFocus?: boolean;     // 不需要专注计时：番茄钟选择器默认不列出（仍可搜索到）。只影响那张列表的可见性
   dependsOn?: string[];  // 轻量依赖（仅可视化连线与冲突提示，不做自动重排）
   baseline?: { startDate: string; endDate: string };  // 基线快照（原计划）
   updatedAt: string;
@@ -378,7 +379,7 @@ interface AppSettings {
 
 Phase 5 之后的模块化增量（各有独立规格，实施与验收以各自文档为准）：
 
-- **番茄钟**（`docs/POMODORO_SPEC.md`，S1–S5）：第 7 张表 `focusSessions`，与手填分钟在 `(goal, task, date)` 粒度取 max 合并为唯一「投入」口径。
+- **番茄钟**（`docs/POMODORO_SPEC.md`，S1–S5 + P1）：第 7 张表 `focusSessions`，与手填分钟在 `(goal, task, date)` 粒度取 max 合并为唯一「投入」口径。P1（§十六）加自动休息循环、Document PiP 悬浮小窗、到点提醒可靠化，以及 `Task.noFocus`（唯一的表结构变化，加字段零 SQL）。
 - **年报 `/year`**（`docs/ANNUAL_SPEC.md`，Y1–Y4）：纯派生的叙事长图，零新表零新依赖，见上 §7.1。
 
 ## 十三、验收清单
