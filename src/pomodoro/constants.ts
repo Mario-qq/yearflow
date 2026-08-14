@@ -68,6 +68,33 @@ export const PIP_H = 172;
 /** 到点提醒态自动消退时长（照 title 闪烁的同一口径） */
 export const ALERT_TTL_MS = 30_000;
 
+/** 窗内自绘顶栏：Chromium 的系统标题栏只显示站点来源，网页改不了，阶段文案只能自己画 */
+export const PIP_TOPBAR_H = 28;
+/** 主操作（开始/暂停）实心圆直径 */
+export const PIP_BTN_PRIMARY = 36;
+/** 次操作（停止/跳过/知道了）描边圆直径 */
+export const PIP_BTN_GHOST = 30;
+/** 底部进度线高度 */
+export const PIP_PROGRESS_H = 3;
+/** 按钮内图标边长 */
+export const PIP_ICON = 14;
+/** 段点直径（顶栏右侧那排「第 N/M 段」） */
+export const PIP_SEG_DOT = 5;
+/** 完成印章（圆环 + 对勾）直径 */
+export const PIP_STAMP = 40;
+
+// ── 到点庆祝的纸屑（canvas 现场绘制，不引任何库） ──────────────────────
+/** 两侧礼花筒各发多少片 */
+export const CONFETTI_PER_CANNON = 26;
+/** 总帧数 ≈ 2.2s @60fps，落完即清空画布，不做常驻动效 */
+export const CONFETTI_FRAMES = 132;
+/** 后 28% 帧数用于淡出 */
+export const CONFETTI_FADE_FROM = 0.72;
+/** 纸屑取哪几个目标色令牌：蓝 / 靛紫 / 青 / 橙 / 朱红（与 L3 底色同族） */
+export const CONFETTI_TOKENS = ['--goal-1', '--goal-6', '--goal-7', '--goal-2', '--goal-5'] as const;
+/** 纸片背面 = 正面压暗到这个比例（翻面时才看得出是一张纸而不是一个色块） */
+export const CONFETTI_BACK_RATIO = 0.62;
+
 // ── 提示音（OscillatorNode 现场合成，不引入音频文件） ─────────────────
 export const CHIME_FREQS = [880, 1174] as const; // A5 → D6
 export const CHIME_NOTE_MS = 90;

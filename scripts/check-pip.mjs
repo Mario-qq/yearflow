@@ -4,6 +4,8 @@
  *
  * 前置：dev server 已运行。运行：node scripts/check-pip.mjs
  * 检查三件事：小窗真的建出来了 / 样式表搬过去了（背景色不是透明） / 三种形态的文案正确。
+ *
+ * ⚠️ 小窗里的控制键全是图标按钮（没有文字），断言与点击一律走 aria-label，别再找 textContent。
  */
 import { chromium } from 'playwright';
 
@@ -24,8 +26,9 @@ const pipInfo = () =>
       sheets: w.document.head.querySelectorAll('style,link').length,
       bg: w.getComputedStyle(w.document.body).backgroundColor,
       size: [w.innerWidth, w.innerHeight],
+      title: w.document.title,
       text: w.document.body.innerText.replace(/\n/g, ' | '),
-      buttons: Array.from(w.document.querySelectorAll('button')).map((b) => b.textContent.trim()),
+      buttons: Array.from(w.document.querySelectorAll('button')).map((b) => b.getAttribute('aria-label')),
     };
   });
 
@@ -65,9 +68,7 @@ console.log(
 // ④ 点「知道了」回到常规形态（休息倒计时）
 await page.evaluate(() => {
   const w = window.documentPictureInPicture.window;
-  Array.from(w.document.querySelectorAll('button'))
-    .find((b) => b.textContent.trim() === '知道了')
-    ?.click();
+  w.document.querySelector('button[aria-label="知道了"]')?.click();
 });
 await page.waitForTimeout(400);
 console.log('④ 确认后：', JSON.stringify(await pipInfo(), null, 0));

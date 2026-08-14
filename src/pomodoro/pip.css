@@ -1,0 +1,298 @@
+/**
+ * 悬浮小窗（Document PiP）的样式。
+ *
+ * 为什么单独一个 css 文件而不是内联 style（照 annual.css 的先例）：
+ * 这里全是内联写不了的东西 —— :hover / :focus-visible / @keyframes / prefers-reduced-motion。
+ *
+ * ⚠️ 小窗的样式靠 pip.ts::copyStyles 把主文档的样式表整份搬过去，所以这个文件必须在
+ * PipView.tsx 里 import（模块在 App 启动时就加载 ⇒ 开窗时它已经在 document 里了）。
+ * 任何开窗之后才注入 document 的样式，都不会出现在小窗里。
+ */
+
+/* ── 顶栏：阶段文案 + 段点 ─────────────────────────────────────────── */
+.pip-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.pip-phase {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-11);
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+.pip-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pip-phase-color);
+}
+.pip-segs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pip-seg {
+  border-radius: 50%;
+  background: var(--border-default);
+}
+.pip-seg--done {
+  background: var(--pip-phase-color);
+}
+.pip-seg--now {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--pip-phase-color);
+}
+
+/* ── hero 倒计时 ───────────────────────────────────────────────────── */
+.pip-hero {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+}
+.pip-time {
+  font-size: var(--font-48);
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+.pip-time--muted {
+  color: var(--text-tertiary);
+}
+
+/* ── 控制行：只有图标，没有文字 ────────────────────────────────────── */
+.pip-controls {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding-bottom: 16px;
+}
+.pip-btn {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition:
+    transform var(--dur-drop) var(--ease),
+    background var(--dur-drop) var(--ease),
+    box-shadow var(--dur-drop) var(--ease);
+}
+.pip-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* 主按钮单独一个变量：待开始时阶段色是灰的（顶栏状态点该灰），但按钮是这屏唯一的
+   行动号召，灰下去就像被禁用了 ⇒ 空闲态按钮走 accent，其余跟随阶段色 */
+.pip-btn--primary {
+  background: var(--pip-action-color, var(--pip-phase-color));
+  color: var(--text-on-accent);
+}
+.pip-btn--primary:hover {
+  transform: scale(1.06);
+}
+.pip-btn--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  box-shadow: inset 0 0 0 1px var(--border-default);
+}
+.pip-btn--ghost:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+/* ── 底部进度线：ticker 用 scaleX 直写，不进 React ─────────────────── */
+.pip-track {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--border-subtle);
+}
+.pip-fill {
+  height: 100%;
+  background: var(--pip-phase-color);
+  transform-origin: left;
+}
+
+/* ── 到点庆祝屏 ─────────────────────────────────────────────────────
+   底色恒为淡亮的三段柔和渐层（主色 → 靛紫 → 青，全部兑白），
+   饱和度只留给印章、主按钮和纸屑。文字用 --celebrate-* 那组恒暗令牌。 */
+.pip-celebrate {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  color: var(--celebrate-ink);
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--accent) 20%, #ffffff) 0%,
+    color-mix(in srgb, var(--goal-6) 16%, #ffffff) 52%,
+    color-mix(in srgb, var(--goal-7) 16%, #ffffff) 100%
+  );
+}
+.pip-celebrate[data-kind='breakEnd'] {
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--success) 20%, #ffffff) 0%,
+    color-mix(in srgb, var(--goal-7) 16%, #ffffff) 52%,
+    color-mix(in srgb, var(--goal-1) 14%, #ffffff) 100%
+  );
+}
+.pip-celebrate .pip-bar {
+  background: transparent;
+  border-bottom-color: var(--celebrate-line);
+}
+.pip-celebrate .pip-phase {
+  color: var(--celebrate-ink-dim);
+}
+/* 这三条必须一起写：`.pip-celebrate .pip-seg` 权重高于 `.pip-seg--done`，
+   只覆写底色会把「已完成」那几颗一起洗成灰点 */
+.pip-celebrate .pip-seg {
+  background: var(--celebrate-dot);
+}
+.pip-celebrate .pip-seg--done {
+  background: var(--pip-phase-color);
+}
+.pip-celebrate .pip-seg--now {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--pip-phase-color);
+}
+.pip-celebrate .pip-btn--ghost {
+  color: var(--celebrate-ink-dim);
+  box-shadow: inset 0 0 0 1px var(--celebrate-hairline);
+}
+.pip-celebrate .pip-btn--ghost:hover {
+  background: rgba(20, 22, 40, 0.05);
+  color: var(--celebrate-ink);
+}
+
+.pip-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.pip-stamp {
+  position: relative;
+}
+.pip-ring,
+.pip-tick {
+  fill: none;
+  stroke: var(--pip-phase-color);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.pip-ring {
+  stroke-width: 2;
+}
+.pip-tick {
+  stroke-width: 2.4;
+}
+/* 一次性外扩光环，代替「闪一下白」那种廉价高光 */
+.pip-halo {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  opacity: 0;
+}
+.pip-headline {
+  font-size: var(--font-15);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.pip-sub {
+  font-size: var(--font-11);
+  color: var(--celebrate-ink-dim);
+}
+.pip-confetti {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* 入场：环画出 → 勾落笔 → 文字浮起。只跑一次，跑完就是静止的一屏 */
+.pip-celebrate .pip-ring {
+  stroke-dasharray: 113;
+  stroke-dashoffset: 113;
+  animation: pip-draw 520ms var(--ease) forwards;
+}
+.pip-celebrate .pip-tick {
+  stroke-dasharray: 22;
+  stroke-dashoffset: 22;
+  animation: pip-draw 260ms var(--ease) 380ms forwards;
+}
+.pip-celebrate .pip-halo {
+  animation: pip-halo 900ms var(--ease) 420ms;
+}
+.pip-celebrate .pip-headline,
+.pip-celebrate .pip-sub {
+  opacity: 0;
+  animation: pip-rise 320ms var(--ease) 480ms forwards;
+}
+.pip-celebrate .pip-sub {
+  animation-delay: 560ms;
+}
+
+@keyframes pip-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes pip-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes pip-halo {
+  from {
+    opacity: 0.8;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--pip-phase-color) 45%, transparent);
+  }
+  to {
+    opacity: 0;
+    box-shadow: 0 0 0 26px transparent;
+  }
+}
+
+/* 关掉动效的用户：直接给终态，不是「快速播一遍」 */
+@media (prefers-reduced-motion: reduce) {
+  .pip-btn,
+  .pip-celebrate .pip-ring,
+  .pip-celebrate .pip-tick,
+  .pip-celebrate .pip-halo,
+  .pip-celebrate .pip-headline,
+  .pip-celebrate .pip-sub {
+    transition: none;
+    animation: none;
+  }
+  .pip-celebrate .pip-ring,
+  .pip-celebrate .pip-tick {
+    stroke-dashoffset: 0;
+  }
+  .pip-celebrate .pip-headline,
+  .pip-celebrate .pip-sub {
+    opacity: 1;
+  }
+}
