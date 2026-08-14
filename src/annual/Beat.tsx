@@ -6,7 +6,13 @@
  */
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { prefersReducedMotion, tween } from '../gantt/lib/tween';
-import { COUNT_DUR_MS, REVEAL_ROOT_MARGIN, REVEAL_THRESHOLD } from './constants';
+import { useIsMobile } from '../lib/useIsMobile';
+import {
+  COUNT_DUR_MS,
+  MOBILE_CHART_W,
+  REVEAL_ROOT_MARGIN,
+  REVEAL_THRESHOLD,
+} from './constants';
 
 const ShownContext = createContext(true);
 
@@ -134,10 +140,11 @@ export function HeroNumber({
   return (
     <div>
       <div className="flex items-baseline gap-2">
-        <span
-          className="tnum"
-          style={{ fontSize: 'var(--font-48)', fontWeight: 600, lineHeight: 1.05 }}
-        >
+        {/*
+          字号走 .annual-hero 而不是内联 style：移动端要降到 --font-32（规格 §5.3），
+          内联 style 只能被 !important 盖过，把降档规则留在 CSS 里更干净。
+        */}
+        <span className="annual-hero tnum" style={{ fontWeight: 600, lineHeight: 1.05 }}>
           {format(n)}
         </span>
         {unit && (
@@ -153,7 +160,13 @@ export function HeroNumber({
   );
 }
 
-/** 图表容器：自绘 SVG 统一用固定 viewBox + 宽度 100%，等比缩放（不引任何图表库） */
+/**
+ * 图表容器：自绘 SVG 统一用固定 viewBox + 宽度 100%，等比缩放（不引任何图表库）。
+ *
+ * 移动端（规格 §5.3「可进可读」）：等比缩到 343px 屏宽时，`--font-11` 的轴标签只剩
+ * 4.6px —— 图还在，但读不了。所以窄屏改成「SVG 保持 MOBILE_CHART_W、外层横向滚动」，
+ * 与宽表格的通行做法一致。桌面与导出路径（离屏舞台固定 900px）完全不受影响。
+ */
 export function ChartBox({
   width,
   height,
@@ -166,16 +179,24 @@ export function ChartBox({
   label: string;
   children: ReactNode;
 }) {
-  return (
+  const isMobile = useIsMobile();
+  const svg = (
     <svg
       viewBox={`0 0 ${width} ${height}`}
-      width="100%"
+      width={isMobile ? MOBILE_CHART_W : '100%'}
+      height={isMobile ? (height / width) * MOBILE_CHART_W : undefined}
       role="img"
       aria-label={label}
-      style={{ display: 'block', overflow: 'visible' }}
+      style={{ display: 'block', overflow: 'visible', flexShrink: 0 }}
     >
       {children}
     </svg>
+  );
+  if (!isMobile) return svg;
+  return (
+    <div className="annual-chart-scroll flex overflow-x-auto" style={{ paddingBottom: 2 }}>
+      {svg}
+    </div>
   );
 }
 

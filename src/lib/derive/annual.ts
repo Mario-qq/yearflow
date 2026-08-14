@@ -250,24 +250,73 @@ export function monthProfiles(args: {
   const { goals, tasks, checkIns, exemptions, sessions, range, today } = args;
   const activeGoals = goals.filter((g) => !g.deletedAt);
 
+  /*
+   * 按目标预分桶。**这不是第二套口径，是同一套口径喂更小的输入**：
+   * monthlyGoalStats 内部对 tasks / checkIns / sessions 做的第一件事就是
+   * `x.goalId !== goalId ⇒ continue`（见 review.ts / streak.ts / focus.ts），
+   * 所以先分好桶再传进去，逐字节等价 —— 分桶逻辑一行都没有被复制。
+   *
+   * 为什么值得：monthlyGoalStats 要被调 月×目标 次（全年 = 12×10 = 120 次），
+   * 每次都重扫一遍全量 checkIns/sessions。Y4 压力实测下这一处占 annualIndex 的
+   * 423ms / 565ms —— 是全页最大的开销，而规格 §九-1 预判的 investedMsByGoal
+   * 实测只有 0.7ms（那条预判找错了人，已回填规格）。
+   * 免打卡区间**不分桶**：exemptions 可以是全局的（goalIds 缺省 = 对所有目标生效）。
+   */
+  const tasksOf = new Map<string, Task[]>();
+  const checkInsOf = new Map<string, CheckIn[]>();
+  const sessionsOf = new Map<string, FocusSession[]>();
+  for (const g of activeGoals) {
+    tasksOf.set(g.id, []);
+    checkInsOf.set(g.id, []);
+    sessionsOf.set(g.id, []);
+  }
+  for (const t of tasks) tasksOf.get(t.goalId)?.push(t);
+  for (const c of checkIns) checkInsOf.get(c.goalId)?.push(c);
+  for (const s of sessions) if (s.goalId) sessionsOf.get(s.goalId)?.push(s);
+
   return range.monthPrefixes.map((month) => {
+    /*
+     * 把传进去的任务**裁到本月**（不重叠的直接滤掉）。monthlyGoalStats 会把每个任务的
+     * 应打卡日整段展开再筛 `startsWith(month)`：一个跨 4 个月的任务，在 12 个月里被
+     * 完整展开 12 遍，其中 8 遍颗粒无收、4 遍只有 1/4 有用，而展开的内层是 dayjs
+     * 逐日 parse —— 实测这一处就是 annualIndex 那 423ms 的来源（规格 §九-1 预判的
+     * investedMsByGoal 只有 0.7ms，找错了人，已回填规格）。
+     *
+     * 为什么裁窄是**逐字节等价**而不是另一套口径：recurrence 全是按星期几判定的
+     * （daily/weekdays/custom/adhoc，见 isScheduledDow），不以 startDate 为锚点；
+     * 免打卡也是按日期判定。所以「先整段展开再筛本月」与「只展开本月这一段」
+     * 得到同一个集合。分桶与计分逻辑一行都没有被复制。
+     */
+    const mStart = `${month}-01`;
+    const mEnd = fmtDay(toDay(mStart).endOf('month'));
+    const clipToMonth = (t: Task): Task =>
+      t.startDate >= mStart && t.endDate <= mEnd
+        ? t
+        : {
+            ...t,
+            startDate: t.startDate > mStart ? t.startDate : mStart,
+            endDate: t.endDate < mEnd ? t.endDate : mEnd,
+          };
     let scheduled = 0;
     let score = 0;
     for (const g of activeGoals) {
       // 逐目标调既有 monthlyGoalStats：完成率口径零重复实现（规格 §3.4）
       const st = monthlyGoalStats({
         goalId: g.id,
-        tasks,
-        checkIns,
+        tasks: tasksOf
+          .get(g.id)!
+          .filter((t) => t.startDate <= mEnd && t.endDate >= mStart)
+          .map(clipToMonth),
+        checkIns: checkInsOf.get(g.id)!,
         exemptions,
         month,
         today,
-        sessions,
+        sessions: sessionsOf.get(g.id)!,
       });
       scheduled += st.scheduled;
       score += st.score;
     }
-    const monthEnd = fmtDay(toDay(`${month}-01`).endOf('month'));
+    const monthEnd = mEnd;
     return {
       month,
       scheduled,

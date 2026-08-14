@@ -137,7 +137,15 @@ export function AnnualTopBar({
           )}
         </div>
       </div>
-      <p style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}>
+      {/*
+        这行是一次性引导，不是数据。整条顶部条是 sticky ⇒ 它会永久占掉屏高：
+        375×812 上连年份带区间已经吃掉约 150px，再加两行说明就把首屏挤没了。
+        窄屏隐藏（规格 §5.3 桌面优先）。
+      */}
+      <p
+        className="max-md:hidden"
+        style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}
+      >
         往下滚，读完这一年。月度数字去复盘页；这里只说复盘页说不了的。
       </p>
     </div>

@@ -17,6 +17,28 @@
   transform: none;
 }
 
+/* hero 巨号数字。字号在这里而不是内联 style，移动端才能被媒体查询降档 */
+.annual-hero {
+  font-size: var(--font-48);
+}
+
+/*
+ * 移动端降级（规格 §5.3：v1 桌面优先，但必须可进可读）。
+ * 断点必须与 lib/useIsMobile.ts 的 QUERY 及 annual/constants.ts 的 MOBILE_MAX_W 同值 ——
+ * CSS 读不到 TS 常量，三处只能靠注释锁住。
+ */
+@media (max-width: 767px) {
+  .annual-hero {
+    font-size: var(--font-32);
+  }
+
+  /* 横滚的图给一点惯性，避免在 iOS 上顿挫 */
+  .annual-chart-scroll {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+}
+
 /* 规格 §4.3：reduced-motion 下静态直出，不做淡入也不做位移 */
 @media (prefers-reduced-motion: reduce) {
   .annual-beat,
@@ -52,6 +74,11 @@
   .annual-beat.is-shown {
     opacity: 1 !important;
     transform: none !important;
+  }
+
+  /* 纸上没有「横向滚动」这回事：窄窗口打印时把滚动容器解开，否则图被裁掉右半 */
+  .annual-chart-scroll {
+    overflow: visible !important;
   }
 
   /* 一个 beat 不许被切到两页 */

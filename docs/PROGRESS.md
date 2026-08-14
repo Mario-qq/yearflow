@@ -527,3 +527,81 @@
 **验收脚本的运行顺序**：先 `capture-annual.mjs`（Y2）再 `capture-annual-y3.mjs`（Y3）。两个脚本都会逐 beat 截图，但 Y3 脚本额外注入了「过期未达成的里程碑」与「一个静默目标」，beat 7/8 的有效截图只有它能产出。
 
 **Y4 起注意**：移动端降级（beat 竖排单列 / hero 降 `--font-32` / 节律热力退化成已经写好的「最强 3 个时段」文字列表 / 导出与打印按钮 `<768px` 已隐藏）；命令面板加「打开年报」「导出年报长图」；性能与包体用**生产构建 + 压力数据**正式复测；回填 `docs/SPEC.md`。导出相关的任何改动，**必须用非背景像素数断言**，不能只看尺寸和文件大小。
+
+### Y4 产出（2026-08-14）：移动端降级 + 命令面板 + 性能与包体正式复测 + 回填规格
+
+`tsc -b` + oxlint（0 diagnostics）+ vitest **225 通过 / 12 文件**。Playwright + 系统 Chrome 三个脚本全过：Y2 14 条、Y3 27 条、**Y4 新增 20 条**，共 61 条。新增依赖 **0 个**。年报模块到此收尾。
+
+**新增文件**：`src/annual/bus.ts`、`scripts/capture-annual-y4.mjs`（移动端 + 命令面板 + reduced-motion）、`scripts/perf-annual.mjs`（生产构建性能复测）、`scripts/gen-stress-backup.mjs`（压力数据生成器）、`docs/screenshots/annual/annual-mobile-{top-light,top-dark,mismatch,rhythm}.png`。
+**改动既有文件 7 个**：`annual/{constants,annual.css,Beat.tsx,AnnualTopBar,BeatRhythm,BeatMismatch}`、`pages/YearReportPage.tsx`、`components/CommandPalette.tsx`、`lib/derive/annual.ts`（性能，见下）、`docs/ANNUAL_SPEC.md`。`store/*` / `db/*` / `gantt/*` / `review/*` / `checkin/*` / `pomodoro/*` / `lib/derive/` 的其余文件**一行未改**。
+
+#### 🔴 Y4 最重要的一条：规格 §九-1 的性能预判是错的，实测推翻了它
+
+Y1 起写在规格里的预判是「`investedMsByGoal` 的 G×M 次全表扫是瓶颈，超预算就给 `focus.ts` 加 ms 版聚合」。生产构建 + 压力数据下逐段实测的分布是：
+
+| | 耗时 |
+|---|---|
+| `annualIndex` 总计 | 565ms |
+| └ `monthProfiles` | **423ms** |
+| └ `goalShares` | 41ms |
+| └ `longestRunOf × G` | 33ms |
+| └ **`investedMsByGoal`** | **0.7ms** ← 预判找错了人 |
+
+真正的开销在 `monthlyGoalStats` 被调 `月 × 目标` 次（全年 = 120 次），**每次都把任务的应打卡日整段展开再筛本月**，而展开的内层是 `toDay(date).day()` 逐日 dayjs parse。一个跨 4 个月的任务在 12 个月里被完整展开 12 遍，8 遍颗粒无收、4 遍只有 1/4 有用。
+
+**处方（已实施，全在 `annual.ts` 的 `monthProfiles` 里）**：不改口径，只**收窄喂进去的输入**。
+1. 按目标预分桶 `tasks/checkIns/sessions` —— `monthlyGoalStats` 内部第一件事就是 `x.goalId !== goalId ⇒ continue`，先分桶等价。
+2. 只传与本月有交集的任务，且**把任务裁到本月**（`startDate/endDate` 夹到月边界）。
+   之所以逐字节等价：recurrence 全按星期几判定（`isScheduledDow`：daily/weekdays/custom/adhoc），**不以 `startDate` 为锚点**；免打卡也按日期判定。所以「整段展开再筛本月」与「只展开本月这一段」是同一个集合。**分桶与计分逻辑一行都没有被复制**（规格 §3.4 的「零重复实现」仍成立），225 条既有测试是护栏。
+
+实测 `monthProfiles` 423 → **119ms**，`annualIndex` 565 → **280ms**，`/year` 首屏 ~870 → **282–342ms**。
+
+**还剩的升级空间（不要顺手做）**：`expandScheduledDays` 的 `toDay(date).day()` 改成按 epoch 天数递推星期几（纯算术）能再快一个量级，且惠及甘特/打卡/复盘 —— 但那是 `scheduled.ts` 的改动，牵动 6 个消费者，应当单独成批配自己的回归。当前已在门槛内，不构成阻塞。
+
+#### 性能与包体正式复测（规格 §六，全部达标）
+
+| 指标 | 门槛 | 实测 |
+|---|---|---|
+| `/year` 首屏（生产构建 + 压力数据） | <500ms | **282 / 307 / 342ms**（三轮中位） |
+| 主包 gzip 增量（相对 Y3） | 0 | **+0.19kB**（620.00→620.54kB，gzip 190.65→190.84） |
+| 甘特首屏（对照组） | <1s | **275–360ms**，未回退 |
+| 区间切换重算 | — | **72–87ms**（`annualIndex` 一次算完） |
+| `YearReportPage` lazy chunk | — | 54.65kB / gzip 17.00 |
+
+**复测方法学（这部分比数字更重要）**：
+- **生产构建 + `vite preview`**，不是 dev server（Y2/Y3 那两次 539/677ms 是未压缩 dev 读数，从来不是结论）。
+- 压力数据走 `scripts/gen-stress-backup.mjs`（确定性伪随机，同种子同数据：10 目标 / 80 任务 / 1587 打卡 / 800 会话）+ 产品自己的「导入 JSON 备份」落 IndexedDB。**不能用 `window.__store` 注入** —— 那个全局有 `import.meta.env.DEV` 守卫，生产构建里根本不存在。
+- 计时基准取 `performance.timeOrigin`（导航开始）而非「脚本注入进页面的那一刻」：后者受 CDP 往返抖动影响，实测能差出几百毫秒，量的是驱动不是应用。
+- 取三次**中位**不取最小值：min 会把「HTTP 缓存已热」的最好情况当结论。
+
+#### 移动端降级（规格 §5.3）
+
+规格点名的四条：竖排单列（本来就是）、hero `--font-48 → --font-32`、节律热力退化为「最强的 3 个时段」文字列表（这个形态 Y3 就已经在桌面版并排给出，不是为移动端新造）、错配镜双列镜像改上下堆叠。导出/打印按钮 <768px **零节点**（不是 `visibility:hidden`）。
+
+**实现期补的三条（规格里没有，但少了就不满足「可读」，已回填 §5.3）**：
+1. **宽图横滚，不等比压扁**。`CHART_W`(812) 等比缩到 343px 时 `--font-11` 轴标签只剩 4.6px —— 图还在但读不了。窄屏下 SVG 保持 `MOBILE_CHART_W`(720)、外层横滚。落在 `ChartBox` 一处，覆盖全部 7 张自绘图。
+2. **顶部条的引导语窄屏隐藏**。整条顶部条 `sticky`，375×812 上年份带区间已吃掉约 150px，再加两行说明首屏就没了。那行是一次性引导，不是数据。
+3. **hero 字号从内联 style 移到 `.annual-hero` 类**。内联 style 只能被 `!important` 盖过；把降档规则留在 CSS 里更干净。
+
+⚠️ **断点三处同值**：`lib/useIsMobile.ts` 的 `QUERY`、`annual/constants.ts` 的 `MOBILE_MAX_W`、`annual.css` 的 `@media` —— CSS 读不到 TS 常量，只能靠注释锁住。
+
+#### 命令面板（规格 §5.4，本批唯一新改的年报域外文件）
+
+`打开年报` 直接 `navigate`。`导出年报长图` **不能直接 import `exportAnnualPng`** —— 命令面板在主包里，那样会把整个年报域拖进主包，「主包 gzip 增量 0」当场作废（Y2 已在 barrel 上踩过同型的坑）。走 `annual/bus.ts`：与 `gantt/bus.ts` 同构，**且必须保持零 import**。
+
+不在年报页时用**闩锁**（命令面板置位 → 页面挂载时取走），不用 `setTimeout`：甘特那条 150ms 成立是因为 `GanttView` 在主包里；年报走 `lazy()`，chunk 何时落地取决于网络与磁盘，赌延时数字迟早会漏。
+
+⚠️ **取闩锁的 effect 不能挂可清理的定时器**：StrictMode 下是 mount → cleanup → mount，第一次 mount 已把闩锁取走，若在 cleanup 里 `clearTimeout`，第二次 mount 再也找不到请求，**导出静默不发生**（实测踩到，Playwright 等下载等到超时）。用 `queueMicrotask` 且不回收。
+
+#### 两条环境坑（Y4 新踩到，记下来省得下次再查）
+
+1. **先确认 dev server 真的在你以为的端口上**。机器上已有一个 5173 的 dev server 时，`npx vite --port 5173` 会静默改用 5174，验证脚本连过去读的是**旧代码**——表现为「改了的东西查无此物」，极易误判成实现有 bug。跑脚本前先看一眼 `vite` 的启动日志。
+2. **Playwright 的 `reducedMotion: 'reduce'` 会给全页元素强塞 `transition-duration: 1e-05s`**，所以断言不能量 `transitionDuration`（永远不是 `0s`）。`transition: none` 生效的可观测证据是 `transitionProperty === 'none'`。
+
+#### 截图门槛（规格 §7.3）
+
+`docs/screenshots/annual/` 共 33 张：11 beat × 深浅 22 张 + 空态 1 + 打印 1 + 导出长图缩略 1 + **移动端 4 张（首屏深浅 + 错配镜堆叠 + 节律文字列表）**。
+
+#### 年报模块收尾状态
+
+11 个 beat 全部就位，桌面 / 移动 / 打印 / 长图导出四条呈现路径都过实测。规格 §二 的六条非目标全部守住：零新表、零新依赖、零 recharts（全仓唯一 import 点仍只有 `AnnualOverview.tsx`）、零 LLM、零分享链接、零自动归档。规格 §九 的其余 5 条已知局限维持原状，留 P1。

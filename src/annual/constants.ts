@@ -111,6 +111,19 @@ export const RHY_TOP_N = 3;
 /** 进度小条几何（卡片内，非 SVG 图） */
 export const OUTCOME_BAR_H = 4;
 
+// ── 移动端降级（规格 §5.3：v1 桌面优先，但必须可进可读） ──────────────
+/**
+ * 移动端断点，**必须与 `lib/useIsMobile.ts` 的 QUERY 同值**（SPEC 第五节 <768px）。
+ * 这里留一份是给 annual.css 的 @media 用 —— CSS 读不到 TS 常量，两处只能靠这条注释锁住。
+ */
+export const MOBILE_MAX_W = 767;
+/**
+ * 移动端自绘图的渲染宽度。**不缩到屏宽**：CHART_W(812) 等比压到 343 时，
+ * `--font-11` 的轴标签只剩 4.6px，图还在但读不了，那不叫「可读」。
+ * 所以保持接近原尺寸并让容器横向滚动 —— 与宽表格的通行做法一致。
+ */
+export const MOBILE_CHART_W = 720;
+
 // ── 导出长图（规格 §4.5） ──────────────────────────────────────────
 /** 导出宽度固定 900 CSS px（= PAGE_W，两者必须同值） */
 export const EXPORT_W = PAGE_W;

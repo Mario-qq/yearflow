@@ -299,7 +299,8 @@ SPEC §八 明令「绝不做花哨仪表盘风」。年报的观感来自**排�
 | 文件 | 改动 |
 |---|---|
 | `src/lib/derive/annual.ts` + `annual.test.ts` | 新增 |
-| `src/lib/derive/index.ts` | 加导出（barrel） |
+| ~~`src/lib/derive/index.ts` 加导出（barrel）~~ | **Y2 撤销**：barrel 被主包引用着，经它导入会让 `annual.ts` 落进共享 index chunk（实测主包 gzip +2.2kB），违反 §6。年报一律从 `derive/annual` 直连，`index.ts` 里已写明原因 |
+| `src/annual/bus.ts` | 新增（Y4，命令面板 → 页面的命令通道，见 §5.4） |
 | `src/annual/*`（constants + 11 个 beat 组件 + 导出/打印） | 新增 |
 | `src/pages/YearReportPage.tsx` | 新增 |
 | `src/App.tsx` | `NAV` 加「年报」+ 一条 `lazy()` 路由 |
@@ -315,18 +316,41 @@ SPEC §八 明令「绝不做花哨仪表盘风」。年报的观感来自**排�
 
 可进、可读：beat 竖排单列、hero 巨字降一档（`--font-32`）、节律热力退化为「你最强的三个时段」文字列表、错配镜双列改上下堆叠。**长图导出与打印按钮在 <768px 隐藏**（不打磨、不假装可用）。
 
+Y4 实现期补的三条（都不在原规格里，但少了就不满足「可读」）：
+
+- **宽图横滚，不等比压扁**。`CHART_W`(812) 等比缩到 343px 屏宽时，`--font-11` 的轴标签只剩 4.6px —— 图还在但读不了。所以窄屏下 SVG 保持 `MOBILE_CHART_W`(720)、外层容器横向滚动（与宽表格的通行做法一致）。这条落在 `ChartBox` 里，一处改动覆盖全部 7 张自绘图。
+- **顶部条的引导语窄屏隐藏**。整条顶部条是 `sticky`，375×812 上年份带区间已经吃掉约 150px，再加两行说明就把首屏挤没了。那行是一次性引导，不是数据。
+- **断点三处同值**：`lib/useIsMobile.ts` 的 `QUERY`、`annual/constants.ts` 的 `MOBILE_MAX_W`、`annual.css` 的 `@media` —— CSS 读不到 TS 常量，只能靠注释锁住。
+
+### 5.4 命令面板的两条入口
+
+`打开年报` = 直接 `navigate('/year')`。
+`导出年报长图` **不能直接 import `exportAnnualPng`** —— 命令面板在主包里，那样会把整个年报域拖进主包，§6 的「主包 gzip 增量 0」当场作废。走 `annual/bus.ts`（零 import 的空壳，与 `gantt/bus.ts` 同构）。
+
+不在年报页时用**闩锁**（命令面板置位，页面挂载时取走），不用 `setTimeout`：甘特那条 150ms 之所以成立，是因为 `GanttView` 在主包里；年报走 `lazy()`，chunk 何时落地取决于网络与磁盘，赌一个延时数字迟早会漏。
+
+⚠️ 取闩锁的那个 effect **不能挂可清理的定时器**：StrictMode 下是 mount → cleanup → mount，第一次 mount 已把闩锁取走，若在 cleanup 里 `clearTimeout`，第二次 mount 就再也找不到请求，导出静默不发生。用 `queueMicrotask` 且不回收。
+
 ---
 
 ## 六、性能与容量
 
 | 指标 | 门槛 |
 |---|---|
-| 报告页首屏（10 目标 × 8 任务 × 全年打卡 + 800 段会话） | **<500ms** |
-| 主包 gzip 增量 | **0**（lazy 路由） |
-| 甘特首屏 / 缩放 / 拖拽 | 不得回退（<1s / <150ms / 60fps），实测一次作对照组 |
-| `annualIndex` 调用次数 | 每次渲染 **1 次**（一个 useMemo） |
+| 报告页首屏（10 目标 × 8 任务 × 全年打卡 + 800 段会话） | **<500ms** ✅ Y4 实测中位 **282–342ms** |
+| 主包 gzip 增量 | **0**（lazy 路由） ✅ Y4 实测 +0.19kB |
+| 甘特首屏 / 缩放 / 拖拽 | 不得回退（<1s / <150ms / 60fps），实测一次作对照组 ✅ 甘特首屏 275–360ms |
+| `annualIndex` 调用次数 | 每次渲染 **1 次**（一个 useMemo） ✅ 切区间重算 72–87ms |
 
-`investedMsByGoal` 的 G×M 次全表扫是已知代价（§3.2）。Y4 实测若超 500ms，处方是给 `focus.ts` 加导出的 ms 版聚合，**不是**在年报里复制分桶逻辑。
+复测方式（Y4 定稿，见 `scripts/perf-annual.mjs`）：**生产构建 + `vite preview`**，压力数据由 `scripts/gen-stress-backup.mjs` 生成（确定性伪随机，同种子同数据）并经产品自己的「导入 JSON 备份」落进 IndexedDB —— 不用 `window.__store` 注入，那个全局只在 DEV 构建里存在。计时基准取 `performance.timeOrigin`（导航开始），取三次中位。
+
+> ⚠️ **Y4 实测推翻了本节原先的预判**：瓶颈不是 `investedMsByGoal`。压力数据下 `annualIndex` 565ms 的分布是
+> `monthProfiles` 423ms / `goalShares` 41ms / `longestRunOf×G` 33ms / **`investedMsByGoal` 0.7ms**。
+> 真正的开销在 `monthlyGoalStats` 被调 月×目标 次，每次都把任务的应打卡日**整段展开**再筛本月，
+> 而展开的内层是 dayjs 逐日 parse。处方也因此不是「给 `focus.ts` 加 ms 版聚合」，而是**把喂给
+> `monthlyGoalStats` 的输入收窄**（按目标预分桶 + 把任务裁到本月）——因为 recurrence 全按星期几判定、
+> 不以 `startDate` 为锚点，收窄输入与原口径逐字节等价，分桶与计分逻辑一行未复制。
+> 实测 `monthProfiles` 423 → 119ms，`annualIndex` 565 → 280ms。详见 §九-1。
 
 ---
 
@@ -376,7 +400,14 @@ SPEC §八 明令「绝不做花哨仪表盘风」。年报的观感来自**排�
 
 ## 九、已知局限与升级路径
 
-1. **`investedMsByGoal` 的 G×M 次全表扫**：见 §3.2 与 §6。升级 = `focus.ts` 加导出 ms 版聚合。
+1. ~~**`investedMsByGoal` 的 G×M 次全表扫**：升级 = `focus.ts` 加导出 ms 版聚合。~~
+   **Y4 实测证伪：它只占 0.7ms**（10 目标 × 全年前缀），G×M 次全表扫在这个数据量下根本不是问题，
+   `focus.ts` 不需要动。真正的热点是 `monthProfiles` 里 月×目标 次的 `monthlyGoalStats`，
+   已在 `annual.ts` 内用「收窄输入」解决（按目标预分桶 + 任务裁到本月，见 §6 的说明与代码注释）。
+   **还剩的升级空间**：`expandScheduledDays` 内层是 `toDay(date).day()` 逐日 dayjs parse。
+   改成按 epoch 天数递推星期几（纯算术）能再快一个量级，且惠及甘特/打卡/复盘 ——
+   但那是 `scheduled.ts` 的改动，牵动 6 个消费者，应当单独成批并配自己的回归，
+   **不要顺手塞进年报的批次里**。当前实测已在门槛内，不构成阻塞。
 2. **节律画像不做跨小时分摊**：一段整记在开始小时（§3.8）。升级 = 按暂停切段后分摊到格。
 3. **`plannedTaskDays` 与完成率分母口径不同**：故意的（§3.3），靠界面措辞区分。若将来觉得混乱，正确做法是在界面上并列展示两者，而不是把权重改成并集（会把结论说反）。
 4. **无基线任务不参与漂移统计**：靠界面提示补齐（§3.7）。升级 = 顶栏「保存基线」的引导。

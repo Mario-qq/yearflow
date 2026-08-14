@@ -8,6 +8,7 @@
  * · 一段跨小时的会话**整段记在开始小时**（v1 不做跨格分摊）。
  */
 import type { AnnualIndex, RhythmCell } from '../lib/derive/annual';
+import { useIsMobile } from '../lib/useIsMobile';
 import { humanMs } from '../pomodoro/format';
 import { Beat, ChartBox, HeroNumber } from './Beat';
 import {
@@ -30,6 +31,7 @@ const DOW_NAME = ['日', '一', '二', '三', '四', '五', '六'];
 const cellLabel = (c: RhythmCell): string => `周${DOW_NAME[c.dow]} ${c.hour} 点`;
 
 export function BeatRhythm({ idx }: { idx: AnnualIndex }) {
+  const isMobile = useIsMobile();
   const cells = idx.rhythm;
   if (cells.length === 0) return null; // 规格 §4.2
 
@@ -75,7 +77,11 @@ export function BeatRhythm({ idx }: { idx: AnnualIndex }) {
         <>
           区间归属看会话所属日期，<b>钟点与星期取开始时间</b>（结果卡「改归相邻日」只改归属日，
           不改你实际几点开始）。一段跨小时的专注整段记在开始的那个小时，v1 不做跨格分摊。
-          颜色深浅 = 该格累计时长，最深的一格是 {humanMs(maxMs)}。
+          {isMobile ? (
+            <>最强的一格是 {humanMs(maxMs)}；窄屏只列最强时段，热力图请在电脑上看。</>
+          ) : (
+            <>颜色深浅 = 该格累计时长，最深的一格是 {humanMs(maxMs)}。</>
+          )}
         </>
       }
     >
@@ -86,6 +92,12 @@ export function BeatRhythm({ idx }: { idx: AnnualIndex }) {
         sub={<>集中在 {cellLabel(top)} 这一格</>}
       />
 
+      {/*
+        规格 §5.3：移动端热力图退化为「你最强的三个时段」文字列表。
+        7×N 格的热力在 375px 上单格只剩几像素，读不出任何东西 —— 与其横滚一张读不懂的图，
+        不如只留下面那份逐字可读的列表（它本来就在，不是为移动端新造的形态）。
+      */}
+      {!isMobile && (
       <ChartBox width={CHART_W} height={height} label="星期 × 小时的专注分布热力图">
         {Array.from({ length: cols }, (_, i) => h0 + i).map((hour, i) => (
           <text
@@ -139,9 +151,13 @@ export function BeatRhythm({ idx }: { idx: AnnualIndex }) {
           );
         })}
       </ChartBox>
+      )}
 
       {/* 文字版最强时段：热力图读的是趋势，具体数字仍要有一处能逐字读到 */}
-      <div className="flex flex-col gap-1.5 border-t pt-3" style={{ borderColor: 'var(--border-subtle)' }}>
+      <div
+        className={`flex flex-col gap-1.5${isMobile ? '' : ' border-t pt-3'}`}
+        style={{ borderColor: 'var(--border-subtle)' }}
+      >
         <p style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}>
           最强的 {tops.length} 个时段：
         </p>

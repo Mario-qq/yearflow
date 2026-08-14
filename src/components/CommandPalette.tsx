@@ -9,6 +9,7 @@ import { createGoal, saveBaselineAll } from '../store/actions';
 import { downloadBackupJSON } from '../lib/download';
 import { showToast } from '../lib/toast';
 import { emitGantt } from '../gantt/bus';
+import { requestAnnualExport } from '../annual/bus';
 import { useGanttUi } from '../gantt/uiStore';
 import { goalColor } from '../lib/colors';
 import type { GanttZoom } from '../types/domain';
@@ -110,6 +111,18 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       } },
       { id: 'go-checkin', kind: '命令', label: '打开今日打卡', hint: 'D', run: () => navigate('/checkin') },
       { id: 'go-review', kind: '命令', label: '打开月度复盘', run: () => navigate('/review') },
+      { id: 'go-year', kind: '命令', label: '打开年报', hint: '一页读完这一年', run: () => navigate('/year') },
+      /*
+       * 导出走 bus 而不是在这里直接调 exportAnnualPng：后者会把年报域拖进主包
+       * （规格 §六「主包 gzip 增量 0」）。annual/bus.ts 是零 import 的空壳，只加几百字节。
+       * 不在页外时用闩锁而非 setTimeout：年报走 lazy()，chunk 何时落地取决于网络与磁盘，
+       * 赌一个延时数字迟早会漏（甘特那条 150ms 只因为它在主包里才成立）。
+       */
+      { id: 'export-annual', kind: '命令', label: '导出年报长图', hint: 'PNG', run: () => {
+        const onYear = pathname.startsWith('/year');
+        if (!onYear) navigate('/year');
+        requestAnnualExport(onYear);
+      } },
       { id: 'go-settings', kind: '命令', label: '打开设置', run: () => navigate('/settings') },
     ];
     for (const g of Object.values(s.goals)) {

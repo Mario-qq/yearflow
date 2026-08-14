@@ -12,6 +12,7 @@
 import type { Goal } from '../types/domain';
 import type { AnnualIndex, GoalShare } from '../lib/derive/annual';
 import { goalColor, goalColorAlpha } from '../lib/colors';
+import { useIsMobile } from '../lib/useIsMobile';
 import { humanMs } from '../pomodoro/format';
 import { Beat, ChartBox, HeroNumber } from './Beat';
 import {
@@ -32,6 +33,7 @@ interface Props {
 }
 
 export function BeatMismatch({ idx, goals }: Props) {
+  const isMobile = useIsMobile();
   const goalMap = new Map(goals.map((g) => [g.id, g]));
   const known = idx.shares.filter((s) => goalMap.has(s.goalId));
 
@@ -82,9 +84,9 @@ export function BeatMismatch({ idx, goals }: Props) {
       }
       footnote={
         <>
-          左列 = 计划任务·日占比（同一天两个并行任务算两份力气，故按任务求和，
-          <b>不是</b>应打卡天数），右列 = 实际投入占比。两列各自归一化到区间内的目标总量，
-          条长按行内最大值等比缩放，百分比才是真值。
+          {isMobile ? '上条' : '左列'} = 计划任务·日占比（同一天两个并行任务算两份力气，故按任务求和，
+          <b>不是</b>应打卡天数），{isMobile ? '下条' : '右列'} = 实际投入占比。
+          两者各自归一化到区间内的目标总量，条长按最大值等比缩放，百分比才是真值。
         </>
       }
     >
@@ -102,7 +104,63 @@ export function BeatMismatch({ idx, goals }: Props) {
         />
       )}
 
-      {ranked.length > 0 && (
+      {/*
+        规格 §5.3：移动端双列镜像改上下堆叠。左右对照要靠中线两侧的对称才读得出来，
+        375px 上左右各只剩 ~120px，两条都短到分不出长短 —— 所以窄屏改成
+        「一个目标一块，计划条在上、实际条在下」，比较关系从「左右」换成「上下」。
+      */}
+      {ranked.length > 0 && isMobile && (
+        <div className="flex flex-col gap-3">
+          {ranked.map((s) => {
+            const g = goalMap.get(s.goalId)!;
+            const rows = [
+              { label: '计划任务·日', share: s.plannedShare, fill: goalColorAlpha(g.color, 40) },
+              { label: '实际投入', share: s.investedShare, fill: goalColor(g.color) },
+            ];
+            return (
+              <div key={s.goalId} className="flex flex-col gap-1">
+                <div className="flex items-baseline gap-2" style={{ fontSize: 'var(--font-12)' }}>
+                  <span className="min-w-0 truncate">{g.name}</span>
+                  <span className="tnum ml-auto shrink-0" style={{ color: gapColor(s) }}>
+                    {gapText(s)}
+                  </span>
+                </div>
+                {rows.map((r) => (
+                  <div key={r.label} className="flex items-center gap-2">
+                    <span
+                      className="shrink-0"
+                      style={{ fontSize: 'var(--font-11)', color: 'var(--text-tertiary)', width: 72 }}
+                    >
+                      {r.label}
+                    </span>
+                    <span
+                      className="min-w-0 flex-1"
+                      style={{ height: MIRROR_BAR_H, background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)' }}
+                    >
+                      <span
+                        className="block h-full"
+                        style={{
+                          width: `${Math.max(1, (r.share / maxShare) * 100)}%`,
+                          background: r.fill,
+                          borderRadius: 'var(--radius-sm)',
+                        }}
+                      />
+                    </span>
+                    <span
+                      className="tnum shrink-0 text-right"
+                      style={{ fontSize: 'var(--font-11)', color: 'var(--text-tertiary)', width: 34 }}
+                    >
+                      {pctOf(r.share)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {ranked.length > 0 && !isMobile && (
         <ChartBox width={CHART_W} height={h} label="计划权重与实际投入对照">
           <text
             x={midL}

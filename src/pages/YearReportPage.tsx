@@ -31,6 +31,7 @@ import { BeatOutcomes } from '../annual/BeatOutcomes';
 import { BeatRhythm } from '../annual/BeatRhythm';
 import { BeatClosing } from '../annual/BeatClosing';
 import { exportAnnualPng } from '../annual/exportLong';
+import { onAnnual, takePendingExport } from '../annual/bus';
 import { PAGE_W } from '../annual/constants';
 import { longDay, RANGE_LABEL } from '../annual/format';
 import '../annual/annual.css';
@@ -144,10 +145,14 @@ export default function YearReportPage() {
     setExporting(true);
     try {
       const r = await exportAnnualPng(root, caption, `yearflow-year-${year}-${kind}`);
+      // pages === 0 ⇒ 页面上一个 beat 都没有（空态）。命令面板那条入口绕过了按钮的
+      // 空态判断，所以必须在这里也说实话，不能报「已导出」。
       showToast(
-        r.pages > 1
-          ? `长图超过单张上限，已按 beat 分成 ${r.pages} 张导出`
-          : '已导出长图 PNG',
+        r.pages === 0
+          ? '这个区间没有内容可导出'
+          : r.pages > 1
+            ? `长图超过单张上限，已按 beat 分成 ${r.pages} 张导出`
+            : '已导出长图 PNG',
       );
     } catch (e) {
       showToast(`导出失败：${e instanceof Error ? e.message : String(e)}`);
@@ -155,6 +160,23 @@ export default function YearReportPage() {
       setExporting(false);
     }
   }, [caption, exporting, kind, year]);
+
+  /*
+   * 命令面板的「导出年报长图」。两条入口：页面已在场 ⇒ 事件；从别的页跳过来 ⇒ 挂载时
+   * 取走闩锁（annual/bus.ts 里写了为什么不用 setTimeout 赌 lazy chunk 的落地时刻）。
+   *
+   * ⚠️ 闩锁那条**不能挂可清理的定时器**：StrictMode 下是 mount → cleanup → mount，
+   * 第一次 mount 已经把闩锁取走，若在 cleanup 里 clearTimeout，第二次 mount 就再也
+   * 找不到请求，导出静默不发生（实测踩到，Playwright 那条等下载等到超时）。
+   * 用 queueMicrotask 且不回收：它必然跑，且此时 DOM 已提交、columnRef 已就位。
+   */
+  const exportRef = useRef(onExport);
+  exportRef.current = onExport;
+  useEffect(() => {
+    const off = onAnnual('export-png', () => void exportRef.current());
+    if (takePendingExport()) queueMicrotask(() => void exportRef.current());
+    return off;
+  }, []);
 
   return (
     <div
