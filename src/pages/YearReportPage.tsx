@@ -10,9 +10,10 @@
  * 2. 本页走 lazy() 路由 ⇒ 主包 gzip 增量目标 0；且**一个 recharts 都不引**，
  *    全仓唯一 recharts import 点必须仍只有 review/AnnualOverview.tsx（规格 §二）。
  */
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { todayStr } from '../lib/date';
+import { showToast } from '../lib/toast';
 // ⚠️ 从 derive/annual 直接导入，**不走 lib/derive 的 barrel**：barrel 被主包（甘特/复盘）
 // 引用着，经它导入会让 annual.ts 落进共享的 index chunk（实测主包 gzip +2.2kB），
 // 违反规格 §六「主包 gzip 增量 0」。annual.ts 只被本页这条 lazy 链引用时才会留在 lazy chunk 里。
@@ -24,8 +25,14 @@ import { BeatCadence } from '../annual/BeatCadence';
 import { BeatMismatch } from '../annual/BeatMismatch';
 import { BeatBestWorst } from '../annual/BeatBestWorst';
 import { BeatStreak } from '../annual/BeatStreak';
+import { BeatDrift } from '../annual/BeatDrift';
+import { BeatMilestones } from '../annual/BeatMilestones';
+import { BeatOutcomes } from '../annual/BeatOutcomes';
+import { BeatRhythm } from '../annual/BeatRhythm';
+import { BeatClosing } from '../annual/BeatClosing';
+import { exportAnnualPng } from '../annual/exportLong';
 import { PAGE_W } from '../annual/constants';
-import { RANGE_LABEL } from '../annual/format';
+import { longDay, RANGE_LABEL } from '../annual/format';
 import '../annual/annual.css';
 
 export default function YearReportPage() {
@@ -96,11 +103,68 @@ export default function YearReportPage() {
 
   const otherYears = years.filter((y) => y !== year);
 
+  // ── 打印与导出（规格 §4.5） ──────────────────────────────────────────
+  const columnRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState(false);
+  const caption = `${year} · ${RANGE_LABEL[kind]}${
+    idx.range.clipped && idx.range.clippedEnd >= idx.range.start
+      ? ` · 统计截至 ${longDay(idx.range.clippedEnd)}`
+      : ''
+  }`;
+
+  /*
+   * 打印时强制浅色：深色主题的大面积深底在纸上既费墨又难读。
+   * 做法是临时改 <html data-theme>，**不碰 store** —— 走 updateSettings 会写库、
+   * 会进同步、会在别的标签页里也变深浅，一次打印不该有这些副作用。
+   * 用 beforeprint/afterprint 而非按钮里改，是为了 Ctrl+P 也走同一条路径。
+   */
+  useEffect(() => {
+    document.body.classList.add('annual-page');
+    let prev: string | undefined;
+    const before = (): void => {
+      prev = document.documentElement.dataset.theme;
+      document.documentElement.dataset.theme = 'light';
+    };
+    const after = (): void => {
+      if (prev) document.documentElement.dataset.theme = prev;
+    };
+    window.addEventListener('beforeprint', before);
+    window.addEventListener('afterprint', after);
+    return () => {
+      document.body.classList.remove('annual-page');
+      window.removeEventListener('beforeprint', before);
+      window.removeEventListener('afterprint', after);
+      after();
+    };
+  }, []);
+
+  const onExport = useCallback(async () => {
+    const root = columnRef.current;
+    if (!root || exporting) return;
+    setExporting(true);
+    try {
+      const r = await exportAnnualPng(root, caption, `yearflow-year-${year}-${kind}`);
+      showToast(
+        r.pages > 1
+          ? `长图超过单张上限，已按 beat 分成 ${r.pages} 张导出`
+          : '已导出长图 PNG',
+      );
+    } catch (e) {
+      showToast(`导出失败：${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setExporting(false);
+    }
+  }, [caption, exporting, kind, year]);
+
   return (
     <div
+      ref={columnRef}
       className="mx-auto flex flex-col gap-6 px-6 pb-16 max-md:px-4"
       style={{ maxWidth: PAGE_W }}
     >
+      {/* 打印专用标题：顶部条在纸上被隐藏，年份与区间不能跟着一起消失 */}
+      <p className="annual-print-title tnum">YearFlow 年报 · {caption}</p>
+
       <AnnualTopBar
         year={year}
         kind={kind}
@@ -112,6 +176,9 @@ export default function YearReportPage() {
         }
         onYear={setYear}
         onKind={setKind}
+        onExport={idx.empty ? undefined : onExport}
+        onPrint={idx.empty ? undefined : () => window.print()}
+        exporting={exporting}
       />
 
       {idx.empty ? (
@@ -165,13 +232,11 @@ export default function YearReportPage() {
           <BeatMismatch idx={idx} goals={goalList} />
           <BeatBestWorst idx={idx} />
           <BeatStreak idx={idx} goals={goalList} />
-          {/* beat 6–10（漂移排行 / 里程碑 / 停滞与放弃 / 节律画像 / 收尾）见 Y3 */}
-          <p
-            className="pt-2 text-center"
-            style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}
-          >
-            后半段（计划漂移、里程碑、停滞与放弃、节律画像）还在路上。
-          </p>
+          <BeatDrift idx={idx} goals={goalList} />
+          <BeatMilestones idx={idx} goals={goalList} />
+          <BeatOutcomes idx={idx} goals={goalList} />
+          <BeatRhythm idx={idx} />
+          <BeatClosing idx={idx} />
         </>
       )}
     </div>

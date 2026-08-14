@@ -494,3 +494,36 @@
 **实测数字（dev server + 系统 Chrome，1440×1000）**：`/year` 首屏含 lazy chunk 载入 539–562ms。规格 §六 门槛是 <500ms，**但这是 dev 未压缩 + 冷加载 chunk 的读数，不是结论**；Y4 用生产构建 + 10 目标×8 任务×全年打卡×800 会话的压力数据正式复测，届时若真超，处方仍是给 `focus.ts` 加导出的 ms 版聚合（规格 §九-1），不是在年报里抄第二份分桶。
 
 **Y3 起注意**：beat 6–10 的数据在 `AnnualIndex` 里已经齐了（`drift` / `milestones` / `outcomes` / `rhythm`），照样只读 props，不许新调派生；`annual.css` 里已备好 `@media print` 的揭示覆盖（没滚到的 beat 不会在长图里留白），Y3 补其余打印规则即可；导出长图必须用 Playwright + 系统 Chrome 验证（`html-to-image` 的 resolve 包在 rAF 里，本机浏览器面板 `document.hidden=true` 下永挂）。
+
+### Y3 产出（2026-08-14）：beat 6–10 + 长图 PNG 导出 + 打印样式
+
+`tsc -b` + oxlint（154 文件 0 diagnostics）+ vitest **225 通过 / 12 文件**（**派生层一行未改** ⇒ 全绿，年报仍是纯派生页）。Playwright + 系统 Chrome：Y3 脚本 22 条断言全过，Y2 脚本 14 条复跑仍全过。新增依赖 **0 个**。
+
+**11 个 beat 全部就位**：`6` 计划漂移 · `7` 里程碑 · `8` 停滞与放弃 · `9` 节律画像 · `10` 收尾。
+
+**新增文件**：`src/annual/BeatDrift / BeatMilestones / BeatOutcomes / BeatRhythm / BeatClosing.tsx`、`src/annual/exportLong.ts`、`scripts/capture-annual-y3.mjs`、`docs/screenshots/annual/annual-beat6–10-{light,dark}.png` + `annual-print-light.png` + `annual-export-thumb.png`。
+**改动既有文件 5 个（全在年报域内）**：`annual/constants.ts`（beat 6/7/8/9 几何 + 导出三常量）、`annual/annual.css`（打印规则）、`annual/Beat.tsx`（`LookButton` 加 `data-annual-noprint`）、`annual/AnnualTopBar.tsx`（导出/打印按钮，<768px 隐藏）、`pages/YearReportPage.tsx`（挂 beat 6–10 + 导出/打印）。`actions.ts` / `store/*` / `db/*` / `gantt/*` / `review/*` / `checkin/*` / `pomodoro/*` / `lib/derive/*` **一行未改**。
+
+**包体：主包 gzip 增量仍 ≈0**。实测 `index` 619.97kB/gzip 190.63（Y2）→ 620.00/190.65（+0.03/+0.02kB）；`YearReportPage` chunk 30.67/10.30 → 52.37/16.43，新增全部落在 lazy chunk。`html-to-image` 早已被甘特导出拉进主包，年报复用它 ⇒ 零新增。
+
+**⚠️ Y3 最大的坑：交给 `html-to-image` 的节点自身不能是 `position:fixed` 的离屏节点，否则导出一张白板**
+`toCanvas` 把节点连同计算样式塞进 SVG `<foreignObject>`，`left:-100000px` 在那个坐标系里照样生效 ⇒ 内容被推出画布，只剩背景色。**尺寸、文件大小、文件名全都对，只有像素是空的**——初版就这样过了三条断言，是肉眼看图才发现的。实测同一个 beat：直接截 fixed 舞台得 **0** 个非背景像素，套一层「外壳 fixed 离屏 + 内层 stage 静态」后得 **196741** 个。
+⇒ 两条固化：`exportLong.ts` 的 `makeStage` 返回 `{host, stage}`（host 负责离屏，stage 负责被截）；验收脚本**必须把落盘的 PNG 送回浏览器解码数非背景像素**，尺寸/大小断言完全抓不到这个 bug。
+🔴 **既有 `src/gantt/lib/exportPng.ts` 有同一个 bug**（实测导出 2880×1848、108kB、非背景像素 **0**）。Y3 的改动面禁止碰 `gantt/*`，故只记录不修；修法与上面同构（外壳 fixed，内层静态，`toCanvas(inner)`）。
+
+**四处口径/实现取舍（Y4 沿用）**
+- **beat 7 的兑现率分母只算「已到期」里程碑**（`date ≤ clippedEnd`）。复盘页的时间线把「过期未达成」和「还没到期」画成同一种未达成，于是「10 个达成 3 个」看着像一场失败，而真相可能是另外 6 个 11 月才到期。年报要说的就是这条分界，所以额外单列「过了日子仍未达成」并给出过期天数。
+- **beat 8 是全篇唯一写库的一 beat**：`[归档]` → `window.confirm`（写明「数据一条不删」「Ctrl+Z 可撤销」）→ 既有 `patchGoal({archived:true})`，实测 undo 栈恰好 +1、撤销后回到原位。卡上必须印「最后一条记录 X，距今 N 天（已扣除免打卡区间）」——一个不能当场被人眼否掉的指控就是噪音。
+- **beat 9 热力图只画有数据的小时跨度**（不足 8 格时向两侧补齐）：24 格铺满时通常一半是空的，会把有效格压成细条，反而读不出「哪个时段最强」。同时并排给「最强的 3 个时段」文字列表——热力图读趋势，具体数字要有一处能逐字读到（这一份也正好是 Y4 移动端降级要用的形态）。
+- **beat 10 不再画第五张图**：收尾要的是一眼扫完，记分卡（6 格）+ 规则驱动的「接下来」就是它的图。每条建议都对应一个可读的判断式（静默目标 / 过期里程碑 / 未归类会话 / 无基线任务），**离线可用、不接任何在线模型**。
+
+**打印（规格 §4.5）**
+- 全部规则挂在 `body.annual-page` 作用域下（`YearReportPage` 挂载时加、卸载时摘）。不加作用域的话，这份 CSS 随 lazy chunk 常驻文档，用户看过年报再去打印甘特图会连顶栏一起被隐藏。
+- **强制浅色用 `beforeprint` 临时改 `<html data-theme>`，不走 `updateSettings`**：走 store 会写库、进同步、连带别的标签页一起变深浅——一次打印不该有这些副作用。`afterprint` 还原（实测无残留）。用事件而非按钮内改，是为了 Ctrl+P 也走同一条路径。
+- 顶栏/导航/`[data-annual-noprint]` 全隐藏，另有 `.annual-print-title` 打印专用行顶替被隐藏的顶部条（否则纸上读不到年份与区间）；App 的 `h-full + overflow-auto` 三层壳必须在 print 下解开，不然只印得出一屏。
+
+**实测数字**：长图 1800 × 8654 实际像素（= 900 CSS px × scale 2，11 个 beat 单张未触 20000 CSS px 上限，分页逻辑按 beat 边界贪心，单个 beat 超限则独占一页）；`/year` dev 首屏 677ms（Y2 是 539–562ms，多了 5 个 beat；**dev 未压缩 + 冷加载 chunk，不是结论**，生产构建的正式复测仍在 Y4）。
+
+**验收脚本的运行顺序**：先 `capture-annual.mjs`（Y2）再 `capture-annual-y3.mjs`（Y3）。两个脚本都会逐 beat 截图，但 Y3 脚本额外注入了「过期未达成的里程碑」与「一个静默目标」，beat 7/8 的有效截图只有它能产出。
+
+**Y4 起注意**：移动端降级（beat 竖排单列 / hero 降 `--font-32` / 节律热力退化成已经写好的「最强 3 个时段」文字列表 / 导出与打印按钮 `<768px` 已隐藏）；命令面板加「打开年报」「导出年报长图」；性能与包体用**生产构建 + 压力数据**正式复测；回填 `docs/SPEC.md`。导出相关的任何改动，**必须用非背景像素数断言**，不能只看尺寸和文件大小。

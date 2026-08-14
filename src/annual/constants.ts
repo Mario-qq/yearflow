@@ -78,3 +78,42 @@ export const RUN_MAX_ROWS = 8;
 
 /** 完成率「达标」线：beat 2 结论句里的「过了 X%」 */
 export const RATE_GOOD = 80;
+
+// ── 漂移排行（beat 6） ──────────────────────────────────────────────
+export const DRIFT_ROW_H = 24;
+export const DRIFT_BAR_H = 12;
+export const DRIFT_LABEL_W = 200;
+export const DRIFT_VALUE_W = 56;
+/** 最多列出多少个延后任务（其余折叠为一行说明，不无限拉长长图） */
+export const DRIFT_MAX_ROWS = 10;
+
+// ── 里程碑时间线（beat 7） ──────────────────────────────────────────
+export const MS_AXIS_Y = 46;
+export const MS_H = 96;
+export const MS_DOT_R = 5;
+/** 标签上下交错的纵向偏移 */
+export const MS_LABEL_DY = 16;
+
+// ── 节律热力（beat 9） ──────────────────────────────────────────────
+/** 左侧星期名列宽 */
+export const RHY_LABEL_W = 34;
+export const RHY_CELL_H = 18;
+export const RHY_CELL_GAP = 2;
+/** 顶部小时刻度带高 */
+export const RHY_AXIS_H = 14;
+/** 热力最浅/最深的填充透明度（%），线性插值 */
+export const RHY_ALPHA_MIN = 12;
+export const RHY_ALPHA_MAX = 92;
+/** 「最强时段」文字列表列出几条（同时供移动端降级用） */
+export const RHY_TOP_N = 3;
+
+// ── 停滞与放弃（beat 8） ────────────────────────────────────────────
+/** 进度小条几何（卡片内，非 SVG 图） */
+export const OUTCOME_BAR_H = 4;
+
+// ── 导出长图（规格 §4.5） ──────────────────────────────────────────
+/** 导出宽度固定 900 CSS px（= PAGE_W，两者必须同值） */
+export const EXPORT_W = PAGE_W;
+export const EXPORT_SCALE = 2;
+/** 单张 PNG 的 CSS 高度硬上限：900×2 = 1800 宽，1800×20000 = 36M px，安全 */
+export const EXPORT_MAX_H = 20000;

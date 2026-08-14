@@ -179,12 +179,16 @@ export function ChartBox({
   );
 }
 
-/** 回流甘特图按钮（规格 §4.4）。低调、不抢结论的视觉重量 */
+/**
+ * 回流甘特图按钮（规格 §4.4）。低调、不抢结论的视觉重量。
+ * `data-annual-noprint`：纸上与长图里点不了，打印 CSS 与 exportLong 都按这个属性摘掉。
+ */
 export function LookButton({ onClick, title }: { onClick: () => void; title?: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      data-annual-noprint
       className="cursor-pointer px-2 py-1 whitespace-nowrap"
       title={title ?? '在甘特图上定位'}
       style={{

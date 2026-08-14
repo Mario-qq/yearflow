@@ -28,13 +28,59 @@
 }
 
 /*
- * 打印与长图导出（Y3 补全其余打印规则）：没滚到的 beat 若停在 opacity 0，
- * 导出的长图就会有整块空白 —— 这里用 !important 压过 class 状态。
+ * 打印（规格 §4.5）。作用域全部挂在 body.annual-page 上 —— 这份 CSS 随 /year 的
+ * lazy chunk 载入后就常驻在文档里，不加作用域的话，用户看过年报再去打印甘特图，
+ * 顶栏会被这里的规则一起隐藏。类名由 YearReportPage 挂载时加、卸载时摘。
+ *
+ * 深色主题强制转浅：见 YearReportPage 的 beforeprint —— 用临时改 data-theme 实现，
+ * 而不是在这里把整套令牌抄一遍浅色值（抄一遍就是第二处真相来源）。
  */
+/* 屏幕上不存在；只在纸上顶替被隐藏的顶部条 */
+.annual-print-title {
+  display: none;
+}
+
 @media print {
+  .annual-print-title {
+    display: block;
+    font-size: var(--font-14);
+    font-weight: 600;
+  }
+
+  /* 没滚到的 beat 若停在 opacity 0，打印出来就是整块空白 */
   .annual-beat,
   .annual-beat.is-shown {
     opacity: 1 !important;
     transform: none !important;
+  }
+
+  /* 一个 beat 不许被切到两页 */
+  .annual-beat {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    box-shadow: none !important;
+  }
+
+  /* 顶栏 / 导航 / 页内按钮：纸上点不了，全部去掉 */
+  body.annual-page > div > header,
+  body.annual-page nav,
+  body.annual-page [data-annual-noprint] {
+    display: none !important;
+  }
+
+  /* App 是 h-full + overflow-auto 的三层壳，不解开就只能印出一屏 */
+  body.annual-page,
+  body.annual-page > div,
+  body.annual-page main {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  /* 图表与目标色是这页的信息本身，不是装饰，必须印出来 */
+  body.annual-page main {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }
