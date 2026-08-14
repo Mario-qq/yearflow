@@ -22,21 +22,33 @@ export async function exportGanttPng(scroller: HTMLDivElement): Promise<void> {
   const st = scroller.scrollTop;
   const bg = getComputedStyle(document.body).backgroundColor;
 
+  /*
+   * 克隆里的 sticky 元素（表头行 / 左栏 / 左上角）**不需要手工补偿位移**：
+   * stage 自己带 overflow:hidden ⇒ 它就是克隆的滚动祖先，且 scrollLeft/Top 恒为 0。
+   * 内层 inner 把内容整体平移 -scrollLeft/-scrollTop 后，sticky 会自动把这三者
+   * 吸回 stage 的左/上边 —— 正是我们要的位置。再叠一层 translate 反而把左栏推出画面
+   * （实测：加了补偿的版本，导出图里整条左侧网格消失）。
+   */
   const clone = content.cloneNode(true) as HTMLElement;
-  // 结构（与 GanttView 对应）：content > [表头行(sticky top) > 角块(sticky left), body(flex) > 左栏(sticky left)]
-  const headerRow = clone.children[0] as HTMLElement | undefined;
-  const corner = headerRow?.children[0] as HTMLElement | undefined;
-  const bodyRow = clone.children[1] as HTMLElement | undefined;
-  const leftGrid = bodyRow?.children[0] as HTMLElement | undefined;
-  if (headerRow) headerRow.style.transform = `translateY(${st}px)`;
-  if (corner) corner.style.transform = `translateX(${sl}px)`;
-  if (leftGrid) leftGrid.style.transform = `translateX(${sl}px)`;
 
-  const stage = document.createElement('div');
-  Object.assign(stage.style, {
+  /*
+   * ⚠️ 交给 toCanvas 的节点**自身不能是 position:fixed 的离屏节点**，否则整张图全白。
+   * html-to-image 把节点连同它的计算样式一起塞进 SVG <foreignObject>，`left:-100000px`
+   * 在那个坐标系里照样生效 ⇒ 内容被推出画布，只剩背景色。
+   * 所以拆成两层：host 负责 fixed 离屏，stage 静态（relative，给 inner 当定位祖先）负责被截。
+   * 同一个坑与修法见 annual/exportLong.ts —— 那边先发现，这边照抄。
+   */
+  const host = document.createElement('div');
+  Object.assign(host.style, {
     position: 'fixed',
     left: '-100000px',
     top: '0',
+    width: `${vw}px`,
+    zIndex: '-1',
+  } satisfies Partial<CSSStyleDeclaration>);
+  const stage = document.createElement('div');
+  Object.assign(stage.style, {
+    position: 'relative',
     width: `${vw}px`,
     height: `${vh}px`,
     overflow: 'hidden',
@@ -50,7 +62,8 @@ export async function exportGanttPng(scroller: HTMLDivElement): Promise<void> {
   } satisfies Partial<CSSStyleDeclaration>);
   inner.appendChild(clone);
   stage.appendChild(inner);
-  document.body.appendChild(stage);
+  host.appendChild(stage);
+  document.body.appendChild(host);
 
   try {
     const canvas = await toCanvas(stage, { pixelRatio: PIXEL_RATIO, backgroundColor: bg });
@@ -65,6 +78,6 @@ export async function exportGanttPng(scroller: HTMLDivElement): Promise<void> {
       }, 'image/png');
     });
   } finally {
-    stage.remove();
+    host.remove();
   }
 }

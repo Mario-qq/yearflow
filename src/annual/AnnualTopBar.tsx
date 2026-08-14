@@ -44,12 +44,19 @@ export function AnnualTopBar({
   exporting,
 }: Props) {
   return (
+    /*
+     * 顶部留白挂在**这条 sticky 里**，不挂在页面列的 padding-top 上：列若用 pt-6，
+     * 那段留白会随滚动划走，条贴顶后「年报」就直接顶到 App 顶栏。放在条自身
+     * ⇒ 初始态与贴顶态的上边距一致，都是 pt-5。
+     * 左右负 margin 把背景与底边撑到列的 padding 外沿：否则贴顶时这条 border-b
+     * 比 App 顶栏的边短一截，两条不等长的横线并排看着是碎的。
+     */
     <div
-      className="sticky top-0 z-10 flex flex-col gap-1.5 border-b pb-3"
+      className="sticky top-0 z-10 -mx-6 flex flex-col gap-1.5 border-b px-6 pt-5 pb-3 max-md:-mx-4 max-md:px-4"
       data-annual-noprint
       style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-base)' }}
     >
-      <div className="flex flex-wrap items-center gap-3 pt-1">
+      <div className="flex flex-wrap items-center gap-3">
         <h1 className="font-semibold" style={{ fontSize: 'var(--font-20)' }}>
           年报
         </h1>

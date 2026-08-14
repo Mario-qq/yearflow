@@ -17,12 +17,12 @@
  */
 import { toCanvas } from 'html-to-image';
 import { downloadBlob } from '../lib/download';
-import { EXPORT_MAX_H, EXPORT_SCALE, EXPORT_W } from './constants';
+import { EXPORT_MAX_H, EXPORT_SCALE, EXPORT_W, PAGE_GAP } from './constants';
 
 /** 舞台左右内边距，与页面上的 px-6 同值，长图边缘才不会顶到卡片 */
 const STAGE_PAD = 24;
-/** beat 之间的间距，与页面上的 gap-6 同值 */
-const STAGE_GAP = 24;
+/** beat 之间的间距 = 页面上的 rowGap，长图的节奏才与屏幕上一致 */
+const STAGE_GAP = PAGE_GAP;
 
 /**
  * ⚠️ 交给 toCanvas 的那个节点**自身不能是 position:fixed 的离屏节点**，否则整张图全白。

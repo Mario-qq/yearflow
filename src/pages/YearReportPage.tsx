@@ -32,7 +32,7 @@ import { BeatRhythm } from '../annual/BeatRhythm';
 import { BeatClosing } from '../annual/BeatClosing';
 import { exportAnnualPng } from '../annual/exportLong';
 import { onAnnual, takePendingExport } from '../annual/bus';
-import { PAGE_W } from '../annual/constants';
+import { PAGE_GAP, PAGE_W } from '../annual/constants';
 import { longDay, RANGE_LABEL } from '../annual/format';
 import '../annual/annual.css';
 
@@ -181,8 +181,8 @@ export default function YearReportPage() {
   return (
     <div
       ref={columnRef}
-      className="mx-auto flex flex-col gap-6 px-6 pb-16 max-md:px-4"
-      style={{ maxWidth: PAGE_W }}
+      className="mx-auto flex flex-col px-6 pb-16 max-md:px-4"
+      style={{ maxWidth: PAGE_W, rowGap: PAGE_GAP }}
     >
       {/* 打印专用标题：顶部条在纸上被隐藏，年份与区间不能跟着一起消失 */}
       <p className="annual-print-title tnum">YearFlow 年报 · {caption}</p>

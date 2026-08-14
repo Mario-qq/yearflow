@@ -66,23 +66,28 @@ export function Beat({ index, eyebrow, title, action, footnote, children }: Beat
     <ShownContext.Provider value={shown}>
       <section
         ref={ref}
-        className={`annual-beat flex flex-col gap-4 border p-5${shown ? ' is-shown' : ''}`}
+        className={`annual-beat flex flex-col gap-4 border p-6 max-md:p-4${shown ? ' is-shown' : ''}`}
         style={{
           borderColor: 'var(--border-default)',
           borderRadius: 'var(--radius-lg)',
           background: 'var(--bg-raised)',
         }}
       >
-        <header className="flex items-start gap-3">
-          <span
-            className="tnum shrink-0 pt-0.5"
-            style={{ fontSize: 'var(--font-11)', color: 'var(--text-tertiary)' }}
-          >
-            {String(index).padStart(2, '0')}
-          </span>
-          <div className="min-w-0 flex-1">
-            <div
-              className="mb-1"
+        {/*
+          序号与 eyebrow 同处第一行、标题独占第二行：序号若像原来那样在流里占一列，
+          标题就会被推进 ~24px，而 hero 数字和图都从卡片内边距起画 ⇒ 卡片内出现两条
+          左边缘。叙事长图整页只该有一条。
+        */}
+        <header className="flex flex-col gap-1">
+          <div className="flex items-center gap-2.5">
+            <span
+              className="tnum shrink-0"
+              style={{ fontSize: 'var(--font-11)', color: 'var(--text-tertiary)' }}
+            >
+              {String(index).padStart(2, '0')}
+            </span>
+            <span
+              className="min-w-0 truncate"
               style={{
                 fontSize: 'var(--font-11)',
                 color: 'var(--text-tertiary)',
@@ -90,12 +95,10 @@ export function Beat({ index, eyebrow, title, action, footnote, children }: Beat
               }}
             >
               {eyebrow}
-            </div>
-            <h2 style={{ fontSize: 'var(--font-20)', fontWeight: 500, lineHeight: 1.45 }}>
-              {title}
-            </h2>
+            </span>
+            {action && <div className="ml-auto shrink-0">{action}</div>}
           </div>
-          {action && <div className="shrink-0">{action}</div>}
+          <h2 style={{ fontSize: 'var(--font-20)', fontWeight: 500, lineHeight: 1.45 }}>{title}</h2>
         </header>
         {children}
         {footnote && (
