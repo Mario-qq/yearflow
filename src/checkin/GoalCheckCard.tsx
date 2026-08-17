@@ -117,7 +117,7 @@ export function FocusAutoBadge({
         style={{ fontSize: 'var(--font-12)', color: 'var(--accent)' }}
         title="番茄钟实测时长（统计里与手填取更完整的那个）"
       >
-        {min} 分（自动）
+        {min}M
       </span>
       {!te.record && (
         <button
@@ -133,7 +133,7 @@ export function FocusAutoBadge({
           }}
           title={`这天你专注了 ${min} 分钟，一键记为完成并写入时长`}
         >
-          补卡
+          auto
         </button>
       )}
     </>
