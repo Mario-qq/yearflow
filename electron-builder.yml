@@ -1,0 +1,31 @@
+# 单人自用：不签名、不做自动更新。产物两种 —— 免安装 portable 和常规 NSIS 安装包。
+appId: com.yearflow.app
+productName: YearFlow
+directories:
+  output: release
+  buildResources: build
+# 只打运行时真正需要的：编译后的主进程/preload + 前端产物。node_modules 里除 electron
+# 自身外没有运行时依赖（Supabase / Dexie 都已 bundle 进 dist）。
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+# 直接用 node_modules 里已就位的那份 Electron，而不是让 electron-builder 重新解压一次
+# 官方 zip。这台机器上 Symantec Endpoint Protection 会在解压过程中把还没签名的
+# electron.exe 抹掉（表现为 EPERM 锁目录 / ENOENT chmod electron.exe），复用已有副本
+# 就完全绕过那个解压步骤。npm 装依赖时那份已经过了 AV，能正常启动。
+electronDist: node_modules/electron/dist
+win:
+  # pwa-512.png 复用为应用图标（electron-builder 会自行转 .ico，要求 ≥256px）
+  icon: public/pwa-512.png
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: YearFlow

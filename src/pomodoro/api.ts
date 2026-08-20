@@ -15,7 +15,7 @@ import { usePomodoroStore } from './store';
  */
 function autoOpenPip(): void {
   if (!useStore.getState().settings.pomodoro.pipAuto) return;
-  if (usePomodoroStore.getState().pipHost) return;
+  if (usePomodoroStore.getState().pipOpen) return;
   void openPip();
 }
 

@@ -19,6 +19,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useStore } from '../store/useStore';
 import { todayStr } from '../lib/date';
+import { isDesktop } from '../lib/desktop';
 import { isCountedSession, todayFocusMs } from '../lib/derive';
 import { startPomodoro } from './api';
 import { burstConfetti } from './confetti';
@@ -33,7 +34,7 @@ import {
   PIP_TOPBAR_H,
 } from './constants';
 import { humanMs, mmss } from './format';
-import { pauseFocus, remainingMs, resumeFocus, startBreak, stopFocus } from './kernel';
+import { pauseFocus, remainingMs, resumeFocus, setAlert, startBreak, stopFocus } from './kernel';
 import './pip.css';
 import { readLastTask } from './running';
 import { usePomodoroStore } from './store';
@@ -175,7 +176,7 @@ export function PipView() {
   // 提醒态自动消退：用户没在电脑前时它不该一直霸着小窗（与 title 闪烁同一口径）
   useEffect(() => {
     if (!alert) return;
-    const t = setTimeout(() => usePomodoroStore.setState({ alert: null }), ALERT_TTL_MS);
+    const t = setTimeout(() => setAlert(null), ALERT_TTL_MS);
     return () => clearTimeout(t);
   }, [alert]);
 
@@ -209,14 +210,15 @@ export function PipView() {
   // 小窗标题：系统标题栏只显示站点来源、改不动，但任务栏/Alt-Tab 有机会取 title。
   // 成本一行；取不到也不影响窗内那条自绘顶栏，那才是阶段文案的可靠出口。
   useEffect(() => {
-    const doc = pipHost?.ownerDocument;
+    // 桌面版没有 portal 宿主：这棵树本身就长在小窗的 document 里
+    const doc = pipHost?.ownerDocument ?? (isDesktop() ? document : null);
     if (!doc) return;
     doc.title = alert
       ? alert.text
       : `${phaseText} · 第 ${Math.min(segDone + 1, segTotal)}/${segTotal} 段`;
   }, [pipHost, alert, phaseText, segDone, segTotal]);
 
-  const dismiss = (): void => usePomodoroStore.setState({ alert: null });
+  const dismiss = (): void => setAlert(null);
 
   if (alert) {
     const focusEnd = alert.kind === 'focusEnd';

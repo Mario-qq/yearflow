@@ -735,3 +735,55 @@ Y1 起写在规格里的预判是「`investedMsByGoal` 的 G×M 次全表扫是�
 - **PiP 窗口在 Playwright 里就是 `context.pages()` 里的一个 page**（系统 Chrome 有头模式），可以直接 `setViewportSize({260,172})` + `screenshot` ——此前一直以为截不到，其实能截，这是这次能做视觉自查的关键。
 - 截图 14 张：待开始/专注/暂停/短休息 × 深浅，外加庆祝态四张。
 - **真实到点路径单独跑了一遍**（62 秒的一段，`≥MIN_SESSION_MS` 才落库）：到点显示「第 1 段完成 / 专注 1 分 / 今日 1 段 · 1 分」，`outcome: completed`，点杯子进短休息，进度线半程 `scaleX(0.484)`。短于 1 分钟的那条路径（不落库）回落到 `alert.text`，`check-pip.mjs` 覆盖。
+
+---
+
+## 桌面化 —— Electron 壳 + 小窗改原生窗口（2026-08-20）
+
+用户想要「小窗能自由拉伸、不要地址栏」。先否掉了「把番茄钟拆成独立小应用」：番茄钟不是孤岛，`gantt/` `checkin/` `annual/` `lib/derive/focus.ts` 都直接读同一份 `focusSessions`，拆出去等于跨进程重造数据通道 + 复制一份领域模型，还会让计时数据与项目数据脱钩。改为**整个应用包成 Electron 桌面版**：业务代码基本不动，数据仍在同一个 IndexedDB，同步逻辑零改动。
+
+网页版（GH Pages，手机在用）的 Document PiP 路径**一行没改**，所有分叉都在最前面按 `window.yearflowDesktop` 是否存在跳走。
+
+### 一、核心难点：小窗的跨窗口桥
+
+Document PiP 与主页面**同一个 JS realm**，所以旧实现是 `createPortal(<PipView/>, pipHost)`，`pipHost` 就是全部的跨窗口机制——零 IPC。原生窗口是独立 renderer，这条路直接没了。
+
+**没有新造 IPC 镜像状态，而是复用了现成的多 tab 机制**：计时权威状态本来就在 localStorage（`running.ts`），跨上下文通知靠 `storage` 事件（`kernel.ts onStorage`），只有一个上下文响铃由 `navigator.locks` 选主保证。**在番茄钟眼里，小窗就是「另一个 tab」**，那套为多 tab 写的代码原样复用（`isLeader` / `leaderKnown` 门控一个没删——删了会重新打开双响铃、双 undo 的失败模式）。
+
+⚠️ 动手前先做了 Phase 0 spike（`electron/spike/`，`npm run electron:spike`）验四项，全绿才继续：两个 `BrowserWindow` 之间 ① `storage` 事件互通 ② `navigator.locks` 真互斥 ③ 共享同一个 IndexedDB ④ 最小化下 20s 长 timer 漂移 **8ms**（`backgroundThrottling: false`）。这四条不成立的话整套设计就得推翻，所以它是门禁而不是练手。
+
+**实测暴露出两处必须补广播的状态**（都是「只有 leader 那个窗口知道」）：
+
+1. **`alert`（到点提醒）在内存 store 里** ⇒ 不广播的话到点时只有主窗变脸，小窗一片安静，而小窗恰恰是那时唯一可见的东西。新增 `ALERT_KEY`，`setAlert()` 成为唯一写入点（setState + 广播），`PipView` 的 dismiss / TTL 也走它 ⇒ 两个窗口一起收。
+2. **刚落库的那条 `FocusSession`** ⇒ 落库发生在 leader 那侧，另一窗的内存 store 不知道，小窗的「今日 N 段」和结果卡永远差最后一段（自查里抓到的就是「今日 1 段」+ 泛用文案而不是「专注 1 分」）。新增 `COMMITTED_KEY` 广播整条记录，接收侧走 `applyRemote()`（入内存、不进 undo、不再落库）。广播整条而不是发「去重读 Dexie」的信号，是为了不和 `persist.ts` 的 500ms 防抖抢时序。
+
+### 二、加载路径：用 `app://` 自定义协议，不用 `file://`
+
+注册成 `standard + secure` 的协议 ⇒ 有真实 origin、是 secure context，于是一次性绕开三个坑：`App.tsx` 的 `BrowserRouter` 与 `import.meta.env.BASE_URL` 不用动、`index.html` 里 `/favicon.svg` 这类绝对路径继续有效、`vite.config.ts` 的 `base` 保持 `'/'`。协议处理器对无扩展名路径回退 `index.html`（SPA 深链接），并做了 `normalize` 后必须仍在 `dist` 内的目录穿越防护。`file://` 下这三条全废，且 `navigator.locks` 也没了——**桥的地基就没了**。
+
+`ELECTRON=1` 时另外：关掉 VitePWA（service worker 在桌面壳里只添乱），`build.rollupOptions.input` 多一个 `pip.html` 入口。
+
+### 三、原生化替换
+
+- 小窗：**无边框 + 置顶 + 可拉伸**。保留 `PipView` 那条 28px 自绘顶栏（它本来就是为了绕开 PiP 系统标题栏改不了才存在的），补上无边框窗口缺的两件事——`-webkit-app-region: drag` 拖动层与关闭按钮，几何对齐 `PIP_TOPBAR_H`，`PipView` 视觉零改动。
+- `confetti.ts` 几何改为**现量** `getBoundingClientRect()`，常量只作兜底。原先写死 `PIP_W/PIP_H`，窗口一拉伸礼花筒就跑到窗外、纸屑在半空消失。
+- 通知走主进程原生通知（无网页权限层，`notifyPermission()` 恒 `granted`）；`sendTestNotification` 那三条「地址栏左侧站点设置」的浏览器文案换成 Windows 通知设置的指引。
+- `catchUp()` 多一路触发源：`powerMonitor` 的 `resume`/`unlock-screen`。tab 冻结的理由在桌面端消失，但被 **OS 睡眠/锁屏**取代，`planRecovery` 那条补算路径照旧必要。
+- `pipOpen` 取代 `pipHost` 作为「小窗开着吗」的判据（`pipHost` 只有 web 版有值）；用户从小窗自己的 × 关掉时靠主进程的 `pip:state` 广播回填。
+
+### 四、验收
+
+- `tsc -b`（含新增的 `electron/tsconfig.json` project）+ `oxlint` 干净；`vitest` **225 全绿**。
+- `npm run desktop:e2e`（Playwright 的 Electron 驱动，跑 vite dev 以拿 DEV 观测句柄）**21 项全过**：小窗独立开出/可拉伸/置顶、主窗开始专注→小窗同步到同一 `sessionId`、暂停/继续双向跟随、三档拉伸尺寸正确、深浅主题跟随、**到点只写一条 `focusSession`**、小窗也看到那条记录且文案是「专注 1 分」、小窗自关后 `pipOpen` 回填。
+- `npm run desktop:smoke`（**打包形态**，走 `app://`，e2e 那条 http://localhost 恰好绕开了协议注册）**17 项全过**：真实 origin、secure context、无 service worker、`BrowserRouter` 落 `/gantt`、`/settings` 上刷新不白屏、四档缩放 × 深浅主题 8 张甘特图均有内容、无 console error。
+  ⚠️ 生产构建里**没有** `window.__store` / `window.__pomodoro`（`import.meta.env.DEV` 才挂），这个脚本一律走 UI 与 DOM。
+- 8 张甘特图 + 小窗 7 张截图已人工过目（`screenshots/desktop/`）：窗控与自绘顶栏几何对齐、段点没被压住、200×132 到 640×200 版式都成立。
+
+### 五、坑
+
+- **打包前必须先停掉 vite dev server**。`electron-builder` 一直 `EPERM: rename win-unpacked.tmp → win-unpacked`，排查后是 vite 的文件监听占着那个**目录句柄**（目录内没有任何文件被锁，是目录本身）。杀掉 vite 进程后立刻能 rename。同一现象在沙箱里还会伪装成 `EXDEV: cross-device link not permitted`，更容易带错方向。
+- **origin 变了 ⇒ localStorage 与 IndexedDB 都不继承**。桌面版第一次打开是空库（甘特图显示「还没有目标」），这是预期状态：用 `lib/backup.ts` 在网页版导出 JSON、桌面版设置页导入。未覆盖的 `yearflow-theme`、`yearflow:sync:*` 游标、`yearflow:pomodoro:*` 全部可再生。Supabase 需重新登录一次（无损，登出保留数据与游标）；账号是邮箱密码登录、无 OAuth ⇒ **没有回调 URL 问题**。
+
+### 六、首版明确未做
+
+托盘图标、自动更新、代码签名、原生保存对话框（备份导出继续走 anchor 点击）、以及「把多 tab 机制简化掉」的重构。

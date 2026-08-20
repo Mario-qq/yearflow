@@ -3,11 +3,21 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "dist-electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "electron:tsc": "tsc -p electron",
+    "electron:dev": "npm run electron:tsc && cross-env-shell ELECTRON=1 concurrently -k -s first \"vite\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173/ electron .\"",
+    "electron:build": "npm run electron:tsc && cross-env ELECTRON=1 vite build",
+    "electron:start": "npm run electron:build && electron .",
+    "electron:pack": "npm run electron:build && electron-builder --win --config electron-builder.yml",
+    "desktop:e2e": "node scripts/desktop-e2e.mjs",
+    "desktop:smoke": "node scripts/desktop-smoke.mjs",
+    "electron:spike": "electron electron/spike/main.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.7",
@@ -28,12 +38,17 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^6.0.3",
+    "concurrently": "^10.0.5",
+    "cross-env": "^10.1.0",
+    "electron": "^43.4.1",
+    "electron-builder": "^26.15.3",
     "oxlint": "^1.71.0",
     "playwright": "^1.61.1",
     "tailwindcss": "^4.3.2",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
     "vite-plugin-pwa": "^1.3.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "wait-on": "^9.1.0"
   }
 }

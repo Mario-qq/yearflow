@@ -296,3 +296,42 @@
     opacity: 1;
   }
 }
+
+/* ── 桌面版（Electron）无边框窗口的窗控 ──────────────────────────────
+   小窗故意不用系统标题栏：PipView 那条 28px 自绘顶栏本来就是为了承载阶段文案
+   （web 版 Document PiP 的系统标题栏只显示站点来源、改不了）。这里给它补上无边框
+   窗口缺的两件事 —— 可拖动区与关闭按钮，几何对齐 PIP_TOPBAR_H。 */
+.pip-native {
+  position: relative;
+}
+/* 盖在顶栏上的透明拖动层。顶栏里没有可点元素（阶段文案 + 段点都是装饰），所以整条盖住无碍 */
+.pip-native-drag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  -webkit-app-region: drag;
+}
+.pip-native-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  -webkit-app-region: no-drag; /* 否则按钮被拖动区吞掉，点不着 */
+  transition: color 120ms var(--ease);
+}
+.pip-native-close:hover {
+  color: var(--text-primary);
+}
+/* 给关闭按钮让位，否则段点会被它压住 */
+.pip-native .pip-bar {
+  padding-right: 32px;
+}

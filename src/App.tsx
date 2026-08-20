@@ -9,6 +9,7 @@ import { Celebration } from './components/Celebration';
 import { SyncIndicator } from './components/SyncIndicator';
 import { initSync } from './db/sync/syncApi';
 import { initPomodoro } from './pomodoro/kernel';
+import { initDesktopPip } from './pomodoro/pip';
 import { PomodoroWidget } from './pomodoro/PomodoroWidget';
 import { CommandPalette } from './components/CommandPalette';
 import { ShortcutHelp } from './components/ShortcutHelp';
@@ -111,6 +112,9 @@ export default function App() {
   useEffect(() => {
     if (hydrated) initPomodoro();
   }, [hydrated]);
+
+  // 桌面版：小窗是原生窗口，用户从窗内的 × 关掉时只有主进程知道，靠这条广播回填 pipOpen
+  useEffect(() => initDesktopPip(), []);
 
   // 全局撤销/重做（SPEC 4.7 / 第六节）：Ctrl+Z / Ctrl+Shift+Z（或 Ctrl+Y），toast 显示摘要
   useEffect(() => {

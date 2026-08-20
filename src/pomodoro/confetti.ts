@@ -9,6 +9,9 @@
  *
  * ⚠️ rAF 必须用**小窗自己的** window：主页面被最小化/遮挡时它的 rAF 会被节流甚至冻结，
  * 而这个小窗恰恰是那时唯一可见的东西 —— 用主窗的 rAF 会让庆祝卡在半空。
+ *
+ * ⚠️ 几何一律现量（canvas 是 inset:0 铺满小窗）：桌面版小窗是可任意拉伸的原生窗口，
+ * 用 PIP_W/PIP_H 常量会让礼花筒在窗外、纸屑在半空消失。常量只作量不到时的兜底。
  */
 import {
   CONFETTI_BACK_RATIO,
@@ -71,17 +74,20 @@ export function burstConfetti(canvas: HTMLCanvasElement): () => void {
   if (!win || !ctx) return () => {};
   if (win.matchMedia('(prefers-reduced-motion: reduce)').matches) return () => {};
 
+  const rect = canvas.getBoundingClientRect();
+  const W = Math.round(rect.width) || PIP_W;
+  const H = Math.round(rect.height) || PIP_H;
   const dpr = Math.min(2, win.devicePixelRatio || 1);
-  canvas.width = PIP_W * dpr;
-  canvas.height = PIP_H * dpr;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   const pal = palette(canvas.ownerDocument.documentElement);
   const bits: Bit[] = [];
   // 左下往右上、右下往左上：两筒对射，比正中央炸开自然得多
   const cannons: Array<[x: number, y: number, angle: number]> = [
-    [6, PIP_H + 6, -Math.PI / 3.1],
-    [PIP_W - 6, PIP_H + 6, -Math.PI + Math.PI / 3.1],
+    [6, H + 6, -Math.PI / 3.1],
+    [W - 6, H + 6, -Math.PI + Math.PI / 3.1],
   ];
   for (const [ox, oy, base] of cannons) {
     for (let i = 0; i < CONFETTI_PER_CANNON; i++) {
@@ -113,7 +119,7 @@ export function burstConfetti(canvas: HTMLCanvasElement): () => void {
   let raf = 0;
   const fadeFrom = CONFETTI_FRAMES * CONFETTI_FADE_FROM;
   const step = (): void => {
-    ctx.clearRect(0, 0, PIP_W, PIP_H);
+    ctx.clearRect(0, 0, W, H);
     const fade =
       frame < fadeFrom ? 1 : Math.max(0, 1 - (frame - fadeFrom) / (CONFETTI_FRAMES - fadeFrom));
     for (const b of bits) {
@@ -124,7 +130,7 @@ export function burstConfetti(canvas: HTMLCanvasElement): () => void {
       b.y += b.vy;
       b.tilt += b.spin;
       b.flip += b.flipV;
-      if (b.y > PIP_H + 18) continue;
+      if (b.y > H + 18) continue;
       const face = Math.cos(b.flip);
       ctx.save();
       ctx.globalAlpha = fade;
@@ -136,12 +142,12 @@ export function burstConfetti(canvas: HTMLCanvasElement): () => void {
       ctx.restore();
     }
     if (++frame < CONFETTI_FRAMES) raf = win.requestAnimationFrame(step);
-    else ctx.clearRect(0, 0, PIP_W, PIP_H);
+    else ctx.clearRect(0, 0, W, H);
   };
   raf = win.requestAnimationFrame(step);
 
   return () => {
     win.cancelAnimationFrame(raf);
-    ctx.clearRect(0, 0, PIP_W, PIP_H);
+    ctx.clearRect(0, 0, W, H);
   };
 }

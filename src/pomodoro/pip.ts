@@ -13,7 +13,14 @@
  *
  * 失败一律安静降级（不支持 / 用户取消 / 没有手势）：不 toast、不报错，按钮本来就只在
  * isPipSupported() 为真时才渲染。
+ *
+ * ── 桌面版（Electron）────────────────────────────────────────────────
+ * 小窗改成真正的原生窗口（可任意拉伸、置顶），于是上面三条性质全部反转：不同 realm、
+ * 有自己的样式表、开窗不需要手势。本文件的四个导出各自在最前面分叉到 IPC，
+ * **web 路径一行不改**（网页版仍是手机/浏览器在用的那条线）。
+ * 窗内内容由 src/pip-main.tsx 独立挂载；两窗之间靠 localStorage + storage 事件对齐。
  */
+import { desktop } from '../lib/desktop';
 import { PIP_H, PIP_W } from './constants';
 import { usePomodoroStore } from './store';
 
@@ -33,7 +40,7 @@ function api(): DocumentPiP | null {
 }
 
 export function isPipSupported(): boolean {
-  return api() !== null;
+  return desktop() !== null || api() !== null;
 }
 
 let pipWindow: Window | null = null;
@@ -83,11 +90,17 @@ function teardown(): void {
   themeObserver?.disconnect();
   themeObserver = null;
   pipWindow = null;
-  usePomodoroStore.setState({ pipHost: null });
+  usePomodoroStore.setState({ pipHost: null, pipOpen: false });
 }
 
-/** 必须在用户手势回调里调用 */
+/** web 路径必须在用户手势回调里调用；桌面路径无此限制 */
 export async function openPip(): Promise<void> {
+  const d = desktop();
+  if (d) {
+    // pipOpen 由主进程的 pip:state 广播回填（见 initDesktopPip），这里不抢着写
+    await d.openPip();
+    return;
+  }
   const pip = api();
   if (!pip || pipWindow) return;
   try {
@@ -110,7 +123,7 @@ export async function openPip(): Promise<void> {
     w.document.body.appendChild(host);
     // 用户点小窗右上角关闭 / 系统回收：pagehide 是唯一可靠的收尾信号
     w.addEventListener('pagehide', teardown, { once: true });
-    usePomodoroStore.setState({ pipHost: host });
+    usePomodoroStore.setState({ pipHost: host, pipOpen: true });
   } catch (e) {
     // 用户取消 / 无手势 / 环境不允许：安静降级。DEV 下留个把手，否则完全无从诊断
     if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__pipError = e;
@@ -119,14 +132,29 @@ export async function openPip(): Promise<void> {
 }
 
 export function closePip(): void {
+  const d = desktop();
+  if (d) {
+    void d.closePip();
+    return;
+  }
   const w = pipWindow;
   teardown();
   w?.close();
 }
 
 export function togglePip(): void {
-  if (pipWindow) closePip();
+  if (usePomodoroStore.getState().pipOpen) closePip();
   else void openPip();
+}
+
+/**
+ * 桌面版：把主进程的小窗开关状态同步进 store。主窗启动时调一次即可。
+ * 用户点小窗自绘顶栏的 × 关掉时，只有这条广播能让主面板的按钮回到「悬浮小窗」。
+ */
+export function initDesktopPip(): () => void {
+  const d = desktop();
+  if (!d) return () => {};
+  return d.onPipState((open) => usePomodoroStore.setState({ pipOpen: open }));
 }
 
 /** 主页面关掉时别留一个孤儿小窗在桌面上飘着 */

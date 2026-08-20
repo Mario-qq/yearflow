@@ -7,6 +7,10 @@ import { VitePWA } from 'vite-plugin-pwa'
 // GitHub Pages 部署在 /yearflow/ 子路径（GH_PAGES=1 时）；Vercel / 本地 dev 仍走根路径 '/'
 const base = process.env.GH_PAGES ? '/yearflow/' : '/'
 
+// Electron 桌面构建（ELECTRON=1）。base 保持 '/' —— 主进程用 app:// 自定义协议托管 dist，
+// 有真实 origin，所以绝对路径和 BrowserRouter 都不用改（见 electron/main.cts 注释）。
+const isElectron = !!process.env.ELECTRON
+
 // https://vite.dev/config/
 export default defineConfig({
   base,
@@ -15,6 +19,8 @@ export default defineConfig({
     tailwindcss(),
     // PWA（SPEC 第二节）：离线可用、可安装到手机主屏
     VitePWA({
+      // 桌面壳里 service worker 只会添乱（离线本来就成立，且注册脚本是注入进 built HTML 的）
+      disable: isElectron,
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icon.svg', 'icon-maskable.svg', 'apple-touch-icon.png'],
       manifest: {
@@ -36,6 +42,10 @@ export default defineConfig({
       },
     }),
   ],
+  // 桌面版多一个 pip.html 入口：小窗是独立窗口、独立 React root，不能再靠 createPortal
+  build: isElectron
+    ? { rollupOptions: { input: { index: 'index.html', pip: 'pip.html' } } }
+    : undefined,
   // 预览代理会通过 PORT 环境变量指定端口（vite 默认不读它）
   server: { port: Number(process.env.PORT) || 5173, strictPort: !!process.env.PORT },
   test: {

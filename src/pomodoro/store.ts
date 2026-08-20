@@ -57,8 +57,14 @@ export interface PomodoroState {
   notice: string | null;
   /** 到点提醒（悬浮小窗的醒目态）；点任一按钮 / 开始新一段 / 30 秒超时后清空 */
   alert: AlertState | null;
-  /** 悬浮小窗的 portal 宿主（开/关时才变，不违反本文件铁律）；null = 小窗未开 */
+  /**
+   * 悬浮小窗的 portal 宿主（开/关时才变，不违反本文件铁律）；null = 小窗未开。
+   * 仅 web 版有值 —— 桌面版小窗是独立窗口、独立 React root，没有 portal 可言。
+   * 判断「小窗开着吗」一律用 pipOpen，不要用这个。
+   */
   pipHost: HTMLElement | null;
+  /** 小窗是否开着。web 版 = pipHost 存在；桌面版 = 那个原生窗口存在。 */
+  pipOpen: boolean;
 }
 
 export const usePomodoroStore = create<PomodoroState>()(() => ({
@@ -70,4 +76,5 @@ export const usePomodoroStore = create<PomodoroState>()(() => ({
   notice: null,
   alert: null,
   pipHost: null,
+  pipOpen: false,
 }));

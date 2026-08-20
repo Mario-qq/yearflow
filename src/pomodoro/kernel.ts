@@ -15,6 +15,7 @@
 import { nanoid } from 'nanoid';
 import type { FocusSession, RunningState } from '../types/domain';
 import { useStore } from '../store/useStore';
+import { desktop } from '../lib/desktop';
 import { commitFocusSession } from '../store/actions';
 import {
   isPaused,
@@ -27,7 +28,9 @@ import {
 } from '../lib/derive/focus';
 import {
   ALARM_FALLBACK_MS,
+  ALERT_KEY,
   AUTO_BREAK_FRESH_MS,
+  COMMITTED_KEY,
   CYCLE_KEY,
   HEARTBEAT_MS,
   LOCK_NAME,
@@ -36,13 +39,17 @@ import {
 import {
   bumpCycleCompleted,
   clearRunning,
+  readAlert,
+  readCommitted,
   readCycle,
   readRunning,
   resetCycle,
+  writeAlert,
+  writeCommitted,
   writeLastTask,
   writeRunning,
 } from './running';
-import { usePomodoroStore, type RunningView } from './store';
+import { usePomodoroStore, type AlertState, type RunningView } from './store';
 
 const isBrowser = typeof window !== 'undefined';
 
@@ -240,6 +247,9 @@ function terminate(outcome: FocusSession['outcome'], opts: TerminateOpts = {}): 
     // 结算落库失败（Dexie 异常）不回滚、不重试：宁可丢一段记录，也不留状态不明的运行态
     try {
       commitFocusSession(session);
+      // 桌面版另一个窗口（小窗）的内存 store 不参与这次落库，得靠广播补上，
+      // 否则它的「今日 N 段」和结果卡永远差最后这一段
+      writeCommitted(session);
       usePomodoroStore.setState({ lastResult: session });
       if (session.outcome === 'completed') {
         const completed = bumpCycleCompleted(now);
@@ -347,7 +357,8 @@ export function startFocus(opts: StartOpts = {}): void {
   };
   writeRunning(r);
   writeLastTask({ goalId: opts.goalId, taskId: opts.taskId });
-  usePomodoroStore.setState({ lastResult: null, ask: null, alert: null });
+  usePomodoroStore.setState({ lastResult: null, ask: null });
+  setAlert(null); // 开新一段就把上一段的提醒收掉，两个窗口一起收
   syncView(r);
   startHeartbeat();
   rearmAlarm(r);
@@ -484,7 +495,32 @@ function catchUp(): void {
   applyRecovery(r, planRecovery(r, Date.now()));
 }
 
+/**
+ * 到点提醒的唯一写入点：本窗口 setState + 广播给其他窗口。
+ *
+ * 桌面版的小窗是独立窗口/独立 store，而响铃只发生在 Web Locks 选中的那**一个** leader
+ * 上 —— 不广播的话「到点了」只有 leader 知道，另一个窗口一片安静（正是小窗存在的意义
+ * 被抹掉）。清空同理：在小窗点掉「知道了」，主窗那份也得跟着消。
+ */
+export function setAlert(a: AlertState | null): void {
+  usePomodoroStore.setState({ alert: a });
+  writeAlert(a);
+}
+
 function onStorage(e: StorageEvent): void {
+  if (e.key === ALERT_KEY) {
+    usePomodoroStore.setState({ alert: readAlert() });
+    return;
+  }
+  if (e.key === COMMITTED_KEY) {
+    const s = readCommitted();
+    // applyRemote：入内存但不进 undo 栈、不再落库（那边已经写过了）
+    if (s) {
+      useStore.getState().applyRemote({ focusSessions: { puts: [s], deletes: [] } });
+      usePomodoroStore.setState({ lastResult: s });
+    }
+    return;
+  }
   if (e.key === CYCLE_KEY) {
     usePomodoroStore.setState({ cycleCompleted: readCycle(Date.now()).completed });
     return;
@@ -531,6 +567,10 @@ if (isBrowser) {
     else beat(); // hidden 是最后一个可靠可观测的状态（不用 beforeunload/unload：会破坏 bfcache）
   });
   window.addEventListener('pagehide', () => beat());
+
+  // 桌面壳：tab 冻结的理由在这里不存在，但被 **OS 睡眠/锁屏** 取代 —— 唤醒后
+  // 时钟已经跳了一大截，必须和 visibilitychange 走同一条 catchUp 补算路径。
+  desktop()?.onPowerResume(catchUp);
 
   if (navigator.locks?.request) {
     // 选主机制可用即认为「会有 leader」（见 leaderKnown 的注释：这一行决定 follower 是否闭嘴）

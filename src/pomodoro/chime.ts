@@ -10,9 +10,9 @@
  *   唯一的防线。权限只在用户主动打开开关时请求（页面加载即请求会招来更安静的权限 UI 惩罚）。
  */
 import { useStore } from '../store/useStore';
+import { desktop, isDesktop } from '../lib/desktop';
 import { CHIME_FREQS, CHIME_GAIN, CHIME_NOTE_MS } from './constants';
-import type { ChimeKind } from './kernel';
-import { usePomodoroStore } from './store';
+import { setAlert, type ChimeKind } from './kernel';
 import { flashTitle } from './title';
 
 const NOTIFY_TAG = 'yearflow-pomodoro';
@@ -65,16 +65,19 @@ async function playChime(): Promise<boolean> {
 }
 
 export function notifySupported(): boolean {
-  return typeof Notification !== 'undefined';
+  return isDesktop() || typeof Notification !== 'undefined';
 }
 
+/** 桌面壳走主进程的原生通知，没有「网页权限」这一层，恒为 granted */
 export function notifyPermission(): NotificationPermission | 'unsupported' {
-  return notifySupported() ? Notification.permission : 'unsupported';
+  if (isDesktop()) return 'granted';
+  return typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
 }
 
 /** 只在用户主动打开「到点通知」开关时调用 */
 export async function requestNotifyPermission(): Promise<boolean> {
-  if (!notifySupported()) return false;
+  if (isDesktop()) return true; // 原生通知不需要申请
+  if (typeof Notification === 'undefined') return false;
   if (Notification.permission === 'granted') return true;
   if (Notification.permission === 'denied') return false;
   try {
@@ -85,7 +88,14 @@ export async function requestNotifyPermission(): Promise<boolean> {
 }
 
 function showNotification(body: string): boolean {
-  if (!notifySupported() || Notification.permission !== 'granted') return false;
+  const d = desktop();
+  if (d) {
+    // 主进程侧是同步 new Notification().show()，只有 IPC 往返是异步的 ⇒ 这里乐观返回 true。
+    // 返回 false 会让 handleChime 退回闪标题，而桌面版根本没有 tab 标题可闪。
+    void d.notify(body);
+    return true;
+  }
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return false;
   try {
     const n = new Notification('YearFlow 番茄钟', { body, tag: NOTIFY_TAG });
     n.onclick = () => {
@@ -98,8 +108,13 @@ function showNotification(body: string): boolean {
   }
 }
 
-/** 发一条测试通知：把「Chrome 站点权限 / 系统通知设置 / 专注助手」三层问题一次性分离出来 */
+/** 发一条测试通知：把「网页/应用权限 / 系统通知设置 / 专注助手」几层问题一次性分离出来 */
 export async function sendTestNotification(): Promise<string> {
+  if (isDesktop()) {
+    return showNotification('这是一条测试通知。看不到它就说明系统层面拦住了：查 Windows 通知设置与专注助手')
+      ? '已发出。若屏幕上没看到，问题在 Windows 通知设置或专注助手（设置 → 系统 → 通知里找 YearFlow）'
+      : '发送失败，系统拒绝了这次通知';
+  }
   if (!notifySupported()) return '这个浏览器不支持系统通知';
   if (Notification.permission === 'denied') return '浏览器已拒绝通知权限，可在地址栏左侧站点设置里恢复';
   if (Notification.permission !== 'granted' && !(await requestNotifyPermission()))
@@ -124,8 +139,9 @@ const TEXT: Record<ChimeKind, string> = {
  */
 export function handleChime(kind: ChimeKind): void {
   const { sound, notify } = useStore.getState().settings.pomodoro;
-  usePomodoroStore.setState({ alert: { kind, text: TEXT[kind], at: Date.now() } });
+  setAlert({ kind, text: TEXT[kind], at: Date.now() });
   if (sound) void playChime();
+  // 桌面版：小窗是独立窗口，它自己 alert 变脸已经是最可靠那层提醒；主窗可见就不再叠系统通知
   if (!document.hidden) return;
   if (!notify) return; // 用户显式关掉了到点通知，不该改用闪标题绕过这个选择
   if (!showNotification(TEXT[kind])) flashTitle(`⏰ ${TEXT[kind]}`);

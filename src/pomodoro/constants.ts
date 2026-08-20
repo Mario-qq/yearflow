@@ -8,6 +8,23 @@ export const RUNNING_KEY = 'yearflow:pomodoro:running';
 export const CYCLE_KEY = 'yearflow:pomodoro:cycle';
 export const LAST_TASK_KEY = 'yearflow:pomodoro:lastTask';
 export const RECENT_TASKS_KEY = 'yearflow:pomodoro:recentTasks';
+/**
+ * 到点提醒的跨窗口广播位。
+ *
+ * web 版不需要它：Document PiP 与主页面同一个 realm，一份 store 就够了。桌面版的小窗
+ * 是独立窗口/独立 store，而响铃只发生在 Web Locks 选出的那一个 leader 上 —— 不广播的话
+ * 「到点了」这件事只有 leader 那个窗口知道，另一个窗口一片安静。走 localStorage 而不是
+ * IPC，是为了和 running/cycle 用同一条既有的 storage 事件通道，不新开一套机制。
+ */
+export const ALERT_KEY = 'yearflow:pomodoro:alert';
+/**
+ * 刚结算的那条 FocusSession 的广播位。
+ *
+ * 同样只有桌面版的双窗口需要：落库发生在 leader 那个窗口，另一个窗口的内存 store 不会
+ * 自己知道，于是小窗的「今日 N 段 / 专注 X 分」会永远差最后一段。广播整条记录而不是
+ * 发个「去重读 Dexie」的信号，是为了不和 persist.ts 的 500ms 防抖抢时序。
+ */
+export const COMMITTED_KEY = 'yearflow:pomodoro:committed';
 
 /** Web Locks 选主锁名：请求一把永不释放的锁，拿到者即 leader（标签崩溃自动释放） */
 export const LOCK_NAME = 'yearflow-pomodoro';

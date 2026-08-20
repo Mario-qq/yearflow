@@ -8,9 +8,12 @@
  * · 天生设备本地不同步（两台设备各跑一个番茄是正确行为，不是冲突）；
  * · storage 事件让其它标签页免费收到变更通知。
  */
-import type { CycleState, RunningState } from '../types/domain';
+import type { CycleState, FocusSession, RunningState } from '../types/domain';
+import type { AlertState } from './store';
 import { todayStr } from '../lib/date';
 import {
+  ALERT_KEY,
+  COMMITTED_KEY,
   CYCLE_IDLE_RESET_MS,
   CYCLE_KEY,
   LAST_TASK_KEY,
@@ -55,6 +58,33 @@ export function writeRunning(r: RunningState): void {
 
 export function clearRunning(): void {
   if (hasStorage()) localStorage.removeItem(RUNNING_KEY);
+}
+
+/**
+ * 到点提醒的广播位（见 constants.ts ALERT_KEY）。只有桌面版的双窗口用得上，
+ * web 版写了也无害 —— 同 realm 的两个上下文本来就共享 store，storage 事件不会自发。
+ */
+export function readAlert(): AlertState | null {
+  const a = readJson<AlertState>(ALERT_KEY);
+  if (!a || (a.kind !== 'focusEnd' && a.kind !== 'breakEnd')) return null;
+  if (typeof a.text !== 'string' || typeof a.at !== 'number') return null;
+  return a;
+}
+
+export function writeAlert(a: AlertState | null): void {
+  if (!hasStorage()) return;
+  if (a) writeJson(ALERT_KEY, a);
+  else localStorage.removeItem(ALERT_KEY);
+}
+
+/** 广播刚落库的那条记录（见 constants.ts COMMITTED_KEY） */
+export function readCommitted(): FocusSession | null {
+  const s = readJson<FocusSession>(COMMITTED_KEY);
+  return s && typeof s.id === 'string' && typeof s.focusMs === 'number' ? s : null;
+}
+
+export function writeCommitted(s: FocusSession): void {
+  writeJson(COMMITTED_KEY, s);
 }
 
 /**
