@@ -820,6 +820,7 @@ Document PiP 与主页面**同一个 JS realm**，所以旧实现是 `createPort
 
 1. **拖动覆盖层吞掉了顶栏里的点击。** 原先在顶栏上盖一层透明 `-webkit-app-region: drag` 层，注释里写的理由是「顶栏里没有可点元素（阶段文案+段点都是装饰）」——顶栏加进事项按钮后这个前提就不成立了。自查报 `<div class="pip-native-drag"> intercepts pointer events`。改法：删掉覆盖层，`.pip-native .pip-bar` 自己 `drag`，其中 `button` 一律 `no-drag`。**教训：把「当前没有交互元素」写进注释当依据，就等于给未来埋雷。**
 2. **自查污染了真实数据。** 早先的 smoke 往 `app://local` 的**真实** IndexedDB 里载入过示例数据。桌面版一旦登录 Supabase，LWW 同步会把那些示例目标推上云、污染手机端。已确认当时 localStorage 里没有 `sb-*-auth-token`（从未登录过），云端是干净的。修法：两个自查脚本一律 `--user-data-dir=<tmp>/yearflow-{e2e,smoke}-profile`，与真实 profile 物理隔离；e2e 在独立空库里自行灌种子数据。
+3. **关闭按钮 DOM 顺序在真实鼠标下失效，`desktop:e2e` 测不出来。** `PipWindow.tsx` 里 `.pip-native-close` 原先排在 `<PipView />`（顶栏 `-webkit-app-region: drag`）**前面**。Chromium 按文档顺序依次对可拖拽区域做并集/差集，no-drag 若先于 drag 处理，会被后处理的 drag 重新并回去——那个角落被判成「拖窗口」，真实点击完全没反应。`desktop:e2e` 里 `pip.click('.pip-native-close')` 却测得通过，因为 Playwright 的合成点击直接把事件灌进渲染进程，绕过了 Chromium 原生的 `WM_NCHITTEST` 拖拽判定；上一条「拖动覆盖层吞掉点击」那次是靠 `elementFromPoint` 断言抓到的，这次连断言都没写，所以没拦住。修法：把关闭按钮挪到 `<PipView />` 之后，让它的 no-drag 最后生效。**教训：无边框窗口的拖拽区域测试不能只信自动化点击结果，必须真人过一遍，或者显式断言拖拽区域几何。**
 
 ### 十、验收（追加后）
 

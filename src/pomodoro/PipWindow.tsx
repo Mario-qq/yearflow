@@ -76,8 +76,13 @@ export function PipWindow(): React.ReactElement | null {
 
   return (
     <div className="pip-native" style={{ height: '100%' }}>
+      <PipView />
       {/* 无边框窗口缺的关闭按钮。拖动交给顶栏自己（pip.css `.pip-native .pip-bar`），
-          不再盖透明层 —— 那会吞掉顶栏里事项选择按钮的点击 */}
+          不再盖透明层 —— 那会吞掉顶栏里事项选择按钮的点击。
+          ⚠️ 必须排在 PipView（顶栏 drag 区）之后：Chromium 按文档顺序依次对可拖拽区域
+          做并集/差集，no-drag 若先于 drag 处理，会被后处理的 drag 重新并回去 —— 于是
+          这颗按钮所在的角落被判成「拖窗口」，点击真实鼠标完全没反应（自动化点击测不出来，
+          它绕过了原生 hit-test，直接把事件灌进渲染进程）。 */}
       <button
         type="button"
         className="pip-native-close"
@@ -90,7 +95,6 @@ export function PipWindow(): React.ReactElement | null {
           <path d="M2 2 8 8M8 2 2 8" />
         </svg>
       </button>
-      <PipView />
     </div>
   );
 }
