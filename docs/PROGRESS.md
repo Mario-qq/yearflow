@@ -798,6 +798,14 @@ Document PiP 与主页面**同一个 JS realm**，所以旧实现是 `createPort
 
 **不影响日常使用**：`npm run electron:start` 可以正常跑完整桌面版（走 `node_modules/electron`，那份已过 AV）。想要「双击图标启动」的话，给这条命令做个快捷方式即可，安装包不是必需品。
 
-### 七、首版明确未做
+### 七、启动方式：桌面快捷方式，不做安装包
 
-托盘图标、自动更新、代码签名、原生保存对话框（备份导出继续走 anchor 点击）、以及「把多 tab 机制简化掉」的重构。
+**不做安装包是有意的选择，不只是被 SEP 逼的。** 桌面壳通过 `app://` 协议直接读项目里的 `dist/`，所以「更新」＝重跑一次 `npm run electron:build`，壳子本身不用动。做成 NSIS 安装包反而会退化成「每次更新都要重装一遍」——除非加自动更新，而那需要发布服务器 + 代码签名，对单人自用太重。
+
+`npm run desktop:shortcut`（`scripts/make-shortcut.ps1`）在桌面放一个快捷方式，指向 `node_modules/electron/dist/electron.exe` + 参数 `.`，工作目录为仓库根，图标用 `build/icon.ico`（由 `public/pwa-512.png` 缩到 256 后包成单张 PNG-in-ICO）。已实测：双击快捷方式起来的是真应用，窗口标题 `YearFlow — 年度计划`。
+
+日常节奏：`git pull` → `npm run electron:build` → 双击快捷方式。快捷方式一次创建，之后不用再管。
+
+### 八、首版明确未做
+
+托盘图标、自动更新、代码签名、NSIS/portable 安装包（见 §六、§七）、原生保存对话框（备份导出继续走 anchor 点击）、以及「把多 tab 机制简化掉」的重构。
