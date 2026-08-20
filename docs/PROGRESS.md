@@ -784,11 +784,19 @@ Document PiP 与主页面**同一个 JS realm**，所以旧实现是 `createPort
 - **打包前必须先停掉 vite dev server**。`electron-builder` 一直 `EPERM: rename win-unpacked.tmp → win-unpacked`，排查后是 vite 的文件监听占着那个**目录句柄**（目录内没有任何文件被锁，是目录本身）。杀掉 vite 进程后立刻能 rename。同一现象在沙箱里还会伪装成 `EXDEV: cross-device link not permitted`，更容易带错方向。
 - **origin 变了 ⇒ localStorage 与 IndexedDB 都不继承**。桌面版第一次打开是空库（甘特图显示「还没有目标」），这是预期状态：用 `lib/backup.ts` 在网页版导出 JSON、桌面版设置页导入。未覆盖的 `yearflow-theme`、`yearflow:sync:*` 游标、`yearflow:pomodoro:*` 全部可再生。Supabase 需重新登录一次（无损，登出保留数据与游标）；账号是邮箱密码登录、无 OAuth ⇒ **没有回调 URL 问题**。
 
-### 六、遗留：安装包尚未产出
+### 六、遗留：安装包在这台机器上打不出来（SEP 拦截）
 
-`electronDist` 那条绕法让 `release/win-unpacked/` 顺利生成（275MB，解压步骤已不再被 SEP 干掉），但**NSIS / portable 安装包这一步还没跑完**，`release/` 下暂时只有 `win-unpacked`。压缩 275MB 叠加 SEP 扫描很慢，也有可能仍在被拦。
+**`npm run electron:pack` 目前跑不通，被 Symantec Endpoint Protection 拦住。** 三轮尝试的失败点依次是：
 
-这不影响使用：`npm run electron:start` 已可正常跑桌面版，`release/win-unpacked/` 里的可执行文件也是完整应用（只是文件名还是 `electron.exe`，重命名与图标注入发生在打包后段）。下次接手就从 `npm run electron:pack` 继续，跑之前**先确认没有 vite dev server 在跑**。
+1. `EPERM: rename win-unpacked.tmp → win-unpacked` —— vite dev server 占着目录句柄。停掉 vite 后这条解决了。
+2. `ENOENT: chmod ...\win-unpacked.tmp\electron.exe` —— electron-builder 解压官方 zip 的过程中，未签名的 `electron.exe` 被 SEP 抹掉（staging 目录 75 个文件只剩 3 个）。加 `electronDist: node_modules/electron/dist` 复用已有副本，绕过解压。
+3. `ENOENT: chmod ...\win-unpacked\dxil.dll` —— **复制阶段同样被抹**。所以 `electronDist` 只是把问题从「解压」推到「复制」，没有真正解决；`release/win-unpacked/` 是残缺的。
+
+结论：**这是环境问题，不是项目问题**，而且是公司管控的安全软件 —— 需要用户自己决定怎么处理（给项目目录加 SEP 排除项，或在另一台机器上打包，或干脆不打包）。我不改系统安全设置。
+
+⚠️ 注意 `Get-MpComputerStatus` 显示 Defender 实时保护为 False（被 SEP 关掉了），所以查 Defender 威胁记录是空的、极易误判成「不是 AV 问题」。要用 `Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct` 才看得到真正生效的是哪家。
+
+**不影响日常使用**：`npm run electron:start` 可以正常跑完整桌面版（走 `node_modules/electron`，那份已过 AV）。想要「双击图标启动」的话，给这条命令做个快捷方式即可，安装包不是必需品。
 
 ### 七、首版明确未做
 
