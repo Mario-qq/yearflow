@@ -784,6 +784,12 @@ Document PiP 与主页面**同一个 JS realm**，所以旧实现是 `createPort
 - **打包前必须先停掉 vite dev server**。`electron-builder` 一直 `EPERM: rename win-unpacked.tmp → win-unpacked`，排查后是 vite 的文件监听占着那个**目录句柄**（目录内没有任何文件被锁，是目录本身）。杀掉 vite 进程后立刻能 rename。同一现象在沙箱里还会伪装成 `EXDEV: cross-device link not permitted`，更容易带错方向。
 - **origin 变了 ⇒ localStorage 与 IndexedDB 都不继承**。桌面版第一次打开是空库（甘特图显示「还没有目标」），这是预期状态：用 `lib/backup.ts` 在网页版导出 JSON、桌面版设置页导入。未覆盖的 `yearflow-theme`、`yearflow:sync:*` 游标、`yearflow:pomodoro:*` 全部可再生。Supabase 需重新登录一次（无损，登出保留数据与游标）；账号是邮箱密码登录、无 OAuth ⇒ **没有回调 URL 问题**。
 
-### 六、首版明确未做
+### 六、遗留：安装包尚未产出
+
+`electronDist` 那条绕法让 `release/win-unpacked/` 顺利生成（275MB，解压步骤已不再被 SEP 干掉），但**NSIS / portable 安装包这一步还没跑完**，`release/` 下暂时只有 `win-unpacked`。压缩 275MB 叠加 SEP 扫描很慢，也有可能仍在被拦。
+
+这不影响使用：`npm run electron:start` 已可正常跑桌面版，`release/win-unpacked/` 里的可执行文件也是完整应用（只是文件名还是 `electron.exe`，重命名与图标注入发生在打包后段）。下次接手就从 `npm run electron:pack` 继续，跑之前**先确认没有 vite dev server 在跑**。
+
+### 七、首版明确未做
 
 托盘图标、自动更新、代码签名、原生保存对话框（备份导出继续走 anchor 点击）、以及「把多 tab 机制简化掉」的重构。
