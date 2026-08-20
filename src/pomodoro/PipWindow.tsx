@@ -76,8 +76,8 @@ export function PipWindow(): React.ReactElement | null {
 
   return (
     <div className="pip-native" style={{ height: '100%' }}>
-      {/* 无边框窗口的拖动条与关闭按钮：几何与 PipView 自绘顶栏严格对齐（pip.css .pip-native） */}
-      <div className="pip-native-drag" style={{ height: PIP_TOPBAR_H }} />
+      {/* 无边框窗口缺的关闭按钮。拖动交给顶栏自己（pip.css `.pip-native .pip-bar`），
+          不再盖透明层 —— 那会吞掉顶栏里事项选择按钮的点击 */}
       <button
         type="button"
         className="pip-native-close"

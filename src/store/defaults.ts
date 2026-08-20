@@ -29,5 +29,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
     notify: false,
     autoBreak: true,
     pipAuto: false,
+    pipOpacity: 100,
   },
 };

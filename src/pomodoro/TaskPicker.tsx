@@ -8,9 +8,8 @@
  * · 选中日期范围外 / 已完成的任务：**提示但不阻止**（任务延期是真实情况），
  *   并顺手给一个「延长任务到今天」的快捷动作。
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { adhocEntries, dayEntries } from '../lib/derive';
 import { patchTask } from '../store/actions';
 import { todayStr } from '../lib/date';
 import {
@@ -18,19 +17,10 @@ import {
   PICKER_GAP,
   PICKER_LIST_MAX,
   PICKER_LIST_MIN,
-  PICKER_RECENT_SHOWN,
   PICKER_VIEWPORT_MARGIN,
 } from './constants';
-import { readRecentTasks } from './running';
 import { useSelLabel, type FocusSel } from './useSelLabel';
-
-interface Option {
-  goalId: string;
-  taskId: string;
-  goalName: string;
-  goalIcon: string;
-  taskName: string;
-}
+import { useFocusOptions, type Option } from './useFocusOptions';
 
 const rowStyle: React.CSSProperties = {
   fontSize: 'var(--font-12)',
@@ -112,83 +102,18 @@ export function TaskPicker({
   onPick: (sel: FocusSel) => void;
   compact?: boolean;
 }) {
-  const goals = useStore((s) => s.goals);
   const tasks = useStore((s) => s.tasks);
-  const checkIns = useStore((s) => s.checkIns);
-  const exemptions = useStore((s) => s.exemptions);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [showHidden, setShowHidden] = useState(false);
-  /** 「最近」来自 localStorage（另一个标签、打卡页 ▶ 都会写它）⇒ 每次打开下拉重读一次 */
-  const [recentRaw, setRecentRaw] = useState(readRecentTasks);
   const anchorRef = useRef<HTMLButtonElement>(null);
   /** 打开方向与列表高度：面板底部那批 compact 选择器若一律向下开会顶出视口 */
   const [drop, setDrop] = useState({ up: false, listMax: PICKER_LIST_MAX });
   const today = todayStr();
   const label = useSelLabel(value);
 
-  const { recentOptions, todayOptions, hiddenOptions, allOptions } = useMemo(() => {
-    const goalList = Object.values(goals);
-    const taskList = Object.values(tasks);
-    const toOption = (goalId: string, taskId: string, taskName: string): Option | null => {
-      const g = goals[goalId];
-      if (!g) return null;
-      // icon 是可选字段：缺省时留空而不是渲染出 'undefined'（既有写法见 CommandPalette）
-      return { goalId, taskId, goalName: g.name, goalIcon: g.icon ?? '', taskName };
-    };
-
-    const due = dayEntries({
-      date: today,
-      goals: goalList,
-      tasks: taskList,
-      checkIns: Object.values(checkIns),
-      exemptions: Object.values(exemptions),
-    })
-      .filter((e) => !e.exempt)
-      .flatMap((e) => e.taskEntries.map((te) => toOption(e.goalId, te.taskId, te.name)));
-    // 随缘任务不在 dayEntries 里，必须单独并进来
-    const adhoc = adhocEntries({
-      date: today,
-      goals: goalList,
-      tasks: taskList,
-      checkIns: Object.values(checkIns),
-    }).map((e) => toOption(e.goalId, e.taskId, e.name));
-
-    const seen = new Set<string>();
-    const todayAll = [...due, ...adhoc].filter((o): o is Option => {
-      if (!o || seen.has(o.taskId)) return false;
-      seen.add(o.taskId);
-      return true;
-    });
-
-    const allOptions = taskList
-      .filter((t) => !t.deletedAt && !goals[t.goalId]?.deletedAt && !goals[t.goalId]?.archived)
-      .sort((a, b) => a.order - b.order)
-      .map((t) => toOption(t.goalId, t.id, t.name))
-      .filter((o): o is Option => o !== null);
-
-    // 「最近」不受 noFocus 与「今日在办」约束：手动选过一次就说明确实想给它计时。
-    // 脏 id（任务已删 / 目标已归档）在这里滤掉，别让它漏进 UI。
-    const recentOptions = recentRaw
-      .map((r) => {
-        const t = tasks[r.taskId];
-        if (!t || t.deletedAt) return null;
-        const g = goals[t.goalId];
-        if (!g || g.deletedAt || g.archived) return null;
-        return toOption(t.goalId, t.id, t.name);
-      })
-      .filter((o): o is Option => o !== null)
-      .slice(0, PICKER_RECENT_SHOWN);
-
-    const inRecent = new Set(recentOptions.map((o) => o.taskId));
-    const rest = todayAll.filter((o) => !inRecent.has(o.taskId));
-    return {
-      recentOptions,
-      todayOptions: rest.filter((o) => !tasks[o.taskId]?.noFocus),
-      hiddenOptions: rest.filter((o) => tasks[o.taskId]?.noFocus),
-      allOptions,
-    };
-  }, [goals, tasks, checkIns, exemptions, today, recentRaw]);
+  const { recentOptions, todayOptions, hiddenOptions, allOptions, refreshRecent } =
+    useFocusOptions();
 
   const q = query.trim().toLowerCase();
   // 搜索模式不受任何过滤影响 —— 搜得到才叫逃生阀
@@ -207,8 +132,8 @@ export function TaskPicker({
   // 打开瞬间（以及视口变化时）量一次上下空间：下方装不下且上方更宽裕就翻上去开，
   // 否则就地压缩列表高度 —— 但压不到 PICKER_LIST_MIN 以下，那种高度已经不能用了。
   useEffect(() => {
-    if (open) setRecentRaw(readRecentTasks());
-  }, [open]);
+    if (open) refreshRecent();
+  }, [open, refreshRecent]);
 
   useLayoutEffect(() => {
     if (!open) return;

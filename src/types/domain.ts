@@ -214,6 +214,12 @@ export interface PomodoroSettings {
   autoBreak: boolean;
   /** 开始专注时自动弹出悬浮小窗（Document PiP），默认 false */
   pipAuto: boolean;
+  /**
+   * 悬浮小窗不透明度百分比，默认 100，取值 [30, 100]。
+   * 仅桌面版生效（原生窗口的 setOpacity）；web 版的 Document PiP 无此能力，设置项也不渲染。
+   * 下限 30 是硬约束：再低就看不清倒计时，而这个窗存在的唯一理由就是「到点了要看得见」。
+   */
+  pipOpacity: number;
 }
 
 export interface AppSettings {

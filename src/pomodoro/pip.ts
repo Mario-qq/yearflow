@@ -21,6 +21,7 @@
  * 窗内内容由 src/pip-main.tsx 独立挂载；两窗之间靠 localStorage + storage 事件对齐。
  */
 import { desktop } from '../lib/desktop';
+import { useStore } from '../store/useStore';
 import { PIP_H, PIP_W } from './constants';
 import { usePomodoroStore } from './store';
 
@@ -154,7 +155,24 @@ export function togglePip(): void {
 export function initDesktopPip(): () => void {
   const d = desktop();
   if (!d) return () => {};
-  return d.onPipState((open) => usePomodoroStore.setState({ pipOpen: open }));
+  const offState = d.onPipState((open) => usePomodoroStore.setState({ pipOpen: open }));
+
+  // 透明度：settings 是权威，主进程只是执行方。这里既覆盖首次（主窗启动即推一次，
+  // 于是之后开的小窗一开就是对的、不会闪一下 100%），也覆盖用户拖滑块的实时改动。
+  let last = -1;
+  const push = (): void => {
+    const v = useStore.getState().settings.pomodoro.pipOpacity;
+    if (v === last) return;
+    last = v;
+    void d.setPipOpacity(v);
+  };
+  push();
+  const offStore = useStore.subscribe(push);
+
+  return () => {
+    offState();
+    offStore();
+  };
 }
 
 /** 主页面关掉时别留一个孤儿小窗在桌面上飘着 */

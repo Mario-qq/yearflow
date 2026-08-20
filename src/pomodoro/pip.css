@@ -15,6 +15,7 @@
   flex: none;
   align-items: center;
   justify-content: space-between;
+  gap: 8px; /* 事项名截断后紧贴段点很难看，留一道固定的呼吸位 */
   padding: 0 10px;
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border-subtle);
@@ -304,14 +305,16 @@
 .pip-native {
   position: relative;
 }
-/* 盖在顶栏上的透明拖动层。顶栏里没有可点元素（阶段文案 + 段点都是装饰），所以整条盖住无碍 */
-.pip-native-drag {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 3;
+/* 顶栏自己就是拖动条。
+   ⚠️ 早先的做法是在顶栏上盖一层透明 drag 覆盖层，理由是「顶栏里没有可点元素」——
+   顶栏加进事项选择按钮之后这个前提就不成立了，覆盖层会把按钮的点击全部吞掉
+   （自查里表现为 `.pip-native-drag intercepts pointer events`）。
+   drag 区域天然吃掉其上的点击，所以里面任何可交互元素都必须显式 no-drag。 */
+.pip-native .pip-bar {
   -webkit-app-region: drag;
+}
+.pip-native .pip-bar button {
+  -webkit-app-region: no-drag;
 }
 .pip-native-close {
   position: absolute;
@@ -334,4 +337,128 @@
 /* 给关闭按钮让位，否则段点会被它压住 */
 .pip-native .pip-bar {
   padding-right: 32px;
+}
+
+/* ── 顶栏里的专注事项 ────────────────────────────────────────────────
+   刻意不新增任何高度：事项名挤在阶段文案右边，靠 min-width:0 + 省略号收口。
+   200px 的最窄小窗下它会被截得只剩几个字，但顶栏几何完全不变 —— 这是有意的取舍，
+   完整名字在 title 与主面板里都有。 */
+.pip-phase--withsel {
+  min-width: 0; /* 不写这条，flex 子项不肯收缩，段点会被顶出小窗 */
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.pip-sel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-11);
+  letter-spacing: 0.04em;
+}
+.pip-sel--static {
+  color: var(--text-tertiary);
+}
+.pip-sel--btn {
+  padding: 1px 5px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition:
+    color 120ms var(--ease),
+    border-color 120ms var(--ease);
+}
+.pip-sel--btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+
+/* ── 事项选择浮层 ───────────────────────────────────────────────────
+   覆盖整窗、只在打开时存在 ⇒ 关掉后小窗几何一模一样，不占常驻高度。 */
+.pip-picker {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-base);
+  outline: none;
+}
+.pip-picker-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px 0 10px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--font-11);
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  -webkit-app-region: no-drag; /* 浮层盖住了拖动层，这里要能点 */
+}
+.pip-picker-x {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: var(--font-11);
+}
+.pip-picker-x:hover {
+  color: var(--text-primary);
+}
+.pip-picker-list {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.pip-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 10px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--font-12);
+  color: var(--text-secondary);
+}
+.pip-picker-row:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+.pip-picker-row.is-on {
+  color: var(--accent);
+}
+.pip-picker-icon {
+  flex: none;
+  width: 14px;
+  text-align: center;
+  font-size: var(--font-11);
+}
+.pip-picker-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 目标名是次要信息：空间不够时它先消失，任务名后消失 */
+.pip-picker-goal {
+  margin-left: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
 }

@@ -87,6 +87,9 @@ export const ALERT_TTL_MS = 30_000;
 
 /** 窗内自绘顶栏：Chromium 的系统标题栏只显示站点来源，网页改不了，阶段文案只能自己画 */
 export const PIP_TOPBAR_H = 28;
+/** 小窗不透明度可调范围（%）。下限 30：再低倒计时就看不清了，而看得清是这个窗的全部意义 */
+export const PIP_OPACITY_MIN = 30;
+export const PIP_OPACITY_MAX = 100;
 /** 主操作（开始/暂停）实心圆直径 */
 export const PIP_BTN_PRIMARY = 36;
 /** 次操作（停止/跳过/知道了）描边圆直径 */

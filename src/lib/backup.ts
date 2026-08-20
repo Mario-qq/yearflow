@@ -153,6 +153,7 @@ const pomodoroSchema = z
     notify: z.boolean().default(false),
     autoBreak: z.boolean().default(true),
     pipAuto: z.boolean().default(false),
+    pipOpacity: z.number().int().min(30).max(100).default(100),
   })
   .default(() => ({ ...DEFAULT_SETTINGS.pomodoro }));
 

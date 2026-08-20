@@ -16,7 +16,7 @@
  * 网页无权改写，所以阶段文案（专注 / 已暂停 / 第几段）由**窗内自绘的顶栏**承载；
  * 任务名与「丢弃」不在小窗露出（丢弃仍在主面板 PomodoroPanel）。
  */
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { todayStr } from '../lib/date';
 import { isDesktop } from '../lib/desktop';
@@ -36,7 +36,9 @@ import {
 import { humanMs, mmss } from './format';
 import { pauseFocus, remainingMs, resumeFocus, setAlert, startBreak, stopFocus } from './kernel';
 import './pip.css';
-import { readLastTask } from './running';
+import { readLastTask, writeLastTask } from './running';
+import { PipTaskPicker } from './PipTaskPicker';
+import { useSelLabel, type FocusSel } from './useSelLabel';
 import { usePomodoroStore } from './store';
 import { subscribeTick } from './ticker';
 
@@ -155,6 +157,12 @@ export function PipView() {
   const pipHost = usePomodoroStore((s) => s.pipHost);
   const pomodoro = useStore((s) => s.settings.pomodoro);
   const focusSessions = useStore((s) => s.focusSessions);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  /**
+   * 待选事项。运行中显示的是那一段自己的归属（不可改 —— 中途改归属等于篡改已发生的记录），
+   * 空闲/休息时显示的是「下一段用哪个」，来源与主面板同一个 localStorage 键。
+   */
+  const [nextSel, setNextSel] = useState<FocusSel>(() => readLastTask() ?? {});
   const timeRef = useRef<HTMLDivElement>(null);
   const fillRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -197,6 +205,17 @@ export function PipView() {
 
   const segTotal = pomodoro.longBreakEvery;
   const segDone = Math.min(cycleCompleted, segTotal);
+
+  // 专注中锁住归属；空闲与休息中可改（改的是「下一段用哪个」）
+  const focusRunning = running?.phase === 'focus';
+  const shownSel: FocusSel = focusRunning
+    ? { goalId: running.goalId, taskId: running.taskId }
+    : nextSel;
+  const selLabel = useSelLabel(shownSel);
+  const pickSel = (sel: FocusSel): void => {
+    setNextSel(sel);
+    writeLastTask(sel); // 落 localStorage ⇒ 主窗与打卡页的选择器立刻同源
+  };
   const phaseText = running
     ? running.phase === 'focus'
       ? running.paused
@@ -321,9 +340,25 @@ export function PipView() {
       }}
     >
       <div className="pip-bar" style={{ height: PIP_TOPBAR_H }}>
-        <span className="pip-phase">
+        {/* 事项名挤在阶段文案右边、靠省略号收口 —— 顶栏本来就在，所以不多占一个像素的高度 */}
+        <span className="pip-phase pip-phase--withsel">
           <i className="pip-dot" />
-          {phaseText}
+          <span className="shrink-0">{phaseText}</span>
+          {focusRunning ? (
+            <span className="pip-sel pip-sel--static" title={selLabel.text}>
+              {selLabel.text}
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="pip-sel pip-sel--btn"
+              onClick={() => setPickerOpen(true)}
+              title={`${selLabel.text}（点击更换）`}
+              aria-label={`专注事项：${selLabel.text}，点击更换`}
+            >
+              {selLabel.text}
+            </button>
+          )}
         </span>
         <Segs
           total={segTotal}
@@ -343,7 +378,7 @@ export function PipView() {
             kind="play"
             variant="primary"
             label="开始专注"
-            onClick={() => startPomodoro(readLastTask() ?? {})}
+            onClick={() => startPomodoro(nextSel)}
           />
         )}
         {running?.phase === 'focus' && (
@@ -366,6 +401,10 @@ export function PipView() {
       <div className="pip-track" style={{ height: PIP_PROGRESS_H }}>
         <div ref={fillRef} className="pip-fill" style={{ transform: 'scaleX(0)' }} />
       </div>
+
+      {pickerOpen && (
+        <PipTaskPicker value={shownSel} onPick={pickSel} onClose={() => setPickerOpen(false)} />
+      )}
     </div>
   );
 }

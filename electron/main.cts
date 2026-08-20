@@ -32,6 +32,11 @@ protocol.registerSchemesAsPrivileged([
 /** 同一时刻只允许一个小窗 */
 let pipWindow: BrowserWindow | null = null;
 let mainWindow: BrowserWindow | null = null;
+/**
+ * 小窗不透明度（0–1）。渲染进程是权威（存在 settings 里），主进程只缓存最后一次收到的值，
+ * 好让「关掉小窗 → 再开」不会闪一下 100% 再变暗。
+ */
+let pipOpacity = 1;
 
 function broadcastPipState(open: boolean): void {
   for (const w of BrowserWindow.getAllWindows()) {
@@ -85,6 +90,7 @@ function createPipWindow(): BrowserWindow {
     webPreferences: { preload: PRELOAD, backgroundThrottling: false },
   });
   win.setAlwaysOnTop(true, 'floating');
+  win.setOpacity(pipOpacity);
   win.once('ready-to-show', () => {
     win.show();
     broadcastPipState(true);
@@ -115,6 +121,17 @@ ipcMain.handle('pip:close', () => {
 /** 小窗自己请求关闭（点自绘顶栏的 ×），拿不到自己的窗口引用，所以走 sender */
 ipcMain.handle('win:close-self', (e) => {
   BrowserWindow.fromWebContents(e.sender)?.close();
+});
+
+/**
+ * 小窗透明度。clamp 在主进程再做一遍 —— 渲染进程的 clamp 是 UI 层的事，
+ * 而 setOpacity(0) 会让窗口彻底看不见、又还在置顶抢点击，属于不可恢复的状态。
+ */
+ipcMain.handle('pip:opacity', (_e, percent: number) => {
+  const p = Math.min(100, Math.max(30, Math.round(Number(percent) || 100)));
+  pipOpacity = p / 100;
+  if (pipWindow && !pipWindow.isDestroyed()) pipWindow.setOpacity(pipOpacity);
+  return p;
 });
 
 ipcMain.handle('notify', (_e, body: string) => {

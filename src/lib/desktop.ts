@@ -12,6 +12,7 @@ export interface DesktopApi {
   openPip(): Promise<boolean>;
   closePip(): Promise<boolean>;
   closeSelf(): Promise<void>;
+  setPipOpacity(percent: number): Promise<number>;
   focusMain(): Promise<void>;
   notify(body: string): Promise<boolean>;
   onPowerResume(cb: () => void): () => void;

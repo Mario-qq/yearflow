@@ -10,6 +10,8 @@ const api = {
   openPip: (): Promise<boolean> => ipcRenderer.invoke('pip:open'),
   closePip: (): Promise<boolean> => ipcRenderer.invoke('pip:close'),
   closeSelf: (): Promise<void> => ipcRenderer.invoke('win:close-self'),
+  /** 设置小窗不透明度（百分比 30–100）。返回主进程 clamp 后的实际值。 */
+  setPipOpacity: (percent: number): Promise<number> => ipcRenderer.invoke('pip:opacity', percent),
   focusMain: (): Promise<void> => ipcRenderer.invoke('win:focus-main'),
   notify: (body: string): Promise<boolean> => ipcRenderer.invoke('notify', body),
   /** OS 睡眠/锁屏唤醒。返回取消订阅函数。 */

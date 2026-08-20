@@ -8,8 +8,17 @@
  */
 import { _electron as electron } from 'playwright';
 import { mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const OUT = 'screenshots/desktop';
+
+/**
+ * ⚠️ 自查一律跑在**独立的 userData 目录**里，绝不碰真实 profile。
+ * 教训：早先的自查往 app://local 的真实 IndexedDB 里载入过示例数据，而桌面版一旦登录
+ * Supabase，LWW 同步就会把那些示例目标推上云、污染手机端。测试数据必须与真实数据物理隔离。
+ */
+const PROFILE = join(tmpdir(), 'yearflow-smoke-profile');
 const fails = [];
 const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
@@ -30,7 +39,7 @@ mkdirSync(OUT, { recursive: true });
 
 const env = { ...process.env };
 delete env.VITE_DEV_SERVER_URL; // 强制走 app://
-const app = await electron.launch({ args: ['.'], env });
+const app = await electron.launch({ args: ['.', `--user-data-dir=${PROFILE}`], env });
 
 const main = await app.firstWindow();
 await main.waitForLoadState('domcontentloaded');

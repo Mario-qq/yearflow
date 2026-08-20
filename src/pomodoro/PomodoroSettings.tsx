@@ -12,6 +12,8 @@ import { useStore } from '../store/useStore';
 import type { PomodoroSettings as Prefs } from '../types/domain';
 import { notifyPermission, requestNotifyPermission, sendTestNotification } from './chime';
 import { isPipSupported } from './pip';
+import { isDesktop } from '../lib/desktop';
+import { PIP_OPACITY_MAX, PIP_OPACITY_MIN } from './constants';
 
 const PERMISSION_TEXT: Record<NotificationPermission | 'unsupported', string> = {
   granted: '已授权',
@@ -156,6 +158,27 @@ export function PomodoroSettings() {
           />
         )}
       </div>
+
+      {/* 透明度只有桌面版能做（原生窗口的 setOpacity）；web 版的 Document PiP 没有这个能力，
+          所以这一行整条不渲染 —— 摆一个点了没反应的滑块比没有更糟 */}
+      {isDesktop() && (
+        <label className="flex items-center gap-2" style={{ fontSize: 'var(--font-12)' }}>
+          <span style={{ color: 'var(--text-secondary)' }}>小窗不透明度</span>
+          <input
+            type="range"
+            min={PIP_OPACITY_MIN}
+            max={PIP_OPACITY_MAX}
+            step={5}
+            value={pomodoro.pipOpacity}
+            onChange={(e) => write({ pipOpacity: Number(e.target.value) })}
+            style={{ width: 140, accentColor: 'var(--accent)' }}
+            aria-label="小窗不透明度"
+          />
+          <span className="tnum" style={{ color: 'var(--text-tertiary)', minWidth: 34 }}>
+            {pomodoro.pipOpacity}%
+          </span>
+        </label>
+      )}
 
       {/* 诊断：通知发不出来时，问题可能在三层里的任何一层，光看开关是「开」没有任何信息量 */}
       <div className="flex flex-wrap items-center gap-2" style={{ fontSize: 'var(--font-12)' }}>
