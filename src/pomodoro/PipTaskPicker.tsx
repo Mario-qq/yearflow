@@ -9,6 +9,7 @@
  * 浮层只在打开时存在，关掉后小窗几何一模一样。
  */
 import { useEffect, useRef } from 'react';
+import { useStore } from '../store/useStore';
 import { PIP_TOPBAR_H } from './constants';
 import { useFocusOptions, type Option } from './useFocusOptions';
 import type { FocusSel } from './useSelLabel';
@@ -23,6 +24,7 @@ export function PipTaskPicker({
   onClose: () => void;
 }) {
   const { recentOptions, todayOptions, allOptions, refreshRecent } = useFocusOptions();
+  const tasks = useStore((s) => s.tasks);
   const boxRef = useRef<HTMLDivElement>(null);
 
   // 「最近」是 localStorage 里的跨窗口状态，打开这一刻才是它最新的时候
@@ -38,9 +40,16 @@ export function PipTaskPicker({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // 「最近」优先，其后补今日在办；都空了才退到全部任务，保证这个浮层永远不是空的
+  // 「最近」优先，其后补今日在办；都空了才退到全部任务，保证这个浮层永远不是空的。
+  // 与网页版一致：标了「不列入专注」（noFocus）的任务不进列表 —— 但「最近」不受此约束，
+  // 手动选过一次就说明确实想给它计时（规则同 useFocusOptions 里的注释）。小窗没有
+  // 网页版那个「显示全部」开关，所以这里是硬过滤。
   const seen = new Set<string>();
-  const list: Option[] = [...recentOptions, ...todayOptions, ...allOptions].filter((o) => {
+  const list: Option[] = [
+    ...recentOptions,
+    ...todayOptions.filter((o) => !tasks[o.taskId]?.noFocus),
+    ...allOptions.filter((o) => !tasks[o.taskId]?.noFocus),
+  ].filter((o) => {
     if (seen.has(o.taskId)) return false;
     seen.add(o.taskId);
     return true;
