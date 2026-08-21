@@ -396,6 +396,9 @@ function createMainWindow(): BrowserWindow {
     },
   });
   win.once('ready-to-show', () => win.show());
+  win.on('closed', () => {
+    mainWindow = null;
+  });
   void win.loadURL(pageURL('index.html'));
   return win;
 }
@@ -549,8 +552,13 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    mainWindow?.show();
-    mainWindow?.focus();
+    // 关了主窗只留小窗时 mainWindow 是 null：重开一个，而不是对着空引用调用
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      mainWindow = createMainWindow();
+      return;
+    }
+    mainWindow.show();
+    mainWindow.focus();
   });
 
   void app.whenReady().then(() => {
