@@ -861,3 +861,23 @@ Document PiP 与主页面**同一个 JS realm**，所以旧实现是 `createPort
 **验收**：`tsc -b` + `oxlint` 干净，`vitest` 225 全绿，`check-pip.mjs`（web 的 Document PiP 路径）五态正常。`desktop:e2e` **47 项全过**，新增 G 段 18 项：四条边各验「吸附成 88×30 且紧贴 / 窗内换成药丸那棵树 / 药丸里没有任何可点元素 / hover 临时展开回 116×76 且仍贴边 / 点脱离边缘回到自由态」，外加「屏幕中央也能直接吸附最近边」「关窗再开位置与尺寸都还在」。截图人工过目：常态、hover 态、深浅主题、四条边的药丸、bottom 的 peek、庆祝屏、选择器浮层。
 
 自查里有两处不得不绕开合成鼠标：Playwright 的 mouse 是注入页面的合成事件、不动真实光标，所以「把鼠标移开小窗」只能等价地调一次 `peekPip(false)`；窗内每次重挂都会再报一次 enter，于是收起态断言在每轮轮询前都先报一次 leave。**顺带确认了一个有意的手感**：刚拖到边上松手时，光标还压在窗上 ⇒ 保持展开，移开鼠标才真收起来。
+
+### 十三、悬停失效：控件根本浮不出来（2026-08-21 修）
+
+用户原话：「不是最小化的时候怎么啥东西都没了」。药丸（88×30）里倒计时是好的，但**自由态那一屏**除了倒计时什么都没有——鼠标移上去，浮层不出、× 也点不到。
+
+**根因：悬停在窗内测不出来。** 上一轮把整块窗体设成 `-webkit-app-region: drag`（这么小的窗，哪都能拖才顺手）。那是**原生 hit-test**：落在拖动区上的真实鼠标被 Windows 判给「移动窗口」，渲染进程连 `mousemove` 都收不到 ⇒ CSS `:hover` 与 `onPointerEnter` 一概不触发。于是：
+
+- `.pip-overlay` 是条件挂载的（`showOverlay = hovered`）⇒ 永远不挂 ⇒ 顶行、控制行、段点全都不存在；
+- `.pip-native-close` 靠 `:not(:hover)` 把自己交还 `drag` ⇒ 永远是 `drag` ⇒ 那颗 × 永远点不到；
+- 收起态的 peek 也走同一条上报路径 ⇒ 药丸移上去也不展开。
+
+**为什么自查全绿**：Playwright 的 `hover()` 是注入页面的合成事件，绕过原生 hit-test，所以窗内那套 `:hover` 在自动化里工作得很好——测的是一条真实鼠标永远走不到的路。§十二 收尾时已经写下「Playwright 的 mouse 不动真实光标」，但只把它当成 peek 的一个测试限制，没意识到它同时意味着**产品代码里那条 hover 通道从来没被真实鼠标走通过**。
+
+**改法：悬停判定搬到主进程。** `main.cts` 在小窗存在期间每 120ms 比对一次 `screen.getCursorScreenPoint()` 与窗矩形，跨越边界时才发一次 `pip:hover`；渲染进程订阅结果（`PipWindow.useNativeHover` → `PipView` 的 `hover` prop + `.pip-native.is-hover`）。peek 的进出延迟（400ms）也一并收回主进程——判据同源，不再需要渲染进程上报。窗内原有的 `onPointerEnter/Leave` 与 `:hover` 保留为兜底：web 版的 Document PiP 没有拖动区，靠的还是它们。
+
+**自查补上「真实鼠标」那条路**（H 段 2 项）。既然合成事件测不了它，就动真光标：用 PowerShell 的 `[System.Windows.Forms.Cursor]::Position` 把光标摆到工作区正中，再把窗挪到光标底下，然后断言浮层浮出 + `.pip-native-close` 的 `opacity` 回到 1（它是「× 已交还 no-drag」的可观测代理）；把光标挪回屏幕角上，断言浮层收回。开跑先 `parkCursor()` 停到 (2,2)：否则测试机上光标恰好压在小窗位置，后半段会撞上一次 peek 展开，药丸截图变成 116×76。
+
+**顺带一个假红**：药丸的深浅主题截图里 dark 那张只有 59 个非背景像素。不是渲染问题——`until(dataset.theme === t)` 一成立就截图，拍到的是「属性改了、帧还没画」那一瞬。补 `paintDone()`（双 rAF + 30ms，500ms 上限兜底）后 5872/5860 稳定通过。
+
+**验收**：`tsc -b`（含 `electron/tsconfig`）+ `oxlint` 干净，`desktop:e2e` **74 项全过**（含新增 H 段 2 项）。

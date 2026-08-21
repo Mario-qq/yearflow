@@ -169,8 +169,12 @@ function Segs({
  * @param docked 已吸附在屏幕边缘（此刻是 hover 临时展开的 peek 态）。
  *   此时那颗按钮的语义反转成「脱离边缘」，否则用户在展开态里没有任何退路 ——
  *   药丸本身是纯拖动区，点不出菜单来。
+ * @param hover 桌面版由主进程轮询光标判定的悬停（main.cts tickHover）。
+ *   **窗内自己测不出来**：整块窗体是 `-webkit-app-region: drag`，原生 hit-test 把鼠标
+ *   判给「移动窗口」，:hover / onPointerEnter 一概不触发 ⇒ 浮层永不浮出、× 永不可点。
+ *   web 版（Document PiP）没有拖动区，传不传都行，走下面的 onPointerEnter。
  */
-export function PipView({ docked = false }: { docked?: boolean } = {}) {
+export function PipView({ docked = false, hover = false }: { docked?: boolean; hover?: boolean } = {}) {
   const running = usePomodoroStore((s) => s.running);
   const alert = usePomodoroStore((s) => s.alert);
   const lastResult = usePomodoroStore((s) => s.lastResult);
@@ -343,7 +347,7 @@ export function PipView({ docked = false }: { docked?: boolean } = {}) {
     : 'var(--text-tertiary)';
 
   // 浮层要在 picker 打开期间强制留着：picker 盖满整窗，鼠标必然离开浮层本身
-  const showOverlay = hovered || pickerOpen;
+  const showOverlay = hover || hovered || pickerOpen;
 
   return (
     <div

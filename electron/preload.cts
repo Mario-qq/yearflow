@@ -30,6 +30,16 @@ const api = {
     ipcRenderer.on('pip:state', handler);
     return () => ipcRenderer.off('pip:state', handler);
   },
+  /**
+   * 光标是否落在小窗上。**必须由主进程判定**：小窗整块是 `-webkit-app-region: drag`，
+   * 那是原生 hit-test，落在上面的鼠标事件直接被判给「移动窗口」，窗内的 :hover 与
+   * onPointerEnter 一概不触发（见 main.cts 的 tickHover）。
+   */
+  onPipHover: (cb: (on: boolean) => void): (() => void) => {
+    const handler = (_e: unknown, on: boolean): void => cb(on === true);
+    ipcRenderer.on('pip:hover', handler);
+    return () => ipcRenderer.off('pip:hover', handler);
+  },
   /** 小窗形态（自由 / 贴边收起 / 临时展开）。只有主进程知道，窗内据此换渲染的那棵树。 */
   onPipMode: (cb: (info: { mode: 'free' | 'docked' | 'peek'; edge: 'left' | 'right' | 'top' | 'bottom' | null }) => void): (() => void) => {
     const handler = (_e: unknown, info: Parameters<typeof cb>[0]): void => cb(info);

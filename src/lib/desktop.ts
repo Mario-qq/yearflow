@@ -37,6 +37,11 @@ export interface DesktopApi {
   onPowerResume(cb: () => void): () => void;
   onPipState(cb: (open: boolean) => void): () => void;
   onPipMode(cb: (info: PipModeInfo) => void): () => void;
+  /**
+   * 光标是否落在小窗上。窗内**测不出来**：整块窗体是 `-webkit-app-region: drag`，
+   * 原生 hit-test 把鼠标判给「移动窗口」，:hover / onPointerEnter 一概不触发。
+   */
+  onPipHover(cb: (on: boolean) => void): () => void;
 }
 
 export function desktop(): DesktopApi | null {

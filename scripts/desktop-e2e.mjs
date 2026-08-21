@@ -12,6 +12,7 @@
  *   node scripts/desktop-e2e.mjs
  */
 import { _electron as electron } from 'playwright';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -26,11 +27,51 @@ const DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173/';
  */
 const PROFILE = join(tmpdir(), 'yearflow-e2e-profile');
 
+/**
+ * 挪**真实**系统光标。
+ *
+ * 为什么非得动真光标：悬停由主进程轮询 screen.getCursorScreenPoint() 判定（小窗整块是
+ * 拖动区，窗内测不出悬停 —— 见 main.cts tickHover），所以 Playwright 的合成 hover 对
+ * 那条路一点作用都没有。反过来，跑测试时光标恰好停在小窗上，会把后半段的断言全带偏
+ * （实测：药丸截图撞上一次 peek 展开，同一棵树两个尺寸）。于是开跑先把光标停到角上，
+ * 需要验真实悬停时再精确摆到指定点。
+ */
+function setCursor(x, y) {
+  if (process.platform !== 'win32') return false;
+  try {
+    execFileSync(
+      'powershell',
+      ['-NoProfile', '-Command',
+        `Add-Type -AssemblyName System.Windows.Forms,System.Drawing; [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${Math.round(x)},${Math.round(y)})`],
+      { stdio: 'ignore' },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+/** 光标停到屏幕左上角：那儿不会压住任何一处被测的小窗位置 */
+const parkCursor = () => setCursor(2, 2);
+
 const fails = [];
 function check(name, ok, detail = '') {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
   if (!ok) fails.push(name);
 }
+
+/**
+ * 等窗内真的画上一帧。
+ * 教训：`until(dataset.theme === t)` 一成立就截图，会拍到「属性改了、帧还没画」那一瞬
+ * —— 药丸截出来是一块几乎全空的底（实测 59 个非背景像素），断言当场红，而实际渲染没病。
+ */
+const paintDone = (page) =>
+  page.evaluate(
+    () =>
+      new Promise((r) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 30)));
+        setTimeout(r, 500); // 窗被系统挂起时 rAF 不发，兜一个上限
+      }),
+  );
 
 /** 轮询直到 fn() 为真值 */
 async function until(fn, ms = 15000, every = 200) {
@@ -76,6 +117,8 @@ mkdirSync(OUT, { recursive: true });
 // 小窗几何是会持久化的（userData/pip-window.json）。上一轮跑完常常停在贴边收起态，
 // 那会让本轮前半段全部对着一条药丸做断言 ⇒ 每轮从干净的几何开始。
 rmSync(join(PROFILE, 'pip-window.json'), { force: true });
+
+parkCursor();
 
 const app = await electron.launch({
   args: ['.', `--user-data-dir=${PROFILE}`],
@@ -142,6 +185,65 @@ check('小窗常态尺寸为 116×76', Math.abs(bare.w - 116) <= 2 && Math.abs(b
 check('常态不显示任何控件，只有倒计时', bare.overlay === false && /^\d+:\d\d$/.test(bare.time),
   JSON.stringify(bare));
 check('小窗置顶', geom.onTop === true);
+
+/**
+ * ── H. 真实鼠标悬停（原生 hit-test 那条路）─────────────────────────────
+ *
+ * 这一段是补一个**被自动化完全掩盖过去的 bug**：小窗整块是 -webkit-app-region: drag，
+ * 那是原生 hit-test，落在上面的真实鼠标被 Windows 判给「移动窗口」，渲染进程连 mousemove
+ * 都收不到 ⇒ :hover 与 onPointerEnter 永不触发 ⇒ 控件永远不浮出、× 永远点不到。而
+ * Playwright 的 hover 是合成事件、绕过 hit-test，所以上面那些 hover() 全绿也证明不了什么。
+ *
+ * 没法在 Node 里挪系统光标，于是反过来：**把窗挪到光标底下**，再等主进程轮询判出 hover。
+ * 这样走的就是真实那条链（screen.getCursorScreenPoint → pip:hover → 浮层挂载）。
+ */
+const putUnderCursor = () =>
+  app.evaluate(({ BrowserWindow, screen }) => {
+    const w = BrowserWindow.getAllWindows().find((x) => x.webContents.getURL().includes('pip.html'));
+    const p = screen.getCursorScreenPoint();
+    const wa = screen.getDisplayNearestPoint(p).workArea;
+    const b = w.getContentBounds();
+    // 贴边会触发吸附判定，这里要的是自由态：一律留出 SNAP(20)+ 的余量
+    const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+    const x = clamp(p.x - Math.round(b.width / 2), wa.x + 24, wa.x + wa.width - b.width - 24);
+    const y = clamp(p.y - Math.round(b.height / 2), wa.y + 24, wa.y + wa.height - b.height - 24);
+    w.setContentBounds({ x, y, width: b.width, height: b.height });
+    const nb = w.getContentBounds();
+    const inside =
+      p.x >= nb.x && p.x < nb.x + nb.width && p.y >= nb.y && p.y < nb.y + nb.height;
+    return { inside, cursor: p, bounds: nb };
+  });
+
+// 先把光标摆到工作区正中，再把窗挪过去：两边都确定，这一项才不看运气
+const center = await app.evaluate(({ screen }) => {
+  const wa = screen.getPrimaryDisplay().workArea;
+  return { x: wa.x + Math.round(wa.width / 2), y: wa.y + Math.round(wa.height / 2) };
+});
+setCursor(center.x, center.y);
+const placed = await putUnderCursor();
+if (!placed.inside) {
+  // 光标恰好在屏幕角上、clamp 后盖不住它 —— 这一项没法判，明说跳过而不是假绿
+  check('H 真实鼠标悬停 → 浮层浮出（跳过：光标在屏幕边角）', true, JSON.stringify(placed));
+} else {
+  const opened = await until(() =>
+    pip.evaluate(() => ({
+      overlay: !!document.querySelector('.pip-overlay'),
+      // × 靠这个类交还 no-drag：没有它，那颗按钮永远是拖动区、点不到
+      hoverClass: !!document.querySelector('.pip-native.is-hover'),
+      closeHit: getComputedStyle(document.querySelector('.pip-native-close')).opacity,
+    })).then((r) => (r.overlay && r.hoverClass && Number(r.closeHit) > 0.5 ? r : null)),
+  );
+  check('H 真实鼠标悬停 → 浮层浮出、× 交还 no-drag', !!opened, JSON.stringify(opened ?? {}));
+  parkCursor(); // 只挪光标，窗留在原处 —— 验的是「鼠标离开」，不是「窗跑了」
+  const away = await app.evaluate(({ BrowserWindow }) => {
+    const w = BrowserWindow.getAllWindows().find((x) => x.webContents.getURL().includes('pip.html'));
+    return w.getContentBounds();
+  });
+  const closed = await until(() =>
+    pip.evaluate(() => !document.querySelector('.pip-overlay') && !document.querySelector('.pip-native.is-hover')),
+  );
+  check('H 鼠标离开 → 浮层收回', !!closed, JSON.stringify(away));
+}
 
 // ── A. 主窗开始专注 → 小窗跟上（storage 桥）────────────────────────────
 await main.evaluate(() => window.__pomodoro.start({}));
@@ -479,9 +581,16 @@ check('G 顶行「收起」键：在屏幕中央也能直接吸附最近边', !!
 for (const theme of ['dark', 'light']) {
   await main.evaluate((t) => window.__store.getState().updateSettings({ theme: t }), theme);
   await until(() => pip.evaluate((t) => document.documentElement.dataset.theme === t, theme));
+  const dump = await pip.evaluate(() => ({
+    tree: document.querySelector('.pip-dock') ? 'dock' : document.querySelector('.pip-shell') ? 'shell' : '?',
+    w: innerWidth, h: innerHeight,
+    time: (document.querySelector('.pip-dock-time, .pip-time')?.textContent ?? '').trim(),
+    theme: document.documentElement.dataset.theme,
+  }));
+  await paintDone(pip); // DOM 就绪 ≠ 已经画上去：不等这一帧会拍到还没上笔的一块空底
   const shot = await pip.screenshot({ path: `${OUT}/pip-dock-theme-${theme}.png` });
   const ink = await countInk(main, shot);
-  check(`G 药丸在 ${theme} 主题下有笔画`, ink > 150, `${ink} 个非背景像素`);
+  check(`G 药丸在 ${theme} 主题下有笔画`, ink > 150, `${ink} 个非背景像素 ${JSON.stringify(dump)}`);
 }
 await main.evaluate(() => window.__store.getState().updateSettings({ theme: 'dark' }));
 await pip.evaluate(() => window.yearflowDesktop.undockPip());

@@ -82,6 +82,28 @@ function useIsCompact(): boolean {
 }
 
 /**
+ * 光标是否落在小窗上 —— **只有主进程知道**。
+ *
+ * 小窗整块是 `-webkit-app-region: drag`（无边框窗要哪都能拖）。那是原生 hit-test：
+ * 落在拖动区上的鼠标被 Windows 判给「移动窗口」，渲染进程连 mousemove 都收不到 ⇒
+ * CSS :hover 与 onPointerEnter 一概不成立。表现就是常态那一屏只有倒计时、鼠标移上去
+ * 控件不浮出、× 也点不到 —— 而 Playwright 的合成事件绕过 hit-test，自查全绿。
+ * 所以悬停由主进程轮询光标位置判定（main.cts tickHover），窗内只订阅结果。
+ *
+ * 仍保留窗内的 onPointerEnter/Leave 作为兜底：合成事件与 web 版的 Document PiP 都靠它。
+ */
+function useNativeHover(): boolean {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const d = desktop();
+    // 旧 preload 没有这个订阅口，缺了只是回到「兜底」路径，不该整窗白屏
+    if (!d?.onPipHover) return;
+    return d.onPipHover(setOn);
+  }, []);
+  return on;
+}
+
+/**
  * 贴边形态：真相在主进程（它拥有窗口几何），这里只订阅 + 上报鼠标进出。
  *
  * peek（收起态鼠标移上去临时展开）故意做成「渲染进程报 hover、主进程改几何」：
@@ -129,6 +151,7 @@ export function PipWindow(): React.ReactElement | null {
   const hydrate = useStore((s) => s.hydrate);
   const [ready, setReady] = useState(false);
   const { info, onEnter, onLeave } = usePipMode();
+  const nativeHover = useNativeHover();
   useFollowTheme();
 
   useEffect(() => {
@@ -147,15 +170,24 @@ export function PipWindow(): React.ReactElement | null {
   // edge 兜底成 left：它只决定圆角朝哪两个角，缺了也不该让倒计时不显示。
   if (info.mode === 'docked') {
     return (
-      <div className="pip-native is-docked" style={{ height: '100%' }} onPointerEnter={onEnter}>
+      <div
+        className={`pip-native is-docked${nativeHover ? ' is-hover' : ''}`}
+        style={{ height: '100%' }}
+        onPointerEnter={onEnter}
+      >
         <PipDock edge={info.edge ?? 'left'} />
       </div>
     );
   }
 
   return (
-    <div className="pip-native" style={{ height: '100%' }} onPointerEnter={onEnter} onPointerLeave={onLeave}>
-      <PipView docked={info.mode === 'peek'} />
+    <div
+      className={`pip-native${nativeHover ? ' is-hover' : ''}`}
+      style={{ height: '100%' }}
+      onPointerEnter={onEnter}
+      onPointerLeave={onLeave}
+    >
+      <PipView docked={info.mode === 'peek'} hover={nativeHover} />
       {/* 无边框窗口缺的关闭按钮。拖动交给顶栏自己（pip.css `.pip-native .pip-bar`），
           不再盖透明层 —— 那会吞掉顶栏里事项选择按钮的点击。
           ⚠️ 必须排在 PipView（顶栏 drag 区）之后：Chromium 按文档顺序依次对可拖拽区域

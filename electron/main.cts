@@ -55,6 +55,10 @@ const PIP_DOCK_W = 88;
 const PIP_DOCK_H = 30;
 /** 拖动松手时，窗边到工作区边缘多少像素内算吸附 */
 const PIP_SNAP_PX = 20;
+/** 收起态移开鼠标后延迟多久收回（镜像 constants.ts 的 PIP_PEEK_LEAVE_MS） */
+const PIP_PEEK_LEAVE_MS = 400;
+/** 光标位置轮询间隔。120ms 足够跟手，又不至于让一个常开的小窗持续占 CPU */
+const PIP_HOVER_POLL_MS = 120;
 
 type PipEdge = 'left' | 'right' | 'top' | 'bottom';
 interface PipGeom {
@@ -89,6 +93,10 @@ let pipFree: Rectangle | null = null;
 let lastSetBounds: Rectangle | null = null;
 let movedTimer: NodeJS.Timeout | null = null;
 let persistTimer: NodeJS.Timeout | null = null;
+/** 光标是否落在小窗上 —— 由主进程轮询判定，见 startHoverWatch */
+let pipHover = false;
+let hoverTimer: NodeJS.Timeout | null = null;
+let peekLeaveTimer: NodeJS.Timeout | null = null;
 
 function geomFile(): string {
   return path.join(app.getPath('userData'), 'pip-window.json');
@@ -274,6 +282,70 @@ function peekPip(win: BrowserWindow, on: boolean): void {
   sendMode(win);
 }
 
+/**
+ * ⚠️ 悬停必须由**主进程**判定，不能靠窗内的 :hover / onPointerEnter。
+ *
+ * 小窗整块都是 `-webkit-app-region: drag`（无边框窗要能哪都能拖）。这是**原生 hit-test**：
+ * Windows 把落在拖动区上的鼠标判给「移动窗口」，渲染进程连 mousemove 都收不到 ⇒ CSS
+ * :hover 永不成立、onPointerEnter 永不触发。表现就是：常态那一屏只剩倒计时，鼠标移上去
+ * 控件不浮出、× 也点不到（它靠 `:not(:hover)` 交还 drag，于是永远是 drag）。
+ * 自动化测不出来 —— Playwright 的合成事件绕过 hit-test，照样能 hover。
+ *
+ * 所以改成主进程轮询光标位置：`screen.getCursorScreenPoint()` 与窗矩形比对，跨越边界时
+ * 才发一次 `pip:hover`。顺带把 peek（收起态移上去临时展开）也收回这里 —— 判据同源，
+ * 不再需要渲染进程上报。
+ */
+function sendHover(win: BrowserWindow, on: boolean): void {
+  if (!win.isDestroyed()) win.webContents.send('pip:hover', on);
+}
+
+function clearPeekLeave(): void {
+  if (peekLeaveTimer) clearTimeout(peekLeaveTimer);
+  peekLeaveTimer = null;
+}
+
+function tickHover(): void {
+  const win = pipWindow;
+  if (!win || win.isDestroyed()) {
+    stopHoverWatch();
+    return;
+  }
+  const p = screen.getCursorScreenPoint();
+  const b = geomOf(win);
+  const inside =
+    p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + b.height;
+  if (inside === pipHover) return;
+  pipHover = inside;
+  sendHover(win, inside);
+  if (inside) {
+    clearPeekLeave();
+    // 收起档才展开：完整态没什么可展的，而 peekPip 自己也会再判一次几何
+    if (isDockSized(win)) peekPip(win, true);
+    return;
+  }
+  // 擦边而过不该让它闪一下：留一段回收延迟，期间再次移入直接取消
+  if (pipMode === 'peek') {
+    clearPeekLeave();
+    peekLeaveTimer = setTimeout(() => {
+      peekLeaveTimer = null;
+      if (pipWindow && !pipWindow.isDestroyed() && !pipHover) peekPip(pipWindow, false);
+    }, PIP_PEEK_LEAVE_MS);
+  }
+}
+
+function startHoverWatch(): void {
+  if (hoverTimer) return;
+  pipHover = false;
+  hoverTimer = setInterval(tickHover, PIP_HOVER_POLL_MS);
+}
+
+function stopHoverWatch(): void {
+  if (hoverTimer) clearInterval(hoverTimer);
+  hoverTimer = null;
+  clearPeekLeave();
+  pipHover = false;
+}
+
 /** 用户拖完窗松手（已防抖）：贴边就吸附，离开边缘就恢复自由 */
 function onPipMoved(win: BrowserWindow): void {
   const b = geomOf(win);
@@ -364,6 +436,7 @@ function createPipWindow(): BrowserWindow {
     if (saved.docked && saved.edge) dockPip(win, saved.edge);
     else sendMode(win);
     win.show();
+    startHoverWatch();
     broadcastPipState(true);
   });
 
@@ -394,6 +467,7 @@ function createPipWindow(): BrowserWindow {
   win.on('closed', () => {
     if (movedTimer) clearTimeout(movedTimer);
     movedTimer = null;
+    stopHoverWatch();
     flushGeom();
     pipWindow = null;
     broadcastPipState(false);
@@ -427,7 +501,10 @@ ipcMain.handle('pip:undock', () => {
   if (pipWindow && !pipWindow.isDestroyed() && pipMode !== 'free') undockPip(pipWindow);
 });
 
-/** 收起态的鼠标进出。渲染进程只报事实，展开方向与 clamp 由这边算 */
+/**
+ * 收起态临时展开。真实鼠标走主进程的 tickHover（拖动区吃掉了窗内的指针事件），
+ * 这条 IPC 只剩两个用处：自查脚本直接驱动展开，以及 web 侧接口保持同形。
+ */
 ipcMain.handle('pip:peek', (_e, on: boolean) => {
   if (pipWindow && !pipWindow.isDestroyed()) peekPip(pipWindow, on === true);
 });

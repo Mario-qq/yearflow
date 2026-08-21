@@ -394,11 +394,17 @@
     color 120ms var(--ease),
     opacity var(--dur-drop) var(--ease);
 }
+/* ⚠️ 是 `.is-hover` 这个类，不是 `:hover` 伪类：拖动区是原生 hit-test，鼠标落在上面
+   根本不进渲染进程 ⇒ :hover 永不成立 ⇒ 这颗 × 永远隐着、且永远占着 drag（既看不见
+   又能误关窗那片死区的反面：一颗根本点不到的关闭键）。悬停由主进程轮询光标判定后
+   经 pip:hover 送进来（main.cts tickHover → PipWindow useNativeHover）。 */
+.pip-native.is-hover .pip-native-close,
+/* :hover 留着只为合成事件（自查脚本 / web 版）：真实鼠标永远走不到这条 */
 .pip-native:hover .pip-native-close {
   opacity: 1;
 }
 /* 没浮出时：不可见、不可点、把这块地还给拖动区 */
-.pip-native:not(:hover) .pip-native-close {
+.pip-native:not(.is-hover):not(:hover) .pip-native-close {
   pointer-events: none;
   -webkit-app-region: drag;
 }
