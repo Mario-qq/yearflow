@@ -43,6 +43,35 @@ async function until(fn, ms = 15000, every = 200) {
   }
 }
 
+/**
+ * 数一张截图里「与左上角像素不同」的点数。
+ * 药丸这种小图最容易骗过断言：DOM 有 .pip-dock-time 节点、几何也对，画面上却一个字都没有
+ * （字被裁掉 / 与背景同色 / 被上一棵树盖住）。所以这里必须看像素，照 check-gantt-export.mjs
+ * 的同一口径。解码借主窗那个 realm 的 canvas 干（Node 里没有 PNG 解码器）。
+ */
+const countInk = (page, buf) =>
+  page.evaluate(
+    (dataUrl) =>
+      new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const cv = document.createElement('canvas');
+          cv.width = img.width;
+          cv.height = img.height;
+          const ctx = cv.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          const d = ctx.getImageData(0, 0, cv.width, cv.height).data;
+          const base = `${d[0]},${d[1]},${d[2]}`;
+          let n = 0;
+          for (let i = 0; i < d.length; i += 4) if (`${d[i]},${d[i + 1]},${d[i + 2]}` !== base) n += 1;
+          resolve(n);
+        };
+        img.onerror = () => reject(new Error('PNG 解码失败'));
+        img.src = dataUrl;
+      }),
+    `data:image/png;base64,${buf.toString('base64')}`,
+  );
+
 mkdirSync(OUT, { recursive: true });
 // 小窗几何是会持久化的（userData/pip-window.json）。上一轮跑完常常停在贴边收起态，
 // 那会让本轮前半段全部对着一条药丸做断言 ⇒ 每轮从干净的几何开始。
@@ -377,7 +406,28 @@ for (const edge of ['left', 'right', 'top', 'bottom']) {
   check(`G ${edge}：窗内换成药丸那棵树`, domEdge === edge, String(domEdge));
   const noHit = await pip.evaluate(() => document.querySelectorAll('.pip-dock button, .pip-dock a').length);
   check(`G ${edge}：药丸里没有可点元素（整块是拖动区，否则拖不走）`, noHit === 0, `${noHit} 个`);
-  await pip.screenshot({ path: `${OUT}/pip-dock-${edge}.png` });
+
+  // 药丸的全部意义就是「不展开也能看时间」：文本、进度线、以及画面上真有笔画，三样都要验
+  const dockShown = await pip.evaluate(() => {
+    const t = document.querySelector('.pip-dock-time');
+    const fill = document.querySelector('.pip-dock .pip-fill');
+    const r = t?.getBoundingClientRect();
+    return {
+      text: (t?.textContent ?? '').trim(),
+      // 数字必须整个落在窗内 —— 30px 高里最容易出的错就是被裁掉半行
+      inside: !!r && r.width > 0 && r.top >= -0.5 && r.bottom <= innerHeight + 0.5,
+      fill: !!fill,
+      stray: document.querySelectorAll('.pip-shell, .pip-overlay, .pip-native-close').length,
+    };
+  });
+  check(`G ${edge}：药丸里就是 mm:ss（${dockShown.text}）`,
+    /^\d{1,2}:\d{2}$/.test(dockShown.text) && dockShown.inside, JSON.stringify(dockShown));
+  check(`G ${edge}：药丸有底部进度线、且没有完整态的残片（段点/×）`,
+    dockShown.fill && dockShown.stray === 0, JSON.stringify(dockShown));
+
+  const shot = await pip.screenshot({ path: `${OUT}/pip-dock-${edge}.png` });
+  const ink = await countInk(main, shot);
+  check(`G ${edge}：药丸画面上真有笔画，不是一块空底`, ink > 150, `${ink} 个非背景像素`);
 
   // 移上去临时展开：必须仍紧贴同一条边（展开方向朝屏内，否则光标会被甩到窗外、来回抖）。
   // 同样绕开合成 hover（见上）：真实 hover 的接线只是 PipWindow 的一个 onPointerEnter，
@@ -424,6 +474,16 @@ const manual = await until(async () => {
   return near(b.width, 88) && near(b.height, 30) ? b : null;
 }, 4000);
 check('G 顶行「收起」键：在屏幕中央也能直接吸附最近边', !!manual, JSON.stringify(manual));
+
+// 药丸的深浅两版各留一张：这是日常最常看到的那个形态，观感要人工过目
+for (const theme of ['dark', 'light']) {
+  await main.evaluate((t) => window.__store.getState().updateSettings({ theme: t }), theme);
+  await until(() => pip.evaluate((t) => document.documentElement.dataset.theme === t, theme));
+  const shot = await pip.screenshot({ path: `${OUT}/pip-dock-theme-${theme}.png` });
+  const ink = await countInk(main, shot);
+  check(`G 药丸在 ${theme} 主题下有笔画`, ink > 150, `${ink} 个非背景像素`);
+}
+await main.evaluate(() => window.__store.getState().updateSettings({ theme: 'dark' }));
 await pip.evaluate(() => window.yearflowDesktop.undockPip());
 await until(async () => near((await pipBounds()).b.width, 116), 4000);
 

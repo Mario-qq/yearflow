@@ -207,6 +207,9 @@ function dockPip(win: BrowserWindow, edge: PipEdge): void {
   pipEdge = edge;
   // 先禁掉拉伸再改尺寸：Windows 给**可拉伸**窗口留着一圈不可见边框，26px 高会被夹到 30
   win.setResizable(false);
+  // 最小尺寸约束对 setBounds 依然生效：不放开就可能把 88×30 夹回 100×64，
+  // 窗看着还挺高、里面却是一条药丸的布局。别指望 setResizable(false) 顺手抹掉它。
+  win.setMinimumSize(PIP_DOCK_W, PIP_DOCK_H);
   setGeom(win, flushTo(edge, geomOf(win), wa, PIP_DOCK_W, PIP_DOCK_H));
   sendMode(win);
   persistGeom();
@@ -232,6 +235,7 @@ function undockPip(win: BrowserWindow): void {
   pipEdge = null;
   const b = geomOf(win);
   win.setResizable(true);
+  win.setMinimumSize(PIP_MIN_W, PIP_MIN_H);
   // 没有记录过自由位置（首次就是从边上起步）就在当前位置铺开，别把窗甩回屏幕中央
   const target = pipFree ?? { x: b.x, y: b.y, width: PIP_W, height: PIP_H };
   pipFree = nudgeInside(target, workAreaOf(win));
@@ -240,15 +244,32 @@ function undockPip(win: BrowserWindow): void {
   persistGeom();
 }
 
+/**
+ * 窗现在是不是药丸档 —— 判 peek 该往哪走只信这个，不信 pipMode。
+ * pipMode 是内存里的一个变量，和真实几何漂移过一次就再也对不回来（渲染进程那边同理，
+ * 见 PipWindow 的 useIsCompact）；矩形是随时能重新量的。
+ */
+function isDockSized(win: BrowserWindow): boolean {
+  const b = geomOf(win);
+  return b.height <= PIP_DOCK_H + 8 || b.width <= PIP_DOCK_W + 8;
+}
+
 function peekPip(win: BrowserWindow, on: boolean): void {
+  const wa = workAreaOf(win);
+  // edge 也现场兜底：吸附是靠「离哪条边最近」判的，收起态的窗必然紧贴着那条边
+  const edge = pipEdge ?? nearestEdge(geomOf(win), wa).edge;
   if (on) {
-    if (pipMode !== 'docked' || !pipEdge) return;
+    if (!isDockSized(win)) return;
     pipMode = 'peek';
-    setGeom(win, flushTo(pipEdge, geomOf(win), workAreaOf(win), PIP_W, PIP_H));
+    pipEdge = edge;
+    win.setMinimumSize(PIP_MIN_W, PIP_MIN_H); // 展开要够高，否则被夹在药丸档下不来
+    setGeom(win, flushTo(edge, geomOf(win), wa, PIP_W, PIP_H));
   } else {
-    if (pipMode !== 'peek' || !pipEdge) return;
+    if (isDockSized(win)) return;
     pipMode = 'docked';
-    setGeom(win, flushTo(pipEdge, geomOf(win), workAreaOf(win), PIP_DOCK_W, PIP_DOCK_H));
+    pipEdge = edge;
+    win.setMinimumSize(PIP_DOCK_W, PIP_DOCK_H);
+    setGeom(win, flushTo(edge, geomOf(win), wa, PIP_DOCK_W, PIP_DOCK_H));
   }
   sendMode(win);
 }

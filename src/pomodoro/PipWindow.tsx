@@ -19,7 +19,7 @@ import { resolveTheme, type ThemePref } from '../lib/theme';
 import { PipView } from './PipView';
 import { PipDock } from './PipDock';
 import { initPomodoro } from './kernel';
-import { PIP_PEEK_LEAVE_MS, PIP_TOPBAR_H } from './constants';
+import { PIP_COMPACT_MAX_H, PIP_PEEK_LEAVE_MS, PIP_TOPBAR_H } from './constants';
 import { useStore } from '../store/useStore';
 
 const THEME_KEY = 'yearflow-theme'; // lib/theme.ts 的同一个 key
@@ -59,6 +59,29 @@ function useFollowTheme(): void {
 }
 
 /**
+ * 「窗已经缩到收起档了吗」—— 形态的权威事实。
+ *
+ * 为什么不直接信主进程的 pip:mode：那是一次性消息，丢一次或与 setBounds 抢跑一次，窗内
+ * 就会停在完整态那棵树上，且没有任何自愈机会（用户看到的就是药丸里露出段点和 ×、一个
+ * 数字都没有）。窗高每次 resize 都能重新测，所以它才是权威；消息只用来补 edge 朝向。
+ *
+ * 用 matchMedia 而不是 ResizeObserver：只在跨过阈值时回调一次，中间的每一像素都不惊动 React。
+ */
+function useIsCompact(): boolean {
+  const [compact, setCompact] = useState(
+    () => window.matchMedia(`(max-height: ${PIP_COMPACT_MAX_H}px)`).matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-height: ${PIP_COMPACT_MAX_H}px)`);
+    const on = (e: MediaQueryListEvent): void => setCompact(e.matches);
+    setCompact(mq.matches); // 订阅前跨过阈值的那次变化补上
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return compact;
+}
+
+/**
  * 贴边形态：真相在主进程（它拥有窗口几何），这里只订阅 + 上报鼠标进出。
  *
  * peek（收起态鼠标移上去临时展开）故意做成「渲染进程报 hover、主进程改几何」：
@@ -68,6 +91,7 @@ function useFollowTheme(): void {
 function usePipMode(): { info: PipModeInfo; onEnter: () => void; onLeave: () => void } {
   const [info, setInfo] = useState<PipModeInfo>({ mode: 'free', edge: null });
   const leaveTimer = useRef<number | null>(null);
+  const compact = useIsCompact();
 
   useEffect(() => desktop()?.onPipMode(setInfo) ?? undefined, []);
 
@@ -80,10 +104,13 @@ function usePipMode(): { info: PipModeInfo; onEnter: () => void; onLeave: () => 
   useEffect(() => clearLeave, []);
 
   return {
-    info,
+    // 尺寸压过消息：窗只要是收起档，画的就是药丸；mode 只贡献 edge 朝向。
+    info: compact ? { mode: 'docked', edge: info.edge } : info,
+    // 判「该不该展开」只看窗是不是已经缩到收起档，不看 info.mode：mode 与真实几何一旦
+    // 漂移（收起态却仍报 free），这道前置判断就是把展开永久卡死的那道闸。
     onEnter: () => {
       clearLeave();
-      if (info.mode === 'docked') void desktop()?.peekPip(true);
+      if (compact) void desktop()?.peekPip(true);
     },
     // 擦边而过不该让它闪一下：留一段回收延迟，期间再次移入直接取消
     onLeave: () => {
@@ -115,12 +142,13 @@ export function PipWindow(): React.ReactElement | null {
 
   if (!ready) return null;
 
-  // 贴边收起态：只有一条药丸，连 × 都不渲染 —— 26px 高放不下两颗按钮，
+  // 贴边收起态：只有一条药丸，连 × 都不渲染 —— 30px 高放不下两颗按钮，
   // 关窗从展开态走（移上去 peek 即可）。
-  if (info.mode === 'docked' && info.edge) {
+  // edge 兜底成 left：它只决定圆角朝哪两个角，缺了也不该让倒计时不显示。
+  if (info.mode === 'docked') {
     return (
       <div className="pip-native is-docked" style={{ height: '100%' }} onPointerEnter={onEnter}>
-        <PipDock edge={info.edge} />
+        <PipDock edge={info.edge ?? 'left'} />
       </div>
     );
   }
