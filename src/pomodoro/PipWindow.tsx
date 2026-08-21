@@ -13,12 +13,13 @@
  * PipView。Phase 0 spike（electron/spike/）已实测 storage 事件、Web Locks、IndexedDB
  * 在两个 BrowserWindow 之间都成立。
  */
-import { useEffect, useState } from 'react';
-import { desktop } from '../lib/desktop';
+import { useEffect, useRef, useState } from 'react';
+import { desktop, type PipModeInfo } from '../lib/desktop';
 import { resolveTheme, type ThemePref } from '../lib/theme';
 import { PipView } from './PipView';
+import { PipDock } from './PipDock';
 import { initPomodoro } from './kernel';
-import { PIP_TOPBAR_H } from './constants';
+import { PIP_PEEK_LEAVE_MS, PIP_TOPBAR_H } from './constants';
 import { useStore } from '../store/useStore';
 
 const THEME_KEY = 'yearflow-theme'; // lib/theme.ts 的同一个 key
@@ -57,10 +58,50 @@ function useFollowTheme(): void {
   }, []);
 }
 
+/**
+ * 贴边形态：真相在主进程（它拥有窗口几何），这里只订阅 + 上报鼠标进出。
+ *
+ * peek（收起态鼠标移上去临时展开）故意做成「渲染进程报 hover、主进程改几何」：
+ * 只有主进程知道该往屏内哪个方向展开、以及怎么 clamp 进工作区 —— 展开后光标必须仍落在
+ * 窗内，否则立刻触发 leave，两边来回抖。
+ */
+function usePipMode(): { info: PipModeInfo; onEnter: () => void; onLeave: () => void } {
+  const [info, setInfo] = useState<PipModeInfo>({ mode: 'free', edge: null });
+  const leaveTimer = useRef<number | null>(null);
+
+  useEffect(() => desktop()?.onPipMode(setInfo) ?? undefined, []);
+
+  const clearLeave = (): void => {
+    if (leaveTimer.current !== null) {
+      clearTimeout(leaveTimer.current);
+      leaveTimer.current = null;
+    }
+  };
+  useEffect(() => clearLeave, []);
+
+  return {
+    info,
+    onEnter: () => {
+      clearLeave();
+      if (info.mode === 'docked') void desktop()?.peekPip(true);
+    },
+    // 擦边而过不该让它闪一下：留一段回收延迟，期间再次移入直接取消
+    onLeave: () => {
+      if (info.mode !== 'peek') return;
+      clearLeave();
+      leaveTimer.current = window.setTimeout(() => {
+        leaveTimer.current = null;
+        void desktop()?.peekPip(false);
+      }, PIP_PEEK_LEAVE_MS);
+    },
+  };
+}
+
 export function PipWindow(): React.ReactElement | null {
   const hydrated = useStore((s) => s.hydrated);
   const hydrate = useStore((s) => s.hydrate);
   const [ready, setReady] = useState(false);
+  const { info, onEnter, onLeave } = usePipMode();
   useFollowTheme();
 
   useEffect(() => {
@@ -74,9 +115,19 @@ export function PipWindow(): React.ReactElement | null {
 
   if (!ready) return null;
 
+  // 贴边收起态：只有一条药丸，连 × 都不渲染 —— 26px 高放不下两颗按钮，
+  // 关窗从展开态走（移上去 peek 即可）。
+  if (info.mode === 'docked' && info.edge) {
+    return (
+      <div className="pip-native is-docked" style={{ height: '100%' }} onPointerEnter={onEnter}>
+        <PipDock edge={info.edge} />
+      </div>
+    );
+  }
+
   return (
-    <div className="pip-native" style={{ height: '100%' }}>
-      <PipView />
+    <div className="pip-native" style={{ height: '100%' }} onPointerEnter={onEnter} onPointerLeave={onLeave}>
+      <PipView docked={info.mode === 'peek'} />
       {/* 无边框窗口缺的关闭按钮。拖动交给顶栏自己（pip.css `.pip-native .pip-bar`），
           不再盖透明层 —— 那会吞掉顶栏里事项选择按钮的点击。
           ⚠️ 必须排在 PipView（顶栏 drag 区）之后：Chromium 按文档顺序依次对可拖拽区域

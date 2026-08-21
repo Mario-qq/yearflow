@@ -9,16 +9,45 @@
  * 任何开窗之后才注入 document 的样式，都不会出现在小窗里。
  */
 
-/* ── 顶栏：阶段文案 + 段点 ─────────────────────────────────────────── */
+/* ── 外壳：常态只有倒计时 + 进度线 ───────────────────────────────────
+   116×76 里没有第二样东西的位置。顶行与控制行收进 .pip-overlay，鼠标移入才浮出，
+   窗口尺寸全程不变 —— 变尺寸的方案在屏幕边缘会与 hover 判定互相触发、抖个不停。 */
+.pip-shell {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── 悬停浮层：顶行 + 控制行 ─────────────────────────────────────────
+   ⚠️ 这层是**条件挂载**的（PipView 的 showOverlay），不是常挂着切透明度：
+   -webkit-app-region 是原生 hit-test，与 opacity / pointer-events 无关，常挂会在收起
+   状态下留下一片既拖不动窗、也点不到东西的死区。 */
+.pip-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  /* 倒计时在下面透出来，压一层同色薄纱保证按钮边缘可读 */
+  background: color-mix(in srgb, var(--bg-base) 74%, transparent);
+  animation: pip-fade var(--dur-drop) var(--ease);
+}
+@keyframes pip-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ── 浮层顶行：阶段点 + 事项名 + 收起 ───────────────────────────────── */
 .pip-bar {
   display: flex;
   flex: none;
   align-items: center;
   justify-content: space-between;
-  gap: 8px; /* 事项名截断后紧贴段点很难看，留一道固定的呼吸位 */
-  padding: 0 10px;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border-subtle);
+  gap: 4px; /* 事项名截断后紧贴按钮很难看，留一道固定的呼吸位 */
+  height: var(--pip-topbar);
+  padding: 0 2px 0 6px;
 }
 .pip-phase {
   display: flex;
@@ -30,8 +59,8 @@
 }
 .pip-dot {
   flex: none;
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--pip-phase-color);
 }
@@ -52,32 +81,77 @@
   box-shadow: inset 0 0 0 1.5px var(--pip-phase-color);
 }
 
-/* ── hero 倒计时 ───────────────────────────────────────────────────── */
+/* ── hero 倒计时：常态铺满整窗居中；浮层出现时让位并退到背景 ────────── */
 .pip-hero {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: center;
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transition: padding var(--dur-drop) var(--ease);
 }
 .pip-time {
-  font-size: var(--font-48);
+  /* 116×76 时取下限 32px；用户把窗拉大时数字跟着长，上限 48px（再大就撑破 116px 宽的下限窗） */
+  font-size: min(var(--font-48), max(var(--font-32), 34vh));
   line-height: 1;
   font-weight: 500;
   letter-spacing: -0.02em;
   color: var(--text-primary);
+  transition:
+    font-size var(--dur-drop) var(--ease),
+    opacity var(--dur-drop) var(--ease);
 }
 .pip-time--muted {
   color: var(--text-tertiary);
 }
+/* 浮出期间倒计时收成小号并让出上下两行 —— 不叠字是硬要求，不是观感偏好 */
+.pip-shell.is-open .pip-hero {
+  padding: var(--pip-topbar) 0 26px;
+}
+.pip-shell.is-open .pip-time {
+  font-size: var(--font-15);
+  opacity: 0.72;
+}
 
 /* ── 控制行：只有图标，没有文字 ────────────────────────────────────── */
 .pip-controls {
+  position: relative;
   display: flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding-bottom: 16px;
+  gap: 6px;
+  padding-bottom: 5px;
+}
+/* 段点挪到控制行右端：顶行的 116px 已经被事项名与收起键占满。
+   绝对定位是为了让按钮组保持在窗口正中，不被段点的宽度推偏 */
+.pip-controls .pip-segs {
+  position: absolute;
+  right: 5px;
+  bottom: 9px;
+}
+/* 收起按钮：与 × 同一档几何，图标在吸附态反向（收起 ⇄ 脱离） */
+.pip-dockbtn {
+  display: grid;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition:
+    color 120ms var(--ease),
+    transform 120ms var(--ease);
+}
+.pip-dockbtn:hover {
+  color: var(--text-primary);
+}
+.pip-dockbtn.is-docked {
+  transform: rotate(180deg);
+}
+.pip-dockbtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 .pip-btn {
   display: grid;
@@ -153,24 +227,9 @@
     color-mix(in srgb, var(--goal-1) 14%, #ffffff) 100%
   );
 }
-.pip-celebrate .pip-bar {
-  background: transparent;
-  border-bottom-color: var(--celebrate-line);
-}
-.pip-celebrate .pip-phase {
-  color: var(--celebrate-ink-dim);
-}
-/* 这三条必须一起写：`.pip-celebrate .pip-seg` 权重高于 `.pip-seg--done`，
-   只覆写底色会把「已完成」那几颗一起洗成灰点 */
-.pip-celebrate .pip-seg {
-  background: var(--celebrate-dot);
-}
-.pip-celebrate .pip-seg--done {
-  background: var(--pip-phase-color);
-}
-.pip-celebrate .pip-seg--now {
-  background: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--pip-phase-color);
+/* 这一屏没有底部进度线，那 3px 让给控制行 */
+.pip-celebrate .pip-controls {
+  padding-bottom: 4px;
 }
 .pip-celebrate .pip-btn--ghost {
   color: var(--celebrate-ink-dim);
@@ -181,13 +240,14 @@
   color: var(--celebrate-ink);
 }
 
+/* 116×76 里这一屏只放得下「印章 + 一句话 + 控制行」：段点与今日战果都退到 title 与主面板 */
 .pip-body {
   display: flex;
   flex: 1;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 4px;
 }
 .pip-stamp {
   position: relative;
@@ -213,18 +273,23 @@
   opacity: 0;
 }
 .pip-headline {
-  font-size: var(--font-15);
+  max-width: 100%;
+  line-height: 1.25; /* 默认行高会让「印章 + 主句 + 控制行」在 76px 高里差 1px 溢出 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-12);
   font-weight: 500;
   letter-spacing: 0.01em;
-}
-.pip-sub {
-  font-size: var(--font-11);
-  color: var(--celebrate-ink-dim);
 }
 .pip-confetti {
   position: absolute;
   inset: 0;
   z-index: 2;
+  /* canvas 是替换元素：只给 inset 会保留 width/height 属性那份 intrinsic 尺寸（DPI 缩放后
+     比小窗还大），于是把这一屏撑出滚动条。必须显式压回容器尺寸。 */
+  width: 100%;
+  height: 100%;
   pointer-events: none;
 }
 
@@ -242,13 +307,9 @@
 .pip-celebrate .pip-halo {
   animation: pip-halo 900ms var(--ease) 420ms;
 }
-.pip-celebrate .pip-headline,
-.pip-celebrate .pip-sub {
+.pip-celebrate .pip-headline {
   opacity: 0;
   animation: pip-rise 320ms var(--ease) 480ms forwards;
-}
-.pip-celebrate .pip-sub {
-  animation-delay: 560ms;
 }
 
 @keyframes pip-draw {
@@ -280,11 +341,14 @@
 /* 关掉动效的用户：直接给终态，不是「快速播一遍」 */
 @media (prefers-reduced-motion: reduce) {
   .pip-btn,
+  .pip-hero,
+  .pip-time,
+  .pip-overlay,
+  .pip-dockbtn,
   .pip-celebrate .pip-ring,
   .pip-celebrate .pip-tick,
   .pip-celebrate .pip-halo,
-  .pip-celebrate .pip-headline,
-  .pip-celebrate .pip-sub {
+  .pip-celebrate .pip-headline {
     transition: none;
     animation: none;
   }
@@ -292,28 +356,25 @@
   .pip-celebrate .pip-tick {
     stroke-dashoffset: 0;
   }
-  .pip-celebrate .pip-headline,
-  .pip-celebrate .pip-sub {
+  .pip-celebrate .pip-headline {
     opacity: 1;
   }
 }
 
 /* ── 桌面版（Electron）无边框窗口的窗控 ──────────────────────────────
-   小窗故意不用系统标题栏：PipView 那条 28px 自绘顶栏本来就是为了承载阶段文案
-   （web 版 Document PiP 的系统标题栏只显示站点来源、改不了）。这里给它补上无边框
-   窗口缺的两件事 —— 可拖动区与关闭按钮，几何对齐 PIP_TOPBAR_H。 */
+   116×76 的窗不配系统标题栏：那条标题栏比内容还高。于是**整块窗体都是拖动区**，
+   可交互元素逐个 no-drag —— 这在小窗上手感更好（哪都能拖），代价是下面两条纪律：
+
+   ⚠️ 一、drag 区吃掉其上的一切点击，所以任何可点元素必须显式 no-drag。
+   ⚠️ 二、Chromium 按**文档顺序**对可拖拽区域做并集/差集：no-drag 若先于 drag 处理，
+      会被后处理的 drag 重新并回去。所以 .pip-native-close 必须排在内容之后（见
+      PipWindow.tsx 的注释），而且它在浮层没浮出时要主动交还 drag —— 一颗看不见却
+      仍占着 no-drag 的按钮，就是一片「拖不动窗、又能误关窗」的死区。 */
 .pip-native {
   position: relative;
-}
-/* 顶栏自己就是拖动条。
-   ⚠️ 早先的做法是在顶栏上盖一层透明 drag 覆盖层，理由是「顶栏里没有可点元素」——
-   顶栏加进事项选择按钮之后这个前提就不成立了，覆盖层会把按钮的点击全部吞掉
-   （自查里表现为 `.pip-native-drag intercepts pointer events`）。
-   drag 区域天然吃掉其上的点击，所以里面任何可交互元素都必须显式 no-drag。 */
-.pip-native .pip-bar {
   -webkit-app-region: drag;
 }
-.pip-native .pip-bar button {
+.pip-native button {
   -webkit-app-region: no-drag;
 }
 .pip-native-close {
@@ -328,21 +389,80 @@
   background: none;
   border: 0;
   cursor: pointer;
-  -webkit-app-region: no-drag; /* 否则按钮被拖动区吞掉，点不着 */
-  transition: color 120ms var(--ease);
+  opacity: 0;
+  transition:
+    color 120ms var(--ease),
+    opacity var(--dur-drop) var(--ease);
+}
+.pip-native:hover .pip-native-close {
+  opacity: 1;
+}
+/* 没浮出时：不可见、不可点、把这块地还给拖动区 */
+.pip-native:not(:hover) .pip-native-close {
+  pointer-events: none;
+  -webkit-app-region: drag;
 }
 .pip-native-close:hover {
   color: var(--text-primary);
 }
-/* 给关闭按钮让位，否则段点会被它压住 */
+/* 给关闭按钮让位，否则收起键会被它压住 */
 .pip-native .pip-bar {
-  padding-right: 32px;
+  padding-right: var(--pip-topbar);
 }
 
-/* ── 顶栏里的专注事项 ────────────────────────────────────────────────
-   刻意不新增任何高度：事项名挤在阶段文案右边，靠 min-width:0 + 省略号收口。
-   200px 的最窄小窗下它会被截得只剩几个字，但顶栏几何完全不变 —— 这是有意的取舍，
-   完整名字在 title 与主面板里都有。 */
+/* ── 贴边收起态：88×26 的窄药丸 ──────────────────────────────────────
+   朝屏内的两个角走圆角、贴边那侧切平 —— 「挂在屏幕边上」的观感全靠这个。
+   这棵树里一个可点元素都没有（见 PipDock.tsx）：整块是拖动区，拖走即脱离边缘。 */
+.pip-dock {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-panel);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+.pip-dock[data-edge='left'] {
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+}
+.pip-dock[data-edge='right'] {
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+}
+.pip-dock[data-edge='top'] {
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+.pip-dock[data-edge='bottom'] {
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+.pip-dock-time {
+  font-size: var(--font-13);
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+/* 到点了要能在药丸上就看出来，不必先展开 */
+.pip-dock.is-alert {
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg-panel));
+}
+.pip-dock.is-alert .pip-dock-time {
+  color: var(--text-primary);
+  animation: pip-blink 1s var(--ease) infinite;
+}
+@keyframes pip-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pip-dock.is-alert .pip-dock-time {
+    animation: none;
+  }
+}
+
+/* ── 浮层顶行里的专注事项 ────────────────────────────────────────────
+   刻意不新增任何高度：事项名靠 min-width:0 + 省略号收口。116px 宽下它常被截得只剩
+   两三个字 —— 这是有意的取舍，完整名字在 title 与主面板里都有。 */
 .pip-phase--withsel {
   min-width: 0; /* 不写这条，flex 子项不肯收缩，段点会被顶出小窗 */
   flex: 1 1 auto;
@@ -376,7 +496,8 @@
 }
 
 /* ── 事项选择浮层 ───────────────────────────────────────────────────
-   覆盖整窗、只在打开时存在 ⇒ 关掉后小窗几何一模一样，不占常驻高度。 */
+   覆盖整窗、只在打开时存在 ⇒ 关掉后小窗几何一模一样，不占常驻高度。
+   116×76 里只放得下两行半，所以列表滚动、目标名整条让位给任务名。 */
 .pip-picker {
   position: absolute;
   inset: 0;
@@ -391,7 +512,7 @@
   flex: none;
   align-items: center;
   justify-content: space-between;
-  padding: 0 6px 0 10px;
+  padding: 0 2px 0 6px;
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border-subtle);
   font-size: var(--font-11);
@@ -403,8 +524,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   border: 0;
   background: none;
   color: var(--text-tertiary);
@@ -422,14 +543,14 @@
 .pip-picker-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
-  padding: 5px 10px;
+  padding: 3px 6px;
   border: 0;
   background: none;
   cursor: pointer;
   text-align: left;
-  font-size: var(--font-12);
+  font-size: var(--font-11);
   color: var(--text-secondary);
 }
 .pip-picker-row:hover {
@@ -441,7 +562,7 @@
 }
 .pip-picker-icon {
   flex: none;
-  width: 14px;
+  width: 12px;
   text-align: center;
   font-size: var(--font-11);
 }
@@ -451,14 +572,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 目标名是次要信息：空间不够时它先消失，任务名后消失 */
+/* 目标名是次要信息：116px 里它已经没有位置了，整条让给任务名（完整信息在 title 上） */
 .pip-picker-goal {
-  margin-left: auto;
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--font-11);
-  color: var(--text-tertiary);
+  display: none;
 }

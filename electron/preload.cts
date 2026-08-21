@@ -12,6 +12,10 @@ const api = {
   closeSelf: (): Promise<void> => ipcRenderer.invoke('win:close-self'),
   /** 设置小窗不透明度（百分比 30–100）。返回主进程 clamp 后的实际值。 */
   setPipOpacity: (percent: number): Promise<number> => ipcRenderer.invoke('pip:opacity', percent),
+  /** 贴边收起 / 脱离边缘 / 收起态临时展开。几何真相只在主进程，网页动不了自己的窗。 */
+  dockPip: (): Promise<void> => ipcRenderer.invoke('pip:dock'),
+  undockPip: (): Promise<void> => ipcRenderer.invoke('pip:undock'),
+  peekPip: (on: boolean): Promise<void> => ipcRenderer.invoke('pip:peek', on),
   focusMain: (): Promise<void> => ipcRenderer.invoke('win:focus-main'),
   notify: (body: string): Promise<boolean> => ipcRenderer.invoke('notify', body),
   /** OS 睡眠/锁屏唤醒。返回取消订阅函数。 */
@@ -25,6 +29,12 @@ const api = {
     const handler = (_e: unknown, open: boolean): void => cb(open);
     ipcRenderer.on('pip:state', handler);
     return () => ipcRenderer.off('pip:state', handler);
+  },
+  /** 小窗形态（自由 / 贴边收起 / 临时展开）。只有主进程知道，窗内据此换渲染的那棵树。 */
+  onPipMode: (cb: (info: { mode: 'free' | 'docked' | 'peek'; edge: 'left' | 'right' | 'top' | 'bottom' | null }) => void): (() => void) => {
+    const handler = (_e: unknown, info: Parameters<typeof cb>[0]): void => cb(info);
+    ipcRenderer.on('pip:mode', handler);
+    return () => ipcRenderer.off('pip:mode', handler);
   },
 };
 

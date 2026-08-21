@@ -80,32 +80,49 @@ export const RECENT_TASKS_LIMIT = 8;
 export const PICKER_RECENT_SHOWN = 5;
 
 // ── 悬浮小窗（Document PiP）几何 ────────────────────────────────────────
-export const PIP_W = 260;
-export const PIP_H = 172;
+/**
+ * 常态尺寸：只放 mm:ss + 进度线，约原 260×172 的 20%。
+ * 顶栏（阶段/事项/段点）与控制行改成 hover 时在窗内浮出（pip.css `.pip-overlay`），
+ * 不占常驻高度 —— 窗口尺寸全程不变，正是为了避开反复 setBounds 带来的边缘抖动。
+ */
+export const PIP_W = 116;
+export const PIP_H = 76;
+/** 贴边收起后的窄药丸（桌面版独有，web 的 Document PiP 没有窗口几何权限） */
+export const PIP_DOCK_W = 88;
+/** 30 而不是更矮：Windows 给窗口留着一圈不可见边框，再矮 setBounds 也会被夹回 ~30 */
+export const PIP_DOCK_H = 30;
+/** 拖动松手时，窗边到工作区边缘多少像素内算吸附 */
+export const PIP_SNAP_PX = 20;
+/** 收起态移开鼠标后延迟多久收回：擦边而过不该让它闪一下 */
+export const PIP_PEEK_LEAVE_MS = 400;
 /** 到点提醒态自动消退时长（照 title 闪烁的同一口径） */
 export const ALERT_TTL_MS = 30_000;
 
-/** 窗内自绘顶栏：Chromium 的系统标题栏只显示站点来源，网页改不了，阶段文案只能自己画 */
-export const PIP_TOPBAR_H = 28;
+/**
+ * 浮层顶行高度：阶段点 + 事项名 + 段点那一行。
+ * Chromium 给 Document PiP 画的系统标题栏只显示站点来源、网页改不了，所以这行只能自己画；
+ * 同时也是无边框桌面窗的拖动区与 × 的几何基准。
+ */
+export const PIP_TOPBAR_H = 20;
 /** 小窗不透明度可调范围（%）。下限 30：再低倒计时就看不清了，而看得清是这个窗的全部意义 */
 export const PIP_OPACITY_MIN = 30;
 export const PIP_OPACITY_MAX = 100;
 /** 主操作（开始/暂停）实心圆直径 */
-export const PIP_BTN_PRIMARY = 36;
+export const PIP_BTN_PRIMARY = 22;
 /** 次操作（停止/跳过/知道了）描边圆直径 */
-export const PIP_BTN_GHOST = 30;
-/** 底部进度线高度 */
+export const PIP_BTN_GHOST = 18;
+/** 底部进度线高度。3px 是下限，再细在 116px 宽里就看不见了 */
 export const PIP_PROGRESS_H = 3;
 /** 按钮内图标边长 */
-export const PIP_ICON = 14;
-/** 段点直径（顶栏右侧那排「第 N/M 段」） */
-export const PIP_SEG_DOT = 5;
+export const PIP_ICON = 10;
+/** 段点直径（浮层顶行右侧那排「第 N/M 段」） */
+export const PIP_SEG_DOT = 4;
 /** 完成印章（圆环 + 对勾）直径 */
-export const PIP_STAMP = 40;
+export const PIP_STAMP = 28;
 
 // ── 到点庆祝的纸屑（canvas 现场绘制，不引任何库） ──────────────────────
-/** 两侧礼花筒各发多少片 */
-export const CONFETTI_PER_CANNON = 26;
+/** 两侧礼花筒各发多少片。116×76 的画布上 26 片是一团糊，减半才看得清是纸屑 */
+export const CONFETTI_PER_CANNON = 14;
 /** 总帧数 ≈ 2.2s @60fps，落完即清空画布，不做常驻动效 */
 export const CONFETTI_FRAMES = 132;
 /** 后 28% 帧数用于淡出 */

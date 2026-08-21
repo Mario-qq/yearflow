@@ -12,14 +12,22 @@
  * （权限、系统勿扰、页面被冻结都能吞掉它），而这个窗是真正的系统级窗口、浮在最上层，
  * 它自己变脸就是最可靠的那一层提醒。
  *
- * 版式：Chromium（Chrome/Edge 同内核）给 Document PiP 画的系统标题栏只显示站点来源、
- * 网页无权改写，所以阶段文案（专注 / 已暂停 / 第几段）由**窗内自绘的顶栏**承载；
- * 任务名与「丢弃」不在小窗露出（丢弃仍在主面板 PomodoroPanel）。
+ * 版式（116×76，约原 260×172 的 20%）：常态只有 mm:ss + 底部进度线，**别的一律不显示**——
+ * 这个窗常年浮在别的软件上面，占屏就是它唯一的成本。顶行（阶段点 / 事项名 / 收起）与控制行
+ * 收进一层 `.pip-overlay`，鼠标移入才浮出，窗口尺寸全程不变。
+ *
+ * ⚠️ 浮层是**条件挂载**而不是 CSS :hover 切透明度：`-webkit-app-region` 是原生 hit-test，
+ * 与 opacity / pointer-events 无关 —— 常挂一层带 no-drag 按钮的浮层，会在收起状态下留下
+ * 一片「既拖不动窗、也点不到东西」的死区（自动化点击测不出来，它绕过原生 hit-test）。
+ * 所以整个小窗默认 drag，可交互元素只在浮出期间存在。
+ *
+ * Chromium 给 Document PiP 画的系统标题栏只显示站点来源、网页无权改写，所以阶段信息只能
+ * 自己画；任务名与「丢弃」的完整入口仍在主面板 PomodoroPanel。
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { todayStr } from '../lib/date';
-import { isDesktop } from '../lib/desktop';
+import { desktop, isDesktop } from '../lib/desktop';
 import { isCountedSession, todayFocusMs } from '../lib/derive';
 import { startPomodoro } from './api';
 import { burstConfetti } from './confetti';
@@ -33,16 +41,16 @@ import {
   PIP_STAMP,
   PIP_TOPBAR_H,
 } from './constants';
-import { humanMs, mmss } from './format';
-import { pauseFocus, remainingMs, resumeFocus, setAlert, startBreak, stopFocus } from './kernel';
+import { humanMs } from './format';
+import { pauseFocus, resumeFocus, setAlert, startBreak, stopFocus } from './kernel';
 import './pip.css';
 import { readLastTask, writeLastTask } from './running';
 import { PipTaskPicker } from './PipTaskPicker';
 import { useSelLabel, type FocusSel } from './useSelLabel';
 import { usePomodoroStore } from './store';
-import { subscribeTick } from './ticker';
+import { usePipPaint } from './usePipPaint';
 
-type IconKind = 'play' | 'pause' | 'stop' | 'skip' | 'cup' | 'close';
+type IconKind = 'play' | 'pause' | 'stop' | 'skip' | 'cup' | 'close' | 'dock';
 
 /** 手写内联 SVG（仓内无图标库，照进度环/甘特连线的既有做法）。一律 currentColor */
 function Icon({ kind }: { kind: IconKind }): React.ReactElement {
@@ -94,6 +102,14 @@ function Icon({ kind }: { kind: IconKind }): React.ReactElement {
       return (
         <svg {...box} fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" aria-hidden>
           <path d="M3.6 3.6 10.4 10.4M10.4 3.6 3.6 10.4" />
+        </svg>
+      );
+    case 'dock':
+      // 箭头撞向一条边 —— 「收到屏幕边上去」的字面画法
+      return (
+        <svg {...box} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M7 2.4v6.2M4.4 6.2 7 8.8l2.6-2.6" />
+          <path d="M2.6 11.4h8.8" />
         </svg>
       );
   }
@@ -149,7 +165,12 @@ function Segs({
   );
 }
 
-export function PipView() {
+/**
+ * @param docked 已吸附在屏幕边缘（此刻是 hover 临时展开的 peek 态）。
+ *   此时那颗按钮的语义反转成「脱离边缘」，否则用户在展开态里没有任何退路 ——
+ *   药丸本身是纯拖动区，点不出菜单来。
+ */
+export function PipView({ docked = false }: { docked?: boolean } = {}) {
   const running = usePomodoroStore((s) => s.running);
   const alert = usePomodoroStore((s) => s.alert);
   const lastResult = usePomodoroStore((s) => s.lastResult);
@@ -159,6 +180,12 @@ export function PipView() {
   const focusSessions = useStore((s) => s.focusSessions);
   const [pickerOpen, setPickerOpen] = useState(false);
   /**
+   * 浮层是否显示。用 state 而不是 CSS :hover —— 浮层里的 no-drag 按钮必须只在浮出期间
+   * 存在于 DOM 里（见文件头注释里的原生 hit-test 死区）。每次进出各一次重渲，与每秒重渲
+   * 是两码事，不违反「倒计时零重渲」那条铁律。
+   */
+  const [hovered, setHovered] = useState(false);
+  /**
    * 待选事项。运行中显示的是那一段自己的归属（不可改 —— 中途改归属等于篡改已发生的记录），
    * 空闲/休息时显示的是「下一段用哪个」，来源与主面板同一个 localStorage 键。
    */
@@ -167,19 +194,8 @@ export function PipView() {
   const fillRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  /** 唯一的绘制函数：hero 文本 + 进度线 scaleX，全部 ref 直写，零重渲 */
-  const paint = (msLeft: number): void => {
-    const r = usePomodoroStore.getState().running;
-    const total = r?.plannedMs ?? useStore.getState().settings.pomodoro.focusMin * 60_000;
-    const left = r ? msLeft : total;
-    if (timeRef.current) timeRef.current.textContent = mmss(left);
-    if (fillRef.current) {
-      const elapsed = total > 0 ? Math.min(1, Math.max(0, 1 - left / total)) : 0;
-      fillRef.current.style.transform = `scaleX(${elapsed})`;
-    }
-  };
-  useEffect(() => subscribeTick(paint), []);
-  useLayoutEffect(() => paint(remainingMs()));
+  // hero 文本 + 进度线：ref 直写、零重渲（与贴边态 PipDock 共用同一条通道）
+  usePipPaint(timeRef, fillRef);
 
   // 提醒态自动消退：用户没在电脑前时它不该一直霸着小窗（与 title 闪烁同一口径）
   useEffect(() => {
@@ -249,6 +265,8 @@ export function PipView() {
         ? `专注 ${humanMs(settled.focusMs)}`
         : alert.text
       : `接第 ${Math.min(segDone + 1, segTotal)} 段`;
+    // 116×76 里放不下第二行文字（stamp + 两行 + 控制行 = 82px），于是这句退到 title 上：
+    // 悬停能看，不悬停也不会挤掉主句。今日战果的常驻出口在主面板，不在这个窗。
     const sub =
       focusEnd && breakRunning && running
         ? `休息 ${Math.round(running.plannedMs / 60_000)} 分钟已开始`
@@ -264,13 +282,6 @@ export function PipView() {
         data-kind={alert.kind}
         style={{ ['--pip-phase-color' as string]: focusEnd ? 'var(--accent)' : 'var(--success)' }}
       >
-        <div className="pip-bar" style={{ height: PIP_TOPBAR_H }}>
-          <span className="pip-phase">
-            {focusEnd ? (segDone > 0 ? `第 ${segDone} 段完成` : '专注完成') : '休息结束'}
-          </span>
-          <Segs total={segTotal} done={segDone} current={-1} />
-        </div>
-
         <div className="pip-body">
           <div className="pip-stamp" style={{ width: PIP_STAMP, height: PIP_STAMP }}>
             <i className="pip-halo" />
@@ -283,8 +294,9 @@ export function PipView() {
               />
             </svg>
           </div>
-          <div className="pip-headline">{headline}</div>
-          <div className="pip-sub tnum">{sub}</div>
+          <div className="pip-headline" title={sub}>
+            {headline}
+          </div>
         </div>
 
         <div className="pip-controls">
@@ -330,73 +342,97 @@ export function PipView() {
         : 'var(--success)'
     : 'var(--text-tertiary)';
 
+  // 浮层要在 picker 打开期间强制留着：picker 盖满整窗，鼠标必然离开浮层本身
+  const showOverlay = hovered || pickerOpen;
+
   return (
     <div
       key="running"
-      className="relative flex h-full flex-col"
+      className={`pip-shell${showOverlay ? ' is-open' : ''}`}
       style={{
         ['--pip-phase-color' as string]: phaseColor,
         ['--pip-action-color' as string]: running ? phaseColor : 'var(--accent)',
+        // 顶行高度既是浮层顶栏的几何，也是 hero 浮出时上方要让开的距离，只能有一个来源
+        ['--pip-topbar' as string]: `${PIP_TOPBAR_H}px`,
       }}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
     >
-      <div className="pip-bar" style={{ height: PIP_TOPBAR_H }}>
-        {/* 事项名挤在阶段文案右边、靠省略号收口 —— 顶栏本来就在，所以不多占一个像素的高度 */}
-        <span className="pip-phase pip-phase--withsel">
-          <i className="pip-dot" />
-          <span className="shrink-0">{phaseText}</span>
-          {focusRunning ? (
-            <span className="pip-sel pip-sel--static" title={selLabel.text}>
-              {selLabel.text}
-            </span>
-          ) : (
-            <button
-              type="button"
-              className="pip-sel pip-sel--btn"
-              onClick={() => setPickerOpen(true)}
-              title={`${selLabel.text}（点击更换）`}
-              aria-label={`专注事项：${selLabel.text}，点击更换`}
-            >
-              {selLabel.text}
-            </button>
-          )}
-        </span>
-        <Segs
-          total={segTotal}
-          done={segDone}
-          current={running?.phase === 'focus' ? Math.min(segDone, segTotal - 1) : -1}
-        />
-      </div>
-
+      {/* 零 children 的空元素：文本只由 ticker 经 ref 写入，React 从不渲染它 */}
       <div className="pip-hero">
-        {/* 零 children 的空元素：文本只由 ticker 经 ref 写入，React 从不渲染它 */}
         <div ref={timeRef} className={`pip-time tnum${running && !running.paused ? '' : ' pip-time--muted'}`} />
       </div>
 
-      <div className="pip-controls">
-        {!running && (
-          <IconButton
-            kind="play"
-            variant="primary"
-            label="开始专注"
-            onClick={() => startPomodoro(nextSel)}
-          />
-        )}
-        {running?.phase === 'focus' && (
-          <IconButton
-            kind={running.paused ? 'play' : 'pause'}
-            variant="primary"
-            label={running.paused ? '继续' : '暂停'}
-            onClick={running.paused ? resumeFocus : pauseFocus}
-          />
-        )}
-        {running?.phase === 'focus' && (
-          <IconButton kind="stop" variant="ghost" label="停止" onClick={stopFocus} />
-        )}
-        {/* 休息阶段只有一个动作：kernel.pauseFocus 对休息是空操作，别摆一颗点了没反应的按钮 */}
-        {running && running.phase !== 'focus' && (
-          <IconButton kind="skip" variant="primary" label="跳过休息" onClick={stopFocus} />
-        )}
-      </div>
+      {showOverlay && (
+        <div className="pip-overlay">
+          <div className="pip-bar">
+            {/* 阶段文案让给了事项名：这个宽度里两者只能留一个，阶段由圆点的颜色 + title 承载 */}
+            <span className="pip-phase pip-phase--withsel">
+              <i className="pip-dot" title={phaseText} />
+              {focusRunning ? (
+                <span className="pip-sel pip-sel--static" title={`${phaseText} · ${selLabel.text}`}>
+                  {selLabel.text}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="pip-sel pip-sel--btn"
+                  onClick={() => setPickerOpen(true)}
+                  title={`${selLabel.text}（点击更换）`}
+                  aria-label={`专注事项：${selLabel.text}，点击更换`}
+                >
+                  {selLabel.text}
+                </button>
+              )}
+            </span>
+            {/* 贴边收起是原生窗口能力，web 的 Document PiP 动不了自己的几何 */}
+            {isDesktop() && (
+              <button
+                type="button"
+                className={`pip-dockbtn${docked ? ' is-docked' : ''}`}
+                style={{ width: PIP_TOPBAR_H, height: PIP_TOPBAR_H }}
+                onClick={() => void (docked ? desktop()?.undockPip() : desktop()?.dockPip())}
+                title={docked ? '脱离屏幕边缘' : '收起到屏幕边缘'}
+                aria-label={docked ? '脱离屏幕边缘' : '收起到屏幕边缘'}
+              >
+                <Icon kind="dock" />
+              </button>
+            )}
+          </div>
+
+          <div className="pip-controls">
+            {!running && (
+              <IconButton
+                kind="play"
+                variant="primary"
+                label="开始专注"
+                onClick={() => startPomodoro(nextSel)}
+              />
+            )}
+            {running?.phase === 'focus' && (
+              <IconButton
+                kind={running.paused ? 'play' : 'pause'}
+                variant="primary"
+                label={running.paused ? '继续' : '暂停'}
+                onClick={running.paused ? resumeFocus : pauseFocus}
+              />
+            )}
+            {running?.phase === 'focus' && (
+              <IconButton kind="stop" variant="ghost" label="停止" onClick={stopFocus} />
+            )}
+            {/* 休息阶段只有一个动作：kernel.pauseFocus 对休息是空操作，别摆一颗点了没反应的按钮 */}
+            {running && running.phase !== 'focus' && (
+              <IconButton kind="skip" variant="primary" label="跳过休息" onClick={stopFocus} />
+            )}
+            {/* 段点挪到控制行右端：顶行的 116px 已经被事项名与收起键占满 */}
+            <Segs
+              total={segTotal}
+              done={segDone}
+              current={running?.phase === 'focus' ? Math.min(segDone, segTotal - 1) : -1}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="pip-track" style={{ height: PIP_PROGRESS_H }}>
         <div ref={fillRef} className="pip-fill" style={{ transform: 'scaleX(0)' }} />
