@@ -423,6 +423,15 @@ function createPipWindow(): BrowserWindow {
     skipTaskbar: true,
     maximizable: false,
     fullscreenable: false,
+    /**
+     * ⚠️ 必须关掉系统投影，否则「不透明度 < 100%」+「主窗全屏」会互相作用出一圈闪烁的浅色光晕。
+     * 链条：无边框窗的投影是 Windows 靠 DwmExtendFrameIntoClientArea 画在窗外的；而
+     * setOpacity(<1) 会把窗变成 layered window（WS_EX_LAYERED + LWA_ALPHA）。主窗全屏后
+     * DWM 换一条合成路径，下方内容每重绘一次（鼠标移动、滚动），那圈投影就被重新混合一次
+     * ⇒ 小窗四周一闪一闪。不透明度 100% 时窗口不是 layered，所以看不见。
+     * 小窗的窗控全是自绘的，系统投影本就没参与任何功能；分离感改由 .pip-shell 的 1px 内描边给。
+     */
+    hasShadow: false,
     backgroundColor: '#101014',
     webPreferences: { preload: PRELOAD, backgroundThrottling: false },
   });

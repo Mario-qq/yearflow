@@ -16,6 +16,9 @@
   position: relative;
   height: 100%;
   overflow: hidden;
+  /* 桌面版关了系统投影（见 main.cts 的 hasShadow: false），边界只剩这一圈；
+     用 inset 而不是外投影 —— 外投影画在窗外，无边框窗根本没有那块画布 */
+  box-shadow: inset 0 0 0 1px var(--border-default);
 }
 
 /* ── 悬停浮层：顶行 + 控制行 ─────────────────────────────────────────
