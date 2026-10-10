@@ -2,6 +2,7 @@
 
 > 唯一需求事实来源：`docs/SPEC.md`（规格书 v2 全文）。实现任何功能前先读对应章节。
 > 当前进度与各 Phase 验收记录：`docs/PROGRESS.md`（每完成一个 Phase 必须更新）。
+> 负责人只看**项目地图**（https://claude.ai/artifact/76ntaWTxBpmPRkmBeQdFH5 ，项目 id `yearflow`，绑定见 `.project-map.json`）；开工/收尾按全局技能 `project-map` 做。
 
 ## 项目定位
 单人使用的年度计划管理网站，**甘特图是首页和主战场**：年度规划（甘特图）+ 每日打卡（结果叠加在甘特图上）+ 月度复盘。质量标准：长期日用的个人工具，甘特图观感与手感对标 MS Project / Linear Timeline，不是 demo。
