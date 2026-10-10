@@ -69,19 +69,19 @@ const firstPaint = async (path, selector) => {
  * 第一次必然更慢（lazy chunk 首次过网），那个数单独打出来，不藏。
  */
 const runs = [];
-for (let i = 0; i < 3; i += 1) runs.push(await firstPaint('/year', '.annual-beat'));
+for (let i = 0; i < 3; i += 1) runs.push(await firstPaint('/year', '.yr-cover'));
 const yearMs = [...runs].sort((a, b) => a - b)[1];
 console.log(
   `  /year 首屏三次：${runs.map((n) => n.toFixed(0)).join(' / ')} ms` +
     `（首次含 chunk 冷取，中位 ${yearMs.toFixed(0)}ms）`,
 );
 ok(yearMs < 500, `/year 生产构建 + 压力数据首屏中位 ${yearMs.toFixed(0)}ms < 500ms`);
-ok((await page.locator('.annual-beat').count()) === 11, '压力数据下 11 个 beat 全部渲染');
+ok((await page.locator('.yr-sec').count()) === 4, '压力数据下封面 + 四节全部渲染');
 
 // ── annualIndex 每次渲染只算一次（规格 §六） ──────────────────────────
 /*
  * 没有专门的计数探针可用（`__ganttDeriveComputes` 那类全局都在 DEV 才挂），
- * 所以改测「切区间的重算耗时」：若某个 beat 私自再调一次派生扫全表，
+ * 所以改测「切区间的重算耗时」：若某一节私自再调一次派生扫全表，
  * 这个数会成倍放大。一次全量重算在压力数据下也应远低于首屏预算。
  */
 const switchMs = await page.evaluate(async () => {

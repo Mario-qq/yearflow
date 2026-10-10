@@ -1,28 +1,31 @@
 /**
- * 年报派生（docs/ANNUAL_SPEC.md §三）：区间引擎 + 11 个 beat 的数据源。
+ * 年报派生（docs/ANNUAL_SPEC.md §三）：区间引擎 + 封面与四节的全部数据。
  *
  * 三条贯穿本文件的铁律：
  * 1. **投入时长口径只有一套** —— 一律走 focus.ts 的 effectiveMsByGoalPrefix（max(手填, 番茄)
- *    在 (goal, task, date) 粒度取 max 再求和）。本文件不写任何自己的分桶/累加逻辑。
- *    POMODORO_SPEC 原话：「两套「投入」数字是可信度杀手」。
+ *    在 (goal, task, date) 粒度取 max 再求和）。本文件不写任何自己的时长分桶/累加逻辑。
  * 2. **完成率/应打卡类统计必须裁到 clippedEnd**（未来的应打卡日不算缺卡）；
- *    **投入时长类不需要裁**（记录不可能落在未来），故走 monthPrefixes。
+ *    投入时长类不需要裁（记录不可能落在未来），故按月前缀走。
  * 3. 全程 ms，只在渲染那一行取整。
+ *
+ * ⚠️ 本文件**不进 lib/derive 的 barrel**：barrel 被主包引用，经它导出会把年报派生拖进
+ * 共享 chunk（Y2 实测主包 gzip +2.2kB）。年报页直连 `derive/annual`。
  */
 import type {
   CheckIn,
+  CheckInStatus,
   ExemptionPeriod,
   FocusSession,
   Goal,
   Milestone,
+  MonthlyReview,
   Task,
 } from '../../types/domain';
 import { diffDays, eachDay, fmtDay, toDay } from '../date';
 import { calcAutoProgress, expandScheduledDays, isExempt } from './scheduled';
 import { bestStatusByDate } from './streak';
-import { baselineDrift } from './baseline';
 import { monthlyGoalStats } from './review';
-import { effectiveMsByGoalPrefix, focusStats, isCountedSession, type FocusStats } from './focus';
+import { effectiveMsByGoalPrefix, isCountedSession } from './focus';
 import { aggregateTrackProgress } from './tracks';
 
 const MS_PER_HOUR = 3_600_000;
@@ -40,7 +43,7 @@ export interface AnnualRange {
   end: string;
   /** min(end, today)：应打卡/完成率类统计的右端 */
   clippedEnd: string;
-  /** clippedEnd < end ⇒ 界面必须标注「统计截至 X 月 X 日」（规格 §4.1） */
+  /** clippedEnd < end ⇒ 界面标注「统计截至 X 月 X 日」 */
   clipped: boolean;
   /** 区间覆盖的月份前缀 YYYY-MM。整月对齐是硬约定，是复用 prefix 口径的前提 */
   monthPrefixes: string[];
@@ -62,8 +65,8 @@ export function rangeOf(year: number, kind: RangeKind, today: string): AnnualRan
   const start = fmtDay(toDay(`${year}-${String(m0).padStart(2, '0')}-01`));
   const end = fmtDay(toDay(`${year}-${String(m1).padStart(2, '0')}-01`).endOf('month'));
 
-  // today < start（看未来年份/未来季度）⇒ clippedEnd 落在 start 之前，
-  // 于是 [start, clippedEnd] 自然是空集，全部统计归零，无需任何特例分支。
+  // today < start（看未来区间）⇒ clippedEnd 落在 start 之前，[start, clippedEnd] 自然是空集，
+  // 全部统计归零，无需任何特例分支。
   const clippedEnd = today < start ? fmtDay(toDay(start).subtract(1, 'day')) : today < end ? today : end;
 
   const monthPrefixes: string[] = [];
@@ -72,281 +75,175 @@ export function rangeOf(year: number, kind: RangeKind, today: string): AnnualRan
   return { kind, year, start, end, clippedEnd, clipped: clippedEnd < end, monthPrefixes };
 }
 
-/** 区间的月份集合（判断某条记录是否落在区间内；≤12 个元素，就地构造足够便宜） */
-function monthSetOf(range: AnnualRange): Set<string> {
-  return new Set(range.monthPrefixes);
+function inMonths(date: string, months: Set<string>): boolean {
+  return months.has(date.slice(0, 7));
 }
 
-// ─────────────────────────────── 投入时长 ───────────────────────────────
+// ─────────────────────────────── 投入时长（§01） ───────────────────────────────
+
+export interface GoalInvest {
+  goalId: string;
+  ms: number;
+  /** 占「全部投入（含未归类）」的比例 0..1 */
+  share: number;
+  /** 与 range.monthPrefixes 对齐的逐月毫秒 */
+  byMonth: number[];
+}
+
+export interface Invested {
+  /** ms > 0 的目标，按 ms 降序 */
+  goals: GoalInvest[];
+  goalTotalMs: number;
+  /** 未归类会话。hero 数字若静静吞掉它就是撒谎，界面单列一段灰色 */
+  unassignedMs: number;
+  unassignedByMonth: number[];
+  /** goalTotalMs + unassignedMs */
+  totalMs: number;
+}
 
 /**
- * 区间内各目标投入毫秒。
- * full ⇒ 每目标一次年前缀扫；其它区间 ⇒ 每目标每月一次（月份互斥 ⇒ ms 级求和精确）。
- *
- * ⚠️ 已知代价（规格 §3.2 / §九-1）：G×M 次全表扫。不自己写一次遍历是刻意的 ——
- * 那等于复制 focus.ts 的分桶逻辑，是口径漂移的入口；而 effectiveMsByGoalByYear
- * 返回的是**已四舍五入的分钟**，focus.ts 明文禁止累加它。
- * 若实测超预算，处方是给 focus.ts 加一个导出的 ms 版聚合，不是在这里抄第二份。
+ * 逐目标逐月调 effectiveMsByGoalPrefix（月份互斥 ⇒ ms 级求和精确，单测锁定
+ * 「逐月之和 === 年前缀」）。G×M 次扫表是刻意的：自己写一次遍历等于复制 focus.ts 的分桶。
  */
-export function investedMsByGoal(
+export function investedOf(
   checkIns: CheckIn[],
   sessions: FocusSession[],
   goalIds: string[],
   range: AnnualRange,
-): Map<string, number> {
-  const out = new Map<string, number>();
-  const prefixes =
-    range.kind === 'full' ? [`${range.year}-`] : range.monthPrefixes;
+): Invested {
+  const rows: GoalInvest[] = [];
+  let goalTotalMs = 0;
   for (const goalId of goalIds) {
-    let ms = 0;
-    for (const p of prefixes) ms += effectiveMsByGoalPrefix(checkIns, sessions, goalId, p);
-    out.set(goalId, ms);
+    const byMonth = range.monthPrefixes.map((p) => effectiveMsByGoalPrefix(checkIns, sessions, goalId, p));
+    const ms = byMonth.reduce((a, b) => a + b, 0);
+    goalTotalMs += ms;
+    if (ms > 0) rows.push({ goalId, ms, share: 0, byMonth });
+  }
+
+  const monthIdx = new Map(range.monthPrefixes.map((p, i) => [p, i]));
+  const unassignedByMonth = range.monthPrefixes.map(() => 0);
+  let unassignedMs = 0;
+  for (const s of sessions) {
+    if (!isCountedSession(s) || s.goalId) continue;
+    const i = monthIdx.get(s.date.slice(0, 7));
+    if (i === undefined) continue;
+    unassignedByMonth[i] += s.focusMs;
+    unassignedMs += s.focusMs;
+  }
+
+  const totalMs = goalTotalMs + unassignedMs;
+  for (const r of rows) r.share = totalMs > 0 ? r.ms / totalMs : 0;
+  rows.sort((a, b) => b.ms - a.ms);
+  return { goals: rows, goalTotalMs, unassignedMs, unassignedByMonth, totalMs };
+}
+
+// ───────────────────────────── 逐日活动（封面年轮 + §02 热力） ─────────────────────────────
+
+export interface DayCell {
+  date: string;
+  /** 打卡分：各目标当日最强记录 done=1、partial=0.5 求和（与复盘页热力图 dailyActivityScores 同口径） */
+  score: number;
+  /** 当日计入的专注毫秒（含未归类） */
+  focusMs: number;
+  /**
+   * 当日「主角」目标：权重 = 打卡分 + 专注小时，取最大者（并列取先出现的目标顺序）。
+   * 只用于给年轮上色，不参与任何数字。
+   */
+  topGoalId?: string;
+  /** date > clippedEnd：还没到的日子，界面画成虚的 */
+  future: boolean;
+}
+
+const STATUS_W: Record<CheckInStatus, number> = { done: 1, partial: 0.5, skipped: 0 };
+const STATUS_RANK: Record<CheckInStatus, number> = { done: 3, partial: 2, skipped: 1 };
+
+export function dailyCells(
+  checkIns: CheckIn[],
+  sessions: FocusSession[],
+  goalIds: string[],
+  range: AnnualRange,
+): DayCell[] {
+  const goalSet = new Set(goalIds);
+  // (goal|date) → 最强状态：同日多条只算一次，与 streak/review 口径一致
+  const best = new Map<string, CheckInStatus>();
+  for (const c of checkIns) {
+    if (c.deletedAt || !goalSet.has(c.goalId) || c.date < range.start || c.date > range.end) continue;
+    const key = `${c.goalId}|${c.date}`;
+    const prev = best.get(key);
+    if (!prev || STATUS_RANK[c.status] > STATUS_RANK[prev]) best.set(key, c.status);
+  }
+
+  const scoreByDate = new Map<string, number>();
+  const focusByDate = new Map<string, number>();
+  // date → goalId → 权重
+  const weight = new Map<string, Map<string, number>>();
+  const addW = (date: string, goalId: string, w: number): void => {
+    if (w <= 0) return;
+    let m = weight.get(date);
+    if (!m) weight.set(date, (m = new Map()));
+    m.set(goalId, (m.get(goalId) ?? 0) + w);
+  };
+
+  for (const [key, status] of best) {
+    const w = STATUS_W[status];
+    if (w === 0) continue;
+    const bar = key.indexOf('|');
+    const goalId = key.slice(0, bar);
+    const date = key.slice(bar + 1);
+    scoreByDate.set(date, (scoreByDate.get(date) ?? 0) + w);
+    addW(date, goalId, w);
+  }
+  for (const s of sessions) {
+    if (!isCountedSession(s) || s.date < range.start || s.date > range.end) continue;
+    focusByDate.set(s.date, (focusByDate.get(s.date) ?? 0) + s.focusMs);
+    if (s.goalId && goalSet.has(s.goalId)) addW(s.date, s.goalId, s.focusMs / MS_PER_HOUR);
+  }
+
+  const order = new Map(goalIds.map((id, i) => [id, i]));
+  const out: DayCell[] = [];
+  for (const date of eachDay(range.start, range.end)) {
+    let topGoalId: string | undefined;
+    let topW = 0;
+    const m = weight.get(date);
+    if (m) {
+      for (const [goalId, w] of m) {
+        if (w > topW || (w === topW && topGoalId && order.get(goalId)! < order.get(topGoalId)!)) {
+          topW = w;
+          topGoalId = goalId;
+        }
+      }
+    }
+    out.push({
+      date,
+      score: scoreByDate.get(date) ?? 0,
+      focusMs: focusByDate.get(date) ?? 0,
+      ...(topGoalId ? { topGoalId } : {}),
+      future: date > range.clippedEnd,
+    });
   }
   return out;
 }
 
-export interface InvestedTotals {
-  byGoal: Map<string, number>;
-  /** 各目标之和（不含未归类） */
-  goalTotalMs: number;
-  /** 未归类会话时长。hero 数字若静静吞掉它就是撒谎（复盘页已有同款披露） */
-  unassignedMs: number;
-  unassignedCount: number;
-}
-
-export function investedTotals(
-  checkIns: CheckIn[],
-  sessions: FocusSession[],
-  goalIds: string[],
-  range: AnnualRange,
-): InvestedTotals {
-  const byGoal = investedMsByGoal(checkIns, sessions, goalIds, range);
-  let goalTotalMs = 0;
-  for (const ms of byGoal.values()) goalTotalMs += ms;
-
-  const months = monthSetOf(range);
-  let unassignedMs = 0;
-  let unassignedCount = 0;
-  for (const s of sessions) {
-    if (!isCountedSession(s) || s.goalId || !months.has(s.date.slice(0, 7))) continue;
-    unassignedMs += s.focusMs;
-    unassignedCount += 1;
-  }
-  return { byGoal, goalTotalMs, unassignedMs, unassignedCount };
-}
-
-/** X 毫秒 = 多少个 hoursPerDay 小时工作日。不取整，取整留给渲染层 */
-export function equivalentWorkdays(ms: number, hoursPerDay = 8): number {
-  if (hoursPerDay <= 0) return 0;
-  return ms / (hoursPerDay * MS_PER_HOUR);
-}
-
-// ──────────────────────────── 错配镜（beat 3） ────────────────────────────
-
-export interface GoalShare {
-  goalId: string;
-  /**
-   * 计划任务·日数 = Σ over tasks |应打卡日 ∩ [start, clippedEnd]|。
-   * ⚠️ 按任务求和、**不是按日并集**（规格 §3.3）：错配镜比的是「计划投入的力气」，
-   * 同一天两个并行任务就是两份力气；按日并集会把它压成一份，系统性低估多任务目标，
-   * 从而把结论说反。界面必须叫「计划任务·日占比」，不得写成「应打卡天数占比」。
-   */
-  plannedTaskDays: number;
-  plannedShare: number;
-  investedMs: number;
-  investedShare: number;
-  /** investedShare - plannedShare，正 = 实际投入超过计划权重 */
-  gap: number;
-  /** 区间内有任务、且全是随缘 ⇒ 天然无计划权重，不可判为「错配」 */
-  adhocOnly: boolean;
-  /** plannedTaskDays === 0：随缘、或区间内无排期。界面单列一组说明原因，不进错配排序 */
-  noPlan: boolean;
-}
-
-function overlapsRange(t: Task, range: AnnualRange): boolean {
-  return t.startDate <= range.end && t.endDate >= range.start;
-}
-
-export function goalShares(args: {
-  goals: Goal[];
-  tasks: Task[];
-  exemptions: ExemptionPeriod[];
-  checkIns: CheckIn[];
-  sessions: FocusSession[];
-  range: AnnualRange;
-}): GoalShare[] {
-  const { goals, tasks, exemptions, checkIns, sessions, range } = args;
-  const activeGoals = goals.filter((g) => !g.deletedAt);
-  const goalIds = activeGoals.map((g) => g.id);
-  const invested = investedMsByGoal(checkIns, sessions, goalIds, range);
-
-  const plannedByGoal = new Map<string, number>();
-  const inRangeCount = new Map<string, number>();
-  const adhocCount = new Map<string, number>();
-  const goalIdSet = new Set(goalIds);
-
-  for (const t of tasks) {
-    if (t.deletedAt || !goalIdSet.has(t.goalId)) continue;
-    if (!overlapsRange(t, range)) continue;
-    inRangeCount.set(t.goalId, (inRangeCount.get(t.goalId) ?? 0) + 1);
-    if (t.recurrence?.type === 'adhoc') adhocCount.set(t.goalId, (adhocCount.get(t.goalId) ?? 0) + 1);
-    // expandScheduledDays 已把右端裁到 min(endDate, clippedEnd)，左端在这里裁
-    let n = 0;
-    for (const d of expandScheduledDays(t, exemptions, range.clippedEnd)) {
-      if (d >= range.start) n += 1;
+/** 最长「连续有打卡」的自然日段（任一目标 done/partial 即算）。热力图上能画成连着的一串格子 */
+export function longestActiveSpan(cells: DayCell[]): { from: string; to: string; days: number } | null {
+  let best: { from: string; to: string; days: number } | null = null;
+  let from: string | null = null;
+  let run = 0;
+  let prev = '';
+  for (const c of cells) {
+    if (c.score > 0) {
+      if (run === 0) from = c.date;
+      run += 1;
+      prev = c.date;
+      if (!best || run > best.days) best = { from: from!, to: prev, days: run };
+    } else {
+      run = 0;
     }
-    plannedByGoal.set(t.goalId, (plannedByGoal.get(t.goalId) ?? 0) + n);
   }
-
-  let totalPlanned = 0;
-  for (const n of plannedByGoal.values()) totalPlanned += n;
-  let totalInvested = 0;
-  for (const ms of invested.values()) totalInvested += ms;
-
-  return activeGoals.map((g) => {
-    const plannedTaskDays = plannedByGoal.get(g.id) ?? 0;
-    const investedMs = invested.get(g.id) ?? 0;
-    const plannedShare = totalPlanned > 0 ? plannedTaskDays / totalPlanned : 0;
-    const investedShare = totalInvested > 0 ? investedMs / totalInvested : 0;
-    const inRange = inRangeCount.get(g.id) ?? 0;
-    return {
-      goalId: g.id,
-      plannedTaskDays,
-      plannedShare,
-      investedMs,
-      investedShare,
-      gap: investedShare - plannedShare,
-      adhocOnly: inRange > 0 && (adhocCount.get(g.id) ?? 0) === inRange,
-      noPlan: plannedTaskDays === 0,
-    };
-  });
+  return best;
 }
 
-// ───────────────────── 月度画像 / 最强最弱月（beat 4） ─────────────────────
-
-export interface MonthProfile {
-  month: string;
-  /** 全目标合计完成率 0-100 = Σscore / Σscheduled；无应打卡返回 null */
-  rate: number | null;
-  scheduled: number;
-  score: number;
-  focus: FocusStats;
-  /**
-   * 是否可参与最强/最弱评选：该月自然末日 ≤ clippedEnd（即整月已过完）。
-   * 排除进行中的当月 —— 一个刚过 3 天的月份拿 100% 夺冠是假结论。
-   */
-  eligible: boolean;
-}
-
-export function monthProfiles(args: {
-  goals: Goal[];
-  tasks: Task[];
-  checkIns: CheckIn[];
-  exemptions: ExemptionPeriod[];
-  sessions: FocusSession[];
-  range: AnnualRange;
-  today: string;
-}): MonthProfile[] {
-  const { goals, tasks, checkIns, exemptions, sessions, range, today } = args;
-  const activeGoals = goals.filter((g) => !g.deletedAt);
-
-  /*
-   * 按目标预分桶。**这不是第二套口径，是同一套口径喂更小的输入**：
-   * monthlyGoalStats 内部对 tasks / checkIns / sessions 做的第一件事就是
-   * `x.goalId !== goalId ⇒ continue`（见 review.ts / streak.ts / focus.ts），
-   * 所以先分好桶再传进去，逐字节等价 —— 分桶逻辑一行都没有被复制。
-   *
-   * 为什么值得：monthlyGoalStats 要被调 月×目标 次（全年 = 12×10 = 120 次），
-   * 每次都重扫一遍全量 checkIns/sessions。Y4 压力实测下这一处占 annualIndex 的
-   * 423ms / 565ms —— 是全页最大的开销，而规格 §九-1 预判的 investedMsByGoal
-   * 实测只有 0.7ms（那条预判找错了人，已回填规格）。
-   * 免打卡区间**不分桶**：exemptions 可以是全局的（goalIds 缺省 = 对所有目标生效）。
-   */
-  const tasksOf = new Map<string, Task[]>();
-  const checkInsOf = new Map<string, CheckIn[]>();
-  const sessionsOf = new Map<string, FocusSession[]>();
-  for (const g of activeGoals) {
-    tasksOf.set(g.id, []);
-    checkInsOf.set(g.id, []);
-    sessionsOf.set(g.id, []);
-  }
-  for (const t of tasks) tasksOf.get(t.goalId)?.push(t);
-  for (const c of checkIns) checkInsOf.get(c.goalId)?.push(c);
-  for (const s of sessions) if (s.goalId) sessionsOf.get(s.goalId)?.push(s);
-
-  return range.monthPrefixes.map((month) => {
-    /*
-     * 把传进去的任务**裁到本月**（不重叠的直接滤掉）。monthlyGoalStats 会把每个任务的
-     * 应打卡日整段展开再筛 `startsWith(month)`：一个跨 4 个月的任务，在 12 个月里被
-     * 完整展开 12 遍，其中 8 遍颗粒无收、4 遍只有 1/4 有用，而展开的内层是 dayjs
-     * 逐日 parse —— 实测这一处就是 annualIndex 那 423ms 的来源（规格 §九-1 预判的
-     * investedMsByGoal 只有 0.7ms，找错了人，已回填规格）。
-     *
-     * 为什么裁窄是**逐字节等价**而不是另一套口径：recurrence 全是按星期几判定的
-     * （daily/weekdays/custom/adhoc，见 isScheduledDow），不以 startDate 为锚点；
-     * 免打卡也是按日期判定。所以「先整段展开再筛本月」与「只展开本月这一段」
-     * 得到同一个集合。分桶与计分逻辑一行都没有被复制。
-     */
-    const mStart = `${month}-01`;
-    const mEnd = fmtDay(toDay(mStart).endOf('month'));
-    const clipToMonth = (t: Task): Task =>
-      t.startDate >= mStart && t.endDate <= mEnd
-        ? t
-        : {
-            ...t,
-            startDate: t.startDate > mStart ? t.startDate : mStart,
-            endDate: t.endDate < mEnd ? t.endDate : mEnd,
-          };
-    let scheduled = 0;
-    let score = 0;
-    for (const g of activeGoals) {
-      // 逐目标调既有 monthlyGoalStats：完成率口径零重复实现（规格 §3.4）
-      const st = monthlyGoalStats({
-        goalId: g.id,
-        tasks: tasksOf
-          .get(g.id)!
-          .filter((t) => t.startDate <= mEnd && t.endDate >= mStart)
-          .map(clipToMonth),
-        checkIns: checkInsOf.get(g.id)!,
-        exemptions,
-        month,
-        today,
-        sessions: sessionsOf.get(g.id)!,
-      });
-      scheduled += st.scheduled;
-      score += st.score;
-    }
-    const monthEnd = mEnd;
-    return {
-      month,
-      scheduled,
-      score,
-      // 合计率而非「各目标率的平均」：后者会让只有 1 天应打卡的目标与全月目标等权
-      rate: scheduled > 0 ? Math.round((score / scheduled) * 100) : null,
-      focus: focusStats(sessions, month),
-      eligible: scheduled > 0 && monthEnd <= range.clippedEnd,
-    };
-  });
-}
-
-/** 最强/最弱月。少于 2 个可评选月份时返回 null（对比 beat 的价值全在两者之差） */
-export function bestWorstMonth(
-  profiles: MonthProfile[],
-): { best: MonthProfile; worst: MonthProfile } | null {
-  const pool = profiles.filter((p) => p.eligible && p.rate !== null);
-  if (pool.length < 2) return null;
-  let best = pool[0];
-  let worst = pool[0];
-  for (const p of pool) {
-    const r = p.rate as number;
-    if (r > (best.rate as number)) best = p;
-    // 并列时取更早的月份（pool 已按月序），故用严格小于
-    if (r < (worst.rate as number)) worst = p;
-  }
-  return best.month === worst.month ? null : { best, worst };
-}
-
-// ─────────────────── 最长连续与打断日（beat 5） ───────────────────
+// ─────────────────── 各目标最长连续（§02） ───────────────────
 
 export interface LongestRun {
   goalId: string;
@@ -355,15 +252,12 @@ export interface LongestRun {
   days: number;
   /** 打断该段的那一天；跑到区间末仍未断则为 undefined */
   breakDate?: string;
-  breakKind?: 'missed';
 }
 
 /**
  * 区间内该目标的最长连续段（含起止与打断日）。
  * 口径与 streak.ts calcStreak 逐字一致：done/partial 延续，skipped 不打断不计数，
  * missed 打断，今天未打不打断。单测锁定 days === calcStreak().longest（全年区间下）。
- *
- * 免打卡日不在应打卡并集里 ⇒ 天然不会被判为打断，故 breakKind v1 只有 'missed'。
  */
 export function longestRunOf(args: {
   goalId: string;
@@ -392,13 +286,7 @@ export function longestRunOf(args: {
 
   const commit = (breakDate?: string): void => {
     if (run > 0 && runFrom && runTo && (!best || run > best.days)) {
-      best = {
-        goalId,
-        from: runFrom,
-        to: runTo,
-        days: run,
-        ...(breakDate ? { breakDate, breakKind: 'missed' as const } : {}),
-      };
+      best = { goalId, from: runFrom, to: runTo, days: run, ...(breakDate ? { breakDate } : {}) };
     }
   };
 
@@ -422,7 +310,7 @@ export function longestRunOf(args: {
   return best;
 }
 
-// ──────────────── 完成与放弃（beat 8） ────────────────
+// ──────────────── 目标结局（§03） ────────────────
 
 export type GoalOutcome = 'completed' | 'active' | 'stalled' | 'adhocOnly';
 
@@ -449,33 +337,18 @@ export function goalOutcomes(args: {
   today: string;
   stallDays?: number;
 }): GoalStatusCard[] {
-  const {
-    goals,
-    tasks,
-    checkIns,
-    exemptions,
-    sessions,
-    range,
-    today,
-    stallDays = DEFAULT_STALL_DAYS,
-  } = args;
+  const { goals, tasks, checkIns, exemptions, sessions, range, today, stallDays = DEFAULT_STALL_DAYS } =
+    args;
 
-  // 最后活动日：打卡与会话取并集里最晚的一天，且不晚于区间右端
-  // （看往年年报时「距今」应当相对那一年的末尾，而不是真实今天）
+  // 最后活动日不晚于区间右端（看往年年报时「距今」应相对那一年的末尾，而不是真实今天）
   const lastByGoal = new Map<string, string>();
   const bump = (goalId: string | undefined, date: string): void => {
     if (!goalId || date > range.clippedEnd) return;
     const prev = lastByGoal.get(goalId);
     if (!prev || date > prev) lastByGoal.set(goalId, date);
   };
-  for (const c of checkIns) {
-    if (c.deletedAt) continue;
-    bump(c.goalId, c.date);
-  }
-  for (const s of sessions) {
-    if (!isCountedSession(s)) continue;
-    bump(s.goalId, s.date);
-  }
+  for (const c of checkIns) if (!c.deletedAt) bump(c.goalId, c.date);
+  for (const s of sessions) if (isCountedSession(s)) bump(s.goalId, s.date);
 
   const tasksByGoal = new Map<string, Task[]>();
   for (const t of tasks) {
@@ -492,9 +365,7 @@ export function goalOutcomes(args: {
     const progressPct = aggregateTrackProgress(own, (id) => {
       const t = own.find((x) => x.id === id);
       if (!t) return 0;
-      return t.progressMode === 'auto'
-        ? calcAutoProgress(t, checkIns, exemptions, today)
-        : t.progress;
+      return t.progressMode === 'auto' ? calcAutoProgress(t, checkIns, exemptions, today) : t.progress;
     });
 
     const lastActivityDate = lastByGoal.get(g.id);
@@ -512,67 +383,33 @@ export function goalOutcomes(args: {
     if (g.completedAt) outcome = 'completed';
     else if (own.length > 0 && unfinished.length === 0) outcome = 'completed';
     else if (unfinished.length > 0 && unfinished.every((t) => t.recurrence?.type === 'adhoc'))
-      outcome = 'adhocOnly'; // 随缘契约：不催、不指责，只中性列出最后一次
+      outcome = 'adhocOnly'; // 随缘契约：不催、不指责
     else if (idleDays > stallDays) outcome = 'stalled';
     else outcome = 'active';
 
-    cards.push({
-      goalId: g.id,
-      outcome,
-      ...(lastActivityDate ? { lastActivityDate } : {}),
-      idleDays,
-      progressPct,
-    });
+    cards.push({ goalId: g.id, outcome, ...(lastActivityDate ? { lastActivityDate } : {}), idleDays, progressPct });
   }
   return cards;
 }
 
-// ──────────────── 漂移排行（beat 6） ────────────────
+// ──────────────── 里程碑（§03） ────────────────
 
-export interface DriftRow {
-  taskId: string;
+export interface MilestoneRow {
+  id: string;
   goalId: string;
   name: string;
-  /** 结束日相对基线的偏移天数（正 = 延后） */
-  driftDays: number;
+  date: string;
+  achieved: boolean;
+  /** 未达成且日子已过（date ≤ clippedEnd） */
+  overdue: boolean;
 }
-
-/**
- * 计划 vs 现实。区间过滤用自然 end（计划漂移是计划属性，与「今天」无关）。
- * totalDelayDays 只累加正值：「总共推迟了多少」问的是延后量，不与提前抵消。
- * noBaselineCount 必须暴露给界面 —— 否则「全年只推迟 3 天」会被误读成计划很准。
- */
-export function driftRanking(
-  tasks: Task[],
-  range: AnnualRange,
-): { rows: DriftRow[]; totalDelayDays: number; noBaselineCount: number } {
-  const rows: DriftRow[] = [];
-  let totalDelayDays = 0;
-  let noBaselineCount = 0;
-
-  for (const t of tasks) {
-    if (t.deletedAt || !overlapsRange(t, range)) continue;
-    const drift = baselineDrift(t);
-    if (!drift) {
-      noBaselineCount += 1;
-      continue;
-    }
-    if (drift.endDriftDays > 0) {
-      rows.push({ taskId: t.id, goalId: t.goalId, name: t.name, driftDays: drift.endDriftDays });
-      totalDelayDays += drift.endDriftDays;
-    }
-  }
-  rows.sort((a, b) => b.driftDays - a.driftDays || a.name.localeCompare(b.name));
-  return { rows, totalDelayDays, noBaselineCount };
-}
-
-// ──────────────── 里程碑（beat 7） ────────────────
 
 export interface MilestoneStats {
-  total: number;
+  /** 区间内全部，按日期升序 */
+  rows: MilestoneRow[];
   achieved: number;
-  /** 按日期升序，供时间线渲染 */
-  rows: { id: string; goalId: string; name: string; date: string; achieved: boolean }[];
+  /** 已到期（date ≤ clippedEnd）的个数：兑现率的分母。还没到日子的不算失败 */
+  due: number;
 }
 
 export function milestoneStats(milestones: Milestone[], range: AnnualRange): MilestoneStats {
@@ -584,12 +421,116 @@ export function milestoneStats(milestones: Milestone[], range: AnnualRange): Mil
       name: m.name,
       date: m.date,
       achieved: m.achieved,
+      overdue: !m.achieved && m.date <= range.clippedEnd,
     }))
-    .sort((a, b) => a.date.localeCompare(b.date));
-  return { total: rows.length, achieved: rows.filter((r) => r.achieved).length, rows };
+    .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+  return {
+    rows,
+    achieved: rows.filter((r) => r.achieved).length,
+    due: rows.filter((r) => r.achieved || r.date <= range.clippedEnd).length,
+  };
 }
 
-// ──────────────── 节律画像（beat 9） ────────────────
+// ───────────────────── 月度起伏（§04） ─────────────────────
+
+export interface MonthProfile {
+  month: string;
+  /** 全目标合计完成率 0-100 = Σscore / Σscheduled；无应打卡返回 null */
+  rate: number | null;
+  scheduled: number;
+  score: number;
+  /** 月度复盘的 1-5 星自评；没评过为 undefined */
+  rating?: number;
+  /** 整月已过完（月末 ≤ clippedEnd）。进行中的当月不参与最佳评选 —— 刚过 3 天拿 100% 是假结论 */
+  complete: boolean;
+}
+
+export function monthProfiles(args: {
+  goals: Goal[];
+  tasks: Task[];
+  checkIns: CheckIn[];
+  exemptions: ExemptionPeriod[];
+  sessions: FocusSession[];
+  reviews: MonthlyReview[];
+  range: AnnualRange;
+  today: string;
+}): MonthProfile[] {
+  const { goals, tasks, checkIns, exemptions, sessions, reviews, range, today } = args;
+  const activeGoals = goals.filter((g) => !g.deletedAt);
+
+  /*
+   * 按目标预分桶 —— 同一套口径喂更小的输入：monthlyGoalStats 内部第一件事就是
+   * `x.goalId !== goalId ⇒ continue`，先分桶再传逐字节等价。月×目标 次调用下
+   * 这是全页最大的开销（Y4 实测 423 → 119ms）。
+   */
+  const tasksOf = new Map<string, Task[]>();
+  const checkInsOf = new Map<string, CheckIn[]>();
+  const sessionsOf = new Map<string, FocusSession[]>();
+  for (const g of activeGoals) {
+    tasksOf.set(g.id, []);
+    checkInsOf.set(g.id, []);
+    sessionsOf.set(g.id, []);
+  }
+  for (const t of tasks) tasksOf.get(t.goalId)?.push(t);
+  for (const c of checkIns) checkInsOf.get(c.goalId)?.push(c);
+  for (const s of sessions) if (s.goalId) sessionsOf.get(s.goalId)?.push(s);
+
+  const ratingOf = new Map<string, number>();
+  for (const r of reviews) if (!r.deletedAt && r.rating) ratingOf.set(r.month, r.rating);
+
+  return range.monthPrefixes.map((month) => {
+    /*
+     * 把任务裁到本月再展开：recurrence 全按星期几判定、免打卡按日期判定，
+     * 「整段展开再筛本月」与「只展开本月」是同一个集合，只是少做 11/12 的 dayjs 解析。
+     */
+    const mStart = `${month}-01`;
+    const mEnd = fmtDay(toDay(mStart).endOf('month'));
+    const clip = (t: Task): Task =>
+      t.startDate >= mStart && t.endDate <= mEnd
+        ? t
+        : { ...t, startDate: t.startDate > mStart ? t.startDate : mStart, endDate: t.endDate < mEnd ? t.endDate : mEnd };
+    let scheduled = 0;
+    let score = 0;
+    for (const g of activeGoals) {
+      const st = monthlyGoalStats({
+        goalId: g.id,
+        tasks: tasksOf
+          .get(g.id)!
+          .filter((t) => t.startDate <= mEnd && t.endDate >= mStart)
+          .map(clip),
+        checkIns: checkInsOf.get(g.id)!,
+        exemptions,
+        month,
+        today,
+        sessions: sessionsOf.get(g.id)!,
+      });
+      scheduled += st.scheduled;
+      score += st.score;
+    }
+    const rating = ratingOf.get(month);
+    return {
+      month,
+      scheduled,
+      score,
+      // 合计率而非「各目标率的平均」：后者会让只有 1 天应打卡的目标与全月目标等权
+      rate: scheduled > 0 ? Math.round((score / scheduled) * 100) : null,
+      ...(rating ? { rating } : {}),
+      complete: mEnd <= range.clippedEnd,
+    };
+  });
+}
+
+/** 最佳月：已过完、有应打卡的月份里完成率最高者（并列取更早）。没有可评选月份返回 null */
+export function bestMonth(profiles: MonthProfile[]): MonthProfile | null {
+  let best: MonthProfile | null = null;
+  for (const p of profiles) {
+    if (!p.complete || p.rate === null) continue;
+    if (!best || p.rate > (best.rate as number)) best = p;
+  }
+  return best;
+}
+
+// ──────────────── 专注节律（§04） ────────────────
 
 export interface RhythmCell {
   /** 0=周日…6=周六 */
@@ -597,75 +538,59 @@ export interface RhythmCell {
   hour: number;
   ms: number;
   count: number;
-  /** 提前停止段数 / 段数 */
-  interruptedRate: number;
 }
 
 /**
  * 星期 × 小时的专注分布。
- * **区间归属看 s.date**（与全仓所有统计一致）；**钟点与星期取 startAt 的本地值**。
- * 为什么不从 date 反推星期：FocusSession.date 允许被用户「改归相邻日」显式覆盖，
- * 与 startAt 永久不一致；而节律问的是「你几点在专注」，答案只能来自 startAt。
- * domain.ts 禁止的是「从 startAt 重算 date」，不是「读 startAt 的钟点」。
- *
- * 一段跨小时的会话整段记在开始小时（v1 不做跨格分摊，规格 §3.8 / §九-2）。
+ * **区间归属看 s.date**（与全仓所有统计一致）；**钟点与星期取 startAt 的本地值**：
+ * FocusSession.date 允许被「改归相邻日」显式覆盖，而节律问的是「你几点在专注」。
+ * 一段跨小时的会话整段记在开始小时（v1 不做跨格分摊）。
  */
 export function focusByHourDow(sessions: FocusSession[], range: AnnualRange): RhythmCell[] {
-  const months = monthSetOf(range);
-  const acc = new Map<string, { ms: number; count: number; stopped: number }>();
+  const months = new Set(range.monthPrefixes);
+  const acc = new Map<number, RhythmCell>();
   for (const s of sessions) {
-    if (!isCountedSession(s) || !months.has(s.date.slice(0, 7))) continue;
+    if (!isCountedSession(s) || !inMonths(s.date, months)) continue;
     const d = new Date(s.startAt);
-    const key = `${d.getDay()}:${d.getHours()}`;
+    const dow = d.getDay();
+    const hour = d.getHours();
+    const key = dow * 24 + hour;
     let cell = acc.get(key);
-    if (!cell) {
-      cell = { ms: 0, count: 0, stopped: 0 };
-      acc.set(key, cell);
-    }
+    if (!cell) acc.set(key, (cell = { dow, hour, ms: 0, count: 0 }));
     cell.ms += s.focusMs;
     cell.count += 1;
-    if (s.outcome === 'stopped') cell.stopped += 1;
   }
-  const out: RhythmCell[] = [];
-  for (const [key, cell] of acc) {
-    const [dow, hour] = key.split(':').map(Number);
-    out.push({
-      dow,
-      hour,
-      ms: cell.ms,
-      count: cell.count,
-      interruptedRate: cell.count > 0 ? cell.stopped / cell.count : 0,
-    });
-  }
-  out.sort((a, b) => a.dow - b.dow || a.hour - b.hour);
-  return out;
+  return [...acc.values()].sort((a, b) => a.dow - b.dow || a.hour - b.hour);
 }
 
 // ──────────────── 一次算完 ────────────────
 
 export interface AnnualIndex {
   range: AnnualRange;
-  /** 区间内是否完全没有数据 ⇒ 整页空态（规格 §4.2） */
+  /** 区间内完全没有数据 ⇒ 整页空态 */
   empty: boolean;
-  /** 封面：区间已过天数 / 总天数 */
+  /** 区间已过天数 / 总天数 */
   elapsedDays: number;
   totalDays: number;
-  checkInCount: number;
-  invested: InvestedTotals;
-  shares: GoalShare[];
-  months: MonthProfile[];
-  bestWorst: { best: MonthProfile; worst: MonthProfile } | null;
+  /** 有打卡（done/partial）的天数 */
+  activeDays: number;
+  /** 区间内有任务排期或有投入的目标数 */
+  goalCount: number;
+  invested: Invested;
+  days: DayCell[];
+  activeSpan: { from: string; to: string; days: number } | null;
+  /** 各目标最长连续，按天数降序 */
   runs: LongestRun[];
   outcomes: GoalStatusCard[];
-  drift: { rows: DriftRow[]; totalDelayDays: number; noBaselineCount: number };
   milestones: MilestoneStats;
+  months: MonthProfile[];
+  best: MonthProfile | null;
   rhythm: RhythmCell[];
+  /** 计入的专注段数 */
+  sessionCount: number;
 }
 
-/**
- * 页面只调这一个函数一次（一个 useMemo）。
- * 禁止每个 beat 组件各自调派生扫全表（规格 §六 性能门槛）。
- */
+/** 页面只调这一个函数一次（一个 useMemo）。禁止各节组件自己调派生扫全表 */
 export function annualIndex(args: {
   goals: Goal[];
   tasks: Task[];
@@ -673,63 +598,58 @@ export function annualIndex(args: {
   checkIns: CheckIn[];
   exemptions: ExemptionPeriod[];
   sessions: FocusSession[];
+  reviews: MonthlyReview[];
   year: number;
   kind: RangeKind;
   today: string;
 }): AnnualIndex {
-  const { goals, tasks, milestones, checkIns, exemptions, sessions, year, kind, today } = args;
+  const { goals, tasks, milestones, checkIns, exemptions, sessions, reviews, year, kind, today } = args;
   const range = rangeOf(year, kind, today);
+  // 归档目标照常进年报：年报是历史，抹掉会让百分比加不到 100。只有软删的才真正不算
   const activeGoals = goals.filter((g) => !g.deletedAt);
-  const months2 = monthSetOf(range);
+  const goalIds = activeGoals.map((g) => g.id);
+  const liveTasks = tasks.filter((t) => !t.deletedAt);
 
-  let checkInCount = 0;
-  for (const c of checkIns) {
-    if (!c.deletedAt && months2.has(c.date.slice(0, 7))) checkInCount += 1;
-  }
+  const invested = investedOf(checkIns, sessions, goalIds, range);
+  const days = dailyCells(checkIns, sessions, goalIds, range);
 
-  const invested = investedTotals(
-    checkIns,
-    sessions,
-    activeGoals.map((g) => g.id),
-    range,
-  );
-  const monthList = monthProfiles({ goals, tasks, checkIns, exemptions, sessions, range, today });
   const runs: LongestRun[] = [];
   for (const g of activeGoals) {
-    const r = longestRunOf({ goalId: g.id, tasks, checkIns, exemptions, today, range });
+    const r = longestRunOf({ goalId: g.id, tasks: liveTasks, checkIns, exemptions, today, range });
     if (r) runs.push(r);
   }
   runs.sort((a, b) => b.days - a.days);
 
-  const totalDays = diffDays(range.end, range.start) + 1;
-  const elapsedDays = range.clippedEnd < range.start ? 0 : diffDays(range.clippedEnd, range.start) + 1;
+  const months = monthProfiles({ goals: activeGoals, tasks: liveTasks, checkIns, exemptions, sessions, reviews, range, today });
+
+  const inRangeTasks = liveTasks.filter((t) => t.startDate <= range.end && t.endDate >= range.start);
+  const involved = new Set(inRangeTasks.map((t) => t.goalId));
+  for (const g of invested.goals) involved.add(g.goalId);
+  const goalCount = goalIds.filter((id) => involved.has(id)).length;
+
+  const monthSet = new Set(range.monthPrefixes);
+  let sessionCount = 0;
+  for (const s of sessions) if (isCountedSession(s) && inMonths(s.date, monthSet)) sessionCount += 1;
+
+  const activeDays = days.filter((d) => d.score > 0).length;
+  const ms = milestoneStats(milestones, range);
 
   return {
     range,
-    empty:
-      checkInCount === 0 &&
-      invested.goalTotalMs === 0 &&
-      invested.unassignedMs === 0 &&
-      !tasks.some((t) => !t.deletedAt && overlapsRange(t, range)),
-    elapsedDays,
-    totalDays,
-    checkInCount,
+    empty: activeDays === 0 && invested.totalMs === 0 && inRangeTasks.length === 0 && ms.rows.length === 0,
+    elapsedDays: range.clippedEnd < range.start ? 0 : diffDays(range.clippedEnd, range.start) + 1,
+    totalDays: diffDays(range.end, range.start) + 1,
+    activeDays,
+    goalCount,
     invested,
-    shares: goalShares({ goals, tasks, exemptions, checkIns, sessions, range }),
-    months: monthList,
-    bestWorst: bestWorstMonth(monthList),
+    days,
+    activeSpan: longestActiveSpan(days),
     runs,
-    outcomes: goalOutcomes({
-      goals,
-      tasks,
-      checkIns,
-      exemptions,
-      sessions,
-      range,
-      today,
-    }),
-    drift: driftRanking(tasks, range),
-    milestones: milestoneStats(milestones, range),
+    outcomes: goalOutcomes({ goals: activeGoals, tasks: liveTasks, checkIns, exemptions, sessions, range, today }),
+    milestones: ms,
+    months,
+    best: bestMonth(months),
     rhythm: focusByHourDow(sessions, range),
+    sessionCount,
   };
 }

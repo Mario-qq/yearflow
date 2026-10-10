@@ -36,7 +36,6 @@ export async function exportGanttPng(scroller: HTMLDivElement): Promise<void> {
    * html-to-image 把节点连同它的计算样式一起塞进 SVG <foreignObject>，`left:-100000px`
    * 在那个坐标系里照样生效 ⇒ 内容被推出画布，只剩背景色。
    * 所以拆成两层：host 负责 fixed 离屏，stage 静态（relative，给 inner 当定位祖先）负责被截。
-   * 同一个坑与修法见 annual/exportLong.ts —— 那边先发现，这边照抄。
    */
   const host = document.createElement('div');
   Object.assign(host.style, {

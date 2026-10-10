@@ -1,113 +1,1333 @@
 /**
- * 年报私有样式：只放「用内联 style 表达不了」的三件事 —— 滚动揭示、
- * reduced-motion 静态直出、打印覆盖。随 /year 的 lazy chunk 一起载入，
- * 主包零增量（规格 §六）。颜色/尺寸一律仍走 tokens.css 与 annual/constants.ts。
+ * 年报样式（随 /year 的 lazy chunk 载入，主包零增量）。
+ * 颜色/字号/圆角一律走 tokens.css；入场动效全部包在 prefers-reduced-motion: no-preference 里，
+ * 减弱动效时没有任何「初始隐藏」状态 —— 内容直出。
+ * 移动端断点 767px 与 lib/useIsMobile.ts 的 QUERY 同值（CSS 读不到 TS 常量，靠注释锁住）。
  */
 
-.annual-beat {
-  opacity: 0;
-  transform: translateY(10px);
+/* ───────────── 页面骨架 ───────────── */
+
+.yr {
+  position: relative;
+  min-height: 100%;
+}
+
+.yr-col {
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-6) 64px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.yr-flow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.yr-panel {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  padding: 40px;
+}
+
+:root[data-theme='dark'] .yr-panel {
+  border-color: var(--border-default);
+}
+
+.yr-dot {
+  display: inline-block;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.yr-axis {
+  font-size: var(--font-11);
+  fill: var(--text-tertiary);
+  color: var(--text-tertiary);
+}
+
+/* ───────────── 控制条 ───────────── */
+
+.yr-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.yr-year-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-16);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.yr-year-step button {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-20);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.yr-year-step button:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.yr-year-step button:disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.yr-seg {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.yr-seg button {
+  padding: 5px var(--space-3);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-13);
+  white-space: nowrap;
+  cursor: pointer;
   transition:
-    opacity 420ms var(--ease),
-    transform 420ms var(--ease);
+    background-color var(--dur-zoom) var(--ease),
+    color var(--dur-zoom) var(--ease);
 }
 
-.annual-beat.is-shown {
-  opacity: 1;
-  transform: none;
+.yr-seg button:hover {
+  color: var(--text-primary);
 }
 
-/* hero 巨号数字。字号在这里而不是内联 style，移动端才能被媒体查询降档 */
-.annual-hero {
+.yr-seg button.is-on {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font-weight: 500;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ───────────── 封面 ───────────── */
+
+.yr-cover {
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+  align-items: center;
+  gap: var(--space-6);
+  min-height: 480px;
+  padding: 48px;
+}
+
+/* 三个目标色晕开的光：每个人的封面颜色都不一样 */
+.yr-cover-glow {
+  position: absolute;
+  inset: -25%;
+  z-index: -1;
+  background:
+    radial-gradient(34% 42% at 22% 22%, color-mix(in srgb, var(--c1) 30%, transparent), transparent 72%),
+    radial-gradient(32% 40% at 82% 34%, color-mix(in srgb, var(--c2) 24%, transparent), transparent 72%),
+    radial-gradient(40% 40% at 52% 86%, color-mix(in srgb, var(--c3) 22%, transparent), transparent 72%);
+}
+
+:root[data-theme='dark'] .yr-cover-glow {
+  opacity: 0.85;
+}
+
+.yr-cover-kicker {
+  font-size: var(--font-12);
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  color: var(--text-secondary);
+}
+
+.yr-cover-year {
+  margin: var(--space-3) 0 var(--space-4) -0.04em;
+  font-size: var(--font-display);
+  font-weight: 800;
+  line-height: 0.92;
+  letter-spacing: -0.055em;
+  /* 年份由文字色流向主色 */
+  background: linear-gradient(115deg, var(--text-primary) 30%, var(--c1) 68%, var(--c2) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.yr-cover-range {
+  margin-left: var(--space-3);
   font-size: var(--font-48);
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  color: var(--text-tertiary);
 }
 
-/*
- * 移动端降级（规格 §5.3：v1 桌面优先，但必须可进可读）。
- * 断点必须与 lib/useIsMobile.ts 的 QUERY 及 annual/constants.ts 的 MOBILE_MAX_W 同值 ——
- * CSS 读不到 TS 常量，三处只能靠注释锁住。
- */
+.yr-cover-sentence {
+  max-width: 28em;
+  font-size: var(--font-20);
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.yr-cover-sentence b {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.yr-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  margin-top: var(--space-8);
+}
+
+.yr-stat + .yr-stat {
+  padding-left: var(--space-8);
+  border-left: 1px solid var(--border-default);
+}
+
+.yr-stat-value {
+  font-size: var(--font-48);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+}
+
+.yr-stat-unit {
+  margin-left: var(--space-1);
+  font-size: var(--font-16);
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-tertiary);
+}
+
+.yr-stat-label {
+  margin-top: var(--space-2);
+  font-size: var(--font-13);
+  color: var(--text-tertiary);
+}
+
+/* 年轮 */
+.yr-ring {
+  position: relative;
+  justify-self: end;
+  width: 100%;
+  max-width: 380px;
+  aspect-ratio: 1;
+}
+
+.yr-ring svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.yr-ring-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.yr-ring-big {
+  font-size: var(--font-48);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+}
+
+.yr-ring-pct {
+  margin-left: 2px;
+  font-size: var(--font-20);
+  color: var(--text-tertiary);
+}
+
+.yr-ring-cap {
+  margin-top: var(--space-2);
+  font-size: var(--font-12);
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+
+.yr-ring-month line {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.yr-ring-month text {
+  font-size: var(--font-11);
+  fill: var(--text-tertiary);
+}
+
+.yr-hit {
+  fill: transparent;
+}
+
+.yr-tick {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
+.yr-tick-off {
+  fill: var(--border-default);
+}
+
+.yr-tick-future {
+  fill: var(--border-subtle);
+}
+
+g:hover > .yr-tick-on {
+  filter: brightness(1.18);
+}
+
+.yr-ring-today circle {
+  fill: var(--accent);
+}
+
+/* ───────────── 节通用 ───────────── */
+
+.yr-sec-head {
+  max-width: 760px;
+  margin-bottom: 28px;
+}
+
+.yr-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  font-size: var(--font-12);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: var(--text-tertiary);
+}
+
+.yr-eyebrow-no {
+  padding: 2px var(--space-2);
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.yr-title {
+  font-size: var(--font-32);
+  font-weight: 600;
+  line-height: 1.32;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  text-wrap: balance;
+}
+
+/* 标题里的关键数字：荧光笔式的底衬 */
+.yr-em {
+  font-weight: 700;
+  padding: 0 0.08em;
+  background: linear-gradient(transparent 60%, color-mix(in srgb, var(--accent) 22%, transparent) 60% 92%, transparent 92%);
+}
+
+.yr-goal-name b {
+  font-weight: 700;
+}
+
+.yr-goal-name .yr-dot {
+  position: relative;
+  top: -0.12em;
+  margin-right: 0.3em;
+  vertical-align: middle;
+}
+
+.yr-sub {
+  margin-top: 10px;
+  font-size: var(--font-16);
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.yr-sub b {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.yr-block {
+  margin-top: 36px;
+}
+
+.yr-block-title {
+  margin-bottom: 14px;
+  font-size: var(--font-13);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.yr-caption {
+  margin-top: var(--space-3);
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+}
+
+.yr-hint {
+  padding: var(--space-5);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-lg);
+  text-align: center;
+  font-size: var(--font-13);
+  color: var(--text-tertiary);
+}
+
+.yr-unit {
+  margin-left: 2px;
+  font-size: var(--font-11);
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+/* ───────────── §01 时间 ───────────── */
+
+.yr-stack {
+  display: flex;
+  gap: 2px;
+  height: 44px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.yr-stack-seg {
+  flex-basis: 0;
+  min-width: 3px;
+}
+
+.yr-stack-seg:hover {
+  filter: brightness(1.12);
+}
+
+.yr-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.yr-tile {
+  padding: var(--space-4) var(--space-4) 14px;
+  border: 1px solid color-mix(in srgb, var(--tile-c) 20%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--tile-c) 6%, var(--bg-panel));
+}
+
+.yr-tile-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-13);
+  color: var(--text-secondary);
+}
+
+.yr-tile-name span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yr-tile-value {
+  margin-top: 10px;
+  font-size: var(--font-32);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.yr-tile-unit {
+  margin-left: var(--space-1);
+  font-size: var(--font-13);
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-tertiary);
+}
+
+.yr-tile-meta {
+  margin-top: 6px;
+  font-size: var(--font-12);
+  color: var(--text-tertiary);
+}
+
+.yr-spark {
+  display: block;
+  width: 100%;
+  height: 28px;
+  margin-top: var(--space-3);
+}
+
+/* ───────────── §02 坚持 ───────────── */
+
+.yr-chart-scroll {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.yr-heat {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.yr-heat-cell {
+  fill: var(--bg-subtle);
+}
+
+.yr-heat-cell.is-future {
+  fill: transparent;
+  stroke: var(--border-subtle);
+  stroke-width: 1;
+}
+
+.yr-span-bracket {
+  fill: none;
+  stroke: var(--text-tertiary);
+  stroke-width: 1;
+}
+
+.yr-span-label {
+  font-size: var(--font-11);
+  fill: var(--text-secondary);
+}
+
+.yr-heat-cell:hover {
+  stroke: var(--text-secondary);
+  stroke-width: 1.5;
+}
+
+.yr-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: var(--space-3);
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+}
+
+.yr-legend-cell {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.yr-runs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.yr-run {
+  display: grid;
+  grid-template-columns: minmax(0, 160px) minmax(0, 1fr) 56px 96px;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--font-13);
+}
+
+.yr-run-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-primary);
+}
+
+.yr-run-name span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yr-run-track {
+  position: relative;
+  height: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.yr-run-seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 4px;
+  border-radius: var(--radius-sm);
+  transform-origin: left;
+}
+
+.yr-run-days {
+  text-align: right;
+  font-size: var(--font-16);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.yr-run-dates {
+  font-size: var(--font-12);
+  color: var(--text-tertiary);
+}
+
+/* ───────────── §03 收获 ───────────── */
+
+.yr-tl {
+  position: relative;
+  height: 56px;
+  margin: 0 var(--space-2) var(--space-2);
+}
+
+.yr-tl-axis {
+  position: absolute;
+  top: 20px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--border-default);
+}
+
+.yr-tl-month {
+  position: absolute;
+  top: 34px;
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+}
+
+.yr-tl-month::before {
+  content: '';
+  position: absolute;
+  top: -12px;
+  left: 0;
+  width: 1px;
+  height: 6px;
+  background: var(--border-strong);
+}
+
+.yr-tl-today {
+  position: absolute;
+  top: 10px;
+  width: 2px;
+  height: 22px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.yr-tl-mark {
+  position: absolute;
+  top: 21px;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--mc);
+  box-shadow: 0 0 0 2px var(--bg-panel);
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.yr-tl-mark.is-overdue {
+  border: 2px solid var(--danger);
+  background: var(--bg-panel);
+}
+
+.yr-tl-mark.is-ahead {
+  border: 2px solid var(--border-strong);
+  background: var(--bg-panel);
+}
+
+.yr-tl-mark:hover {
+  scale: 1.35;
+}
+
+.yr-ms-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--space-4);
+}
+
+.yr-ms {
+  display: grid;
+  grid-template-columns: 44px 12px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font-size: var(--font-13);
+  cursor: pointer;
+}
+
+.yr-ms:hover {
+  background: var(--row-hover);
+}
+
+.yr-ms-date {
+  color: var(--text-tertiary);
+}
+
+.yr-ms-icon {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--mc);
+  transform: rotate(45deg);
+}
+
+.yr-ms-icon.is-overdue {
+  border: 2px solid var(--danger);
+  background: transparent;
+}
+
+.yr-ms-icon.is-ahead {
+  border: 2px solid var(--border-strong);
+  background: transparent;
+}
+
+.yr-ms-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.yr-ms-goal {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-12);
+  white-space: nowrap;
+  color: var(--text-tertiary);
+}
+
+.yr-ms-state {
+  min-width: 64px;
+  text-align: right;
+  font-size: var(--font-12);
+  white-space: nowrap;
+}
+
+.yr-ms-state.is-done {
+  color: var(--success);
+}
+
+.yr-ms-state.is-overdue {
+  color: var(--danger);
+}
+
+.yr-ms-state.is-ahead {
+  color: var(--text-tertiary);
+}
+
+.yr-more {
+  margin-top: var(--space-2);
+  padding: var(--space-1) 10px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: var(--font-12);
+  cursor: pointer;
+}
+
+.yr-outcomes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.yr-outcome {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: var(--space-3) 14px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
+}
+
+.yr-outcome-text {
+  min-width: 0;
+}
+
+.yr-outcome-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-14);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.yr-outcome-state {
+  margin-top: 3px;
+  font-size: var(--font-12);
+}
+
+.yr-outcome-state.is-success {
+  color: var(--success);
+}
+
+.yr-outcome-state.is-accent {
+  color: var(--accent);
+}
+
+.yr-outcome-state.is-warning {
+  color: var(--warning);
+}
+
+.yr-outcome-state.is-muted {
+  color: var(--text-tertiary);
+}
+
+.yr-pring {
+  flex-shrink: 0;
+}
+
+.yr-pring-bg {
+  fill: none;
+  stroke: var(--border-default);
+}
+
+.yr-pring-fg {
+  fill: none;
+  stroke-linecap: round;
+  stroke-dashoffset: var(--off);
+}
+
+.yr-pring-text {
+  font-size: var(--font-12);
+  font-weight: 600;
+  fill: var(--text-primary);
+}
+
+/* ───────────── §04 节律 ───────────── */
+
+.yr-months {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.yr-month {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-1) 0 6px;
+  border-radius: var(--radius-md);
+}
+
+.yr-month:hover {
+  background: var(--row-hover);
+}
+
+.yr-month-plot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.yr-month.is-future .yr-month-plot {
+  border-bottom-style: dashed;
+}
+
+.yr-month-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.yr-month-bar {
+  display: flex;
+  flex-direction: column-reverse;
+  width: 100%;
+  overflow: hidden;
+  transform-origin: bottom;
+}
+
+.yr-month-bar > span {
+  display: block;
+  flex-basis: 0;
+  min-height: 2px;
+}
+
+.yr-month-badge {
+  margin-bottom: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-size: var(--font-11);
+  white-space: nowrap;
+}
+
+.yr-month-label {
+  margin-top: var(--space-2);
+  font-size: var(--font-12);
+  color: var(--text-secondary);
+}
+
+.yr-month.is-best .yr-month-label {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.yr-month-rate {
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+}
+
+.yr-month-star {
+  font-size: var(--font-11);
+  color: var(--warning);
+}
+
+.yr-rhythm {
+  display: grid;
+  grid-template-columns: 24px repeat(24, minmax(0, 1fr));
+  gap: 3px;
+  max-width: 720px;
+}
+
+.yr-rhythm-row {
+  display: contents;
+}
+
+.yr-rhythm-dow {
+  align-self: center;
+}
+
+.yr-rhythm-cell {
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.yr-rhythm-cell:hover {
+  outline: 1.5px solid var(--text-secondary);
+  outline-offset: 1px;
+}
+
+.yr-rhythm-cell.is-peak {
+  outline: 1.5px solid var(--text-primary);
+  outline-offset: 1px;
+}
+
+/* ───────────── 结尾 / 空态 / 提示 ───────────── */
+
+.yr-closing {
+  padding: 56px var(--space-6) var(--space-6);
+  text-align: center;
+}
+
+.yr-closing-year {
+  background: linear-gradient(115deg, var(--c1), var(--c2) 60%, var(--c3));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.yr-closing-line {
+  font-size: var(--font-32);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.yr-closing-sub {
+  margin-top: 10px;
+  font-size: var(--font-16);
+  color: var(--text-tertiary);
+}
+
+.yr-closing-bar {
+  max-width: 360px;
+  height: 4px;
+  margin: 28px auto 0;
+  border-radius: 2px;
+  background: var(--border-subtle);
+  overflow: hidden;
+}
+
+.yr-closing-bar span {
+  display: block;
+  width: var(--elapsed);
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--c1), var(--c2), var(--c3));
+}
+
+.yr-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 72px var(--space-6);
+  text-align: center;
+}
+
+/* 一圈空刻度：年轮的「白纸」版 */
+.yr-empty-ring {
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(var(--border-default) 0 1.2deg, transparent 1.2deg 6deg);
+  -webkit-mask: radial-gradient(circle, transparent 44px, #000 45px 62px, transparent 63px);
+  mask: radial-gradient(circle, transparent 44px, #000 45px 62px, transparent 63px);
+}
+
+.yr-empty-title {
+  margin-top: var(--space-4);
+  font-size: var(--font-20);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.yr-empty-sub {
+  font-size: var(--font-14);
+  color: var(--text-tertiary);
+}
+
+.yr-empty-years {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.yr-empty-years button {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--accent);
+  font-size: var(--font-13);
+  cursor: pointer;
+}
+
+.yr-tip {
+  position: fixed;
+  z-index: 60;
+  max-width: 260px;
+  padding: var(--space-2) 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-secondary);
+  font-size: var(--font-12);
+  line-height: 1.55;
+  white-space: pre-line;
+  pointer-events: none;
+}
+
+.yr-tip::first-line {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ───────────── 入场动效（只在用户没要求减弱动效时） ───────────── */
+
+@media (prefers-reduced-motion: no-preference) {
+  .yr-cover-glow {
+    animation: yr-drift 18s var(--ease) infinite alternate;
+  }
+
+  @keyframes yr-drift {
+    to {
+      transform: translate3d(3%, -2%, 0) scale(1.06);
+    }
+  }
+
+  .yr-cover-text > * {
+    opacity: 0;
+    transform: translateY(12px);
+    transition:
+      opacity 700ms var(--ease),
+      transform 700ms var(--ease);
+  }
+
+  .yr-cover.is-in .yr-cover-text > * {
+    opacity: 1;
+    transform: none;
+  }
+
+  .yr-cover-text > :nth-child(2) {
+    transition-delay: 80ms;
+  }
+
+  .yr-cover-text > :nth-child(3) {
+    transition-delay: 180ms;
+  }
+
+  .yr-cover-text > :nth-child(4) {
+    transition-delay: 280ms;
+  }
+
+  /* 逐个错开的入场：延迟走 --d 变量、且只挂在具体属性的 transition 上。
+     直接写内联 transition-delay 会配上默认的 transition-property: all ——
+     减弱动效时连切换深浅主题的颜色都会被逐格延迟（实测踩到）。 */
+  .yr-tick {
+    transform: scaleY(0);
+    transition: transform 520ms var(--ease);
+    transition-delay: var(--d, 0ms);
+  }
+
+  .is-in .yr-tick {
+    transform: none;
+  }
+
+  .yr-sec {
+    opacity: 0;
+    transform: translateY(16px);
+    transition:
+      opacity 600ms var(--ease),
+      transform 600ms var(--ease);
+  }
+
+  .yr-sec.is-in {
+    opacity: 1;
+    transform: none;
+  }
+
+  .yr-stack {
+    clip-path: inset(0 100% 0 0 round var(--radius-lg));
+    transition: clip-path 1000ms var(--ease) 150ms;
+  }
+
+  .is-in .yr-stack {
+    clip-path: inset(0 0 0 0 round var(--radius-lg));
+  }
+
+  .yr-heat-cell,
+  .yr-rhythm-cell {
+    opacity: 0;
+    transition: opacity 500ms var(--ease);
+    transition-delay: var(--d, 0ms);
+  }
+
+  .is-in .yr-heat-cell,
+  .is-in .yr-rhythm-cell {
+    opacity: 1;
+  }
+
+  .yr-run-seg {
+    transform: scaleX(0);
+    transition: transform 800ms var(--ease) 200ms;
+  }
+
+  .is-in .yr-run-seg {
+    transform: none;
+  }
+
+  .yr-tl-mark {
+    scale: 0;
+    transition: scale 400ms var(--ease);
+    transition-delay: var(--d, 0ms);
+  }
+
+  .is-in .yr-tl-mark {
+    scale: 1;
+  }
+
+  .is-in .yr-tl-mark:hover {
+    scale: 1.35;
+    transition-delay: 0ms;
+  }
+
+  .yr-pring-fg {
+    transition: stroke-dashoffset 1100ms var(--ease) 200ms;
+  }
+
+  .yr-sec:not(.is-in) .yr-pring-fg {
+    stroke-dashoffset: var(--len);
+  }
+
+  .yr-month-bar {
+    transform: scaleY(0);
+    transition: transform 700ms var(--ease);
+    transition-delay: var(--d, 0ms);
+  }
+
+  .is-in .yr-month-bar {
+    transform: none;
+  }
+
+  .yr-closing-bar span {
+    transition: width 1400ms var(--ease) 200ms;
+  }
+
+  .yr-closing:not(.is-in) .yr-closing-bar span {
+    width: 0;
+  }
+}
+
+/* ───────────── 移动端（与 useIsMobile 同为 767px） ───────────── */
+
 @media (max-width: 767px) {
-  .annual-hero {
+  .yr-col {
+    padding: var(--space-4) var(--space-4) 48px;
+    gap: 14px;
+  }
+
+  .yr-flow {
+    gap: 14px;
+  }
+
+  .yr-panel {
+    padding: var(--space-6) var(--space-5);
+    border-radius: var(--radius-lg);
+  }
+
+  .yr-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .yr-cover {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+    padding: 28px var(--space-5);
+  }
+
+  .yr-ring {
+    justify-self: center;
+    max-width: 320px;
+  }
+
+  .yr-cover-range {
     font-size: var(--font-32);
   }
 
-  /* 横滚的图给一点惯性，避免在 iOS 上顿挫 */
-  .annual-chart-scroll {
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
+  .yr-cover-sentence {
+    font-size: var(--font-16);
   }
-}
 
-/* 规格 §4.3：reduced-motion 下静态直出，不做淡入也不做位移 */
-@media (prefers-reduced-motion: reduce) {
-  .annual-beat,
-  .annual-beat.is-shown {
-    opacity: 1;
-    transform: none;
-    transition: none;
+  .yr-stats {
+    gap: var(--space-5);
+    margin-top: var(--space-6);
   }
-}
 
-/*
- * 打印（规格 §4.5）。作用域全部挂在 body.annual-page 上 —— 这份 CSS 随 /year 的
- * lazy chunk 载入后就常驻在文档里，不加作用域的话，用户看过年报再去打印甘特图，
- * 顶栏会被这里的规则一起隐藏。类名由 YearReportPage 挂载时加、卸载时摘。
- *
- * 深色主题强制转浅：见 YearReportPage 的 beforeprint —— 用临时改 data-theme 实现，
- * 而不是在这里把整套令牌抄一遍浅色值（抄一遍就是第二处真相来源）。
- */
-/* 屏幕上不存在；只在纸上顶替被隐藏的顶部条 */
-.annual-print-title {
-  display: none;
-}
+  .yr-stat + .yr-stat {
+    padding-left: var(--space-5);
+  }
 
-@media print {
-  .annual-print-title {
-    display: block;
+  .yr-stat-value {
+    font-size: var(--font-32);
+  }
+
+  .yr-title {
+    font-size: var(--font-24);
+  }
+
+  .yr-sub {
     font-size: var(--font-14);
-    font-weight: 600;
   }
 
-  /* 没滚到的 beat 若停在 opacity 0，打印出来就是整块空白 */
-  .annual-beat,
-  .annual-beat.is-shown {
-    opacity: 1 !important;
-    transform: none !important;
+  .yr-sec-head {
+    margin-bottom: var(--space-5);
   }
 
-  /* 纸上没有「横向滚动」这回事：窄窗口打印时把滚动容器解开，否则图被裁掉右半 */
-  .annual-chart-scroll {
-    overflow: visible !important;
+  .yr-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
   }
 
-  /* 一个 beat 不许被切到两页 */
-  .annual-beat {
-    break-inside: avoid;
-    page-break-inside: avoid;
-    box-shadow: none !important;
+  .yr-tile-value {
+    font-size: var(--font-24);
   }
 
-  /* 顶栏 / 导航 / 页内按钮：纸上点不了，全部去掉 */
-  body.annual-page > div > header,
-  body.annual-page nav,
-  body.annual-page [data-annual-noprint] {
-    display: none !important;
+  .yr-heat {
+    min-width: 640px;
   }
 
-  /* App 是 h-full + overflow-auto 的三层壳，不解开就只能印出一屏 */
-  body.annual-page,
-  body.annual-page > div,
-  body.annual-page main {
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-    display: block !important;
+  .yr-rhythm {
+    gap: 2px;
   }
 
-  /* 图表与目标色是这页的信息本身，不是装饰，必须印出来 */
-  body.annual-page main {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+  .yr-rhythm-cell {
+    border-radius: 2px;
+  }
+
+  .yr-run {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 6px;
+  }
+
+  .yr-run-track {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+
+  .yr-run-dates {
+    display: none;
+  }
+
+  .yr-tl-month.is-minor {
+    display: none;
+  }
+
+  .yr-ms {
+    grid-template-columns: 40px 12px minmax(0, 1fr) auto;
+  }
+
+  .yr-ms-goal {
+    display: none;
+  }
+
+  .yr-months {
+    gap: 2px;
+  }
+
+  .yr-month-label {
+    font-size: var(--font-11);
+  }
+
+  .yr-month-badge {
+    display: none;
+  }
+
+  .yr-month.is-best .yr-month-label {
+    color: var(--accent);
+  }
+
+  .yr-closing-line {
+    font-size: var(--font-24);
   }
 }
