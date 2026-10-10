@@ -1,0 +1,21 @@
+[
+ {"id":"gantt-timeline","name":"时间轴与缩放","layer":"plan","order":10,"summary":"四档缩放、表头、今日线天天在用，坐标纯函数有单测；手机端「只读」漏了里程碑和依赖线，误触会改计划"},
+ {"id":"gantt-bars","name":"任务条与依赖","layer":"plan","order":11,"summary":"拖拽只改 transform、结构健康；拖动改期、拖出新任务、基线都只在自动化里验过"},
+ {"id":"gantt-grid","name":"左侧任务表与详情","layer":"plan","order":12,"summary":"功能全，但 LeftGrid 1005 行、两套重复的拖动排序，继续往上加会越来越慢，值得拆"},
+ {"id":"gantt-ops","name":"批量操作与效率工具","layer":"plan","order":13,"summary":"右键菜单、筛选在用；命令面板/快捷键/PNG 导出没在桌面版试过，顶栏有个英文按钮"},
+ {"id":"checkin","name":"每日打卡","layer":"exec","order":20,"summary":"今日打卡、任务级打卡在用，计算有单测；打卡编辑界面在打卡页和甘特气泡里各写了一份"},
+ {"id":"track","name":"执行轨道","layer":"exec","order":21,"summary":"长期项目收成一行，因你的真实数据而做、在用；纯函数 + 16 个单测，健康"},
+ {"id":"pomodoro","name":"番茄钟专注","layer":"exec","order":22,"summary":"计时、选任务、自动计入打卡在用；到点提醒和自动休息还没你亲测闭环，计时内核没有单测"},
+ {"id":"pip","name":"悬浮小窗","layer":"exec","order":23,"summary":"桌面原生小窗在用、修过多轮；小窗逻辑和主窗混在 electron/main.cts 一个文件里，贴边药丸改过三次仍该重整"},
+ {"id":"review","name":"月度复盘与年度总览","layer":"reflect","order":30,"summary":"都只在自动化里验过；复盘笔记离开页面前 0.8 秒内打的字会丢（已确认）"},
+ {"id":"yearreport","name":"年度报告","layer":"reflect","order":31,"summary":"结构健康、40 个单测；年底才真正用到，长图导出在桌面版没试过"},
+ {"id":"desktop","name":"桌面版","layer":"platform","order":40,"summary":"快捷方式启动、单实例在用；网页构建和桌面构建共用 dist/，跑错命令桌面版就坏"},
+ {"id":"mobile","name":"手机网页","layer":"platform","order":41,"summary":"github.io 手机能用、默认落打卡页；离线与新版生效、添加到主屏没验过；Vercel 部署可以砍"},
+ {"id":"sync","name":"云同步与登录","layer":"platform","order":42,"summary":"登录与自动同步在用、合并有单测；顶栏状态点、冲突处理只在自动化里验过"},
+ {"id":"harmony","name":"鸿蒙桌面卡片","layer":"platform","order":43,"summary":"代码写了、没编译装机、没提交；排期规则在数据库里复刻了一份，以后改规则容易漏"},
+ {"id":"settings","name":"设置、主题与备份","layer":"base","order":50,"summary":"能用；导入备份、载入示例、清空数据会同步删除到所有设备，确认框没说清楚"},
+ {"id":"data","name":"本地数据","layer":"base","order":51,"summary":"软删除、自动保存结构干净；关窗前不强制落盘，最后 0.5 秒的改动可能丢"},
+ {"id":"store","name":"撤销重做与编辑入口","layer":"base","order":52,"summary":"撤销模型优雅；actions.ts 766 行横跨 8 个领域、级联删除三份、零单测；撤销可能盖掉别的设备刚改的内容"},
+ {"id":"derive","name":"派生计算","layer":"base","order":53,"summary":"最健康的一层：纯函数、单测密，口径全站一致"},
+ {"id":"eng","name":"工程与发布","layer":"base","order":54,"summary":"225 个测试、类型检查、lint 全绿；自动发布前不跑测试，也没有自动备份"}
+]
