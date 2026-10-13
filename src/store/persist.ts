@@ -6,6 +6,7 @@ import {
   goalRepo,
   milestoneRepo,
   reviewRepo,
+  screenTimeRepo,
   settingsRepo,
   taskRepo,
 } from '../db/repos';
@@ -22,6 +23,7 @@ export const repoByTable: Record<TableName, BaseRepo<SyncableEntity>> = {
   exemptions: exemptionRepo as BaseRepo<SyncableEntity>,
   reviews: reviewRepo as BaseRepo<SyncableEntity>,
   focusSessions: focusRepo as BaseRepo<SyncableEntity>,
+  screenTimeDays: screenTimeRepo as BaseRepo<SyncableEntity>,
 };
 
 const PERSIST_DEBOUNCE_MS = 500; // SPEC：所有变更自动保存（防抖 500ms）

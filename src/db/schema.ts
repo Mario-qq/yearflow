@@ -7,6 +7,7 @@ import type {
   Goal,
   Milestone,
   MonthlyReview,
+  ScreenTimeDay,
   Task,
 } from '../types/domain';
 
@@ -24,6 +25,7 @@ export class YearFlowDB extends Dexie {
   exemptions!: Table<ExemptionPeriod, string>;
   reviews!: Table<MonthlyReview, string>;
   focusSessions!: Table<FocusSession, string>;
+  screenTimeDays!: Table<ScreenTimeDay, string>;
   settings!: Table<SettingsRow, string>;
 
   constructor(name = 'yearflow') {
@@ -47,6 +49,10 @@ export class YearFlowDB extends Dexie {
      */
     this.version(2).stores({
       focusSessions: 'id, goalId, taskId, date, updatedAt, [goalId+date]',
+    });
+    /** v3：屏幕时间原始数据（一天一行，id = date）。updatedAt 索引是同步推送的硬依赖 */
+    this.version(3).stores({
+      screenTimeDays: 'id, date, updatedAt',
     });
   }
 }

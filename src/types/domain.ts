@@ -53,6 +53,11 @@ export interface Task {
    * 反向存储（缺省 = 参与）⇒ 老数据零迁移。只影响选择器的默认可见性，不影响任何统计口径。
    */
   noFocus?: boolean;
+  /**
+   * 屏幕时间关联：手机上这些应用的前台时长自动折算成本任务的打卡（scripts/screentime 采集，
+   * 规则见 derive/screenTime.ts）。缺省 = 不关联 ⇒ 老数据零迁移。
+   */
+  screenTime?: ScreenTimeRule;
   dependsOn?: string[]; // 轻量依赖（仅可视化连线与冲突提示，不做自动重排）
   baseline?: { startDate: string; endDate: string }; // 基线快照（原计划）
   updatedAt: string;
@@ -70,6 +75,31 @@ export interface Milestone {
   deletedAt?: string;
 }
 
+/**
+ * 屏幕时间规则：
+ * reach = 累计型（学习类）：关联应用合计 ≥ minutes 记「完成」，>0 不足记「做了一点」，0 不记
+ * cap   = 上限型（娱乐类）：合计 ≤ minutes 记「完成」，超出不记（当天按缺卡显示）。
+ *         上限型的时长只写进备注、不写 CheckIn.minutes —— minutes 会被统计成「投入时间」
+ */
+export interface ScreenTimeRule {
+  apps: string[]; // 鸿蒙包名，如 yylx.danmaku.bili
+  mode: 'reach' | 'cap';
+  minutes: number; // reach = 目标分钟；cap = 上限分钟
+}
+
+/**
+ * 一天的手机应用前台时长（原始数据，电脑端 scripts/screentime 经 hdc 读系统事件日志算出）。
+ * id = date，一天一行；重采同一天整行覆盖。规则改了可按它重算历史打卡。
+ */
+export interface ScreenTimeDay {
+  id: string; // = date
+  date: string; // YYYY-MM-DD
+  apps: Record<string, number>; // 包名 → 前台分钟（一位小数）
+  collectedAt: string; // ISO，采集时刻
+  updatedAt: string;
+  deletedAt?: string;
+}
+
 export type CheckInStatus = 'done' | 'partial' | 'skipped';
 
 /** 每日打卡记录 */
@@ -81,6 +111,8 @@ export interface CheckIn {
   status: CheckInStatus; // 完成 / 做了一点 / 有意跳过
   minutes?: number;
   note?: string;
+  /** 'screentime' = 屏幕时间自动打卡写入（重采时可被覆盖）；缺省 = 手动/卡片，自动打卡不改它的状态 */
+  source?: 'screentime';
   createdAt: string;
   updatedAt: string;
   deletedAt?: string;

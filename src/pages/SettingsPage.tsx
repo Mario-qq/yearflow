@@ -20,6 +20,7 @@ const TABLE_LABEL: Record<TableName, string> = {
   exemptions: '免打卡区间',
   reviews: '月度复盘',
   focusSessions: '专注会话',
+  screenTimeDays: '屏幕时间',
 };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -108,6 +109,7 @@ export default function SettingsPage() {
       exemptions: [],
       reviews: [],
       focusSessions: [],
+      screenTimeDays: [],
     });
     say('已清空全部数据');
   };

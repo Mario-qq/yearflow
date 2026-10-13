@@ -7,6 +7,7 @@ import {
   goalRepo,
   milestoneRepo,
   reviewRepo,
+  screenTimeRepo,
   settingsRepo,
   taskRepo,
 } from '../db/repos';
@@ -39,6 +40,7 @@ function emptyMaps(): EntityMaps {
     exemptions: {},
     reviews: {},
     focusSessions: {},
+    screenTimeDays: {},
   };
 }
 
@@ -93,7 +95,7 @@ export const useStore = create<StoreState>()((set, get) => ({
   hydrate: async () => {
     // ⚠️ 加表时这里有三处要一起改：import、Promise.all 数组项、下面 set() 的键。
     // set() 缺键不会编译报错（Partial 语义），后果是「表存在但内存永远为空」。
-    const [goals, tasks, milestones, checkIns, exemptions, reviews, focusSessions, settings] =
+    const [goals, tasks, milestones, checkIns, exemptions, reviews, focusSessions, screenTimeDays, settings] =
       await Promise.all([
         goalRepo.getAllActive(),
         taskRepo.getAllActive(),
@@ -102,6 +104,7 @@ export const useStore = create<StoreState>()((set, get) => ({
         exemptionRepo.getAllActive(),
         reviewRepo.getAllActive(),
         focusRepo.getAllActive(),
+        screenTimeRepo.getAllActive(),
         settingsRepo.get(),
       ]);
     set({
@@ -112,6 +115,7 @@ export const useStore = create<StoreState>()((set, get) => ({
       exemptions: toMap(exemptions),
       reviews: toMap(reviews),
       focusSessions: toMap(focusSessions),
+      screenTimeDays: toMap(screenTimeDays),
       settings,
       hydrated: true,
     });

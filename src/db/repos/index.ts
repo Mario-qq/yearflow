@@ -8,6 +8,7 @@ import type {
   Goal,
   Milestone,
   MonthlyReview,
+  ScreenTimeDay,
   Task,
 } from '../../types/domain';
 import { DEFAULT_SETTINGS } from '../../store/defaults';
@@ -49,6 +50,7 @@ export const checkInRepo = new CheckInRepo(db.checkIns);
 export const exemptionRepo = new BaseRepo<ExemptionPeriod>(db.exemptions);
 export const reviewRepo = new BaseRepo<MonthlyReview>(db.reviews);
 export const focusRepo = new BaseRepo<FocusSession>(db.focusSessions);
+export const screenTimeRepo = new BaseRepo<ScreenTimeDay>(db.screenTimeDays);
 export const settingsRepo = new SettingsRepo();
 
 /** 清空全库（JSON 导入重建 / 清空示例数据） */
@@ -61,5 +63,6 @@ export async function clearAllData(): Promise<void> {
     db.exemptions.clear(),
     db.reviews.clear(),
     db.focusSessions.clear(),
+    db.screenTimeDays.clear(),
   ]);
 }

@@ -897,3 +897,16 @@ Document PiP 与主页面**同一个 JS realm**，所以旧实现是 `createPort
 **新令牌**：`--radius-xl`、`--font-24`、`--font-display`（均标注唯一用途）。
 
 **验收**：`tsc -b` + `oxlint` 干净；vitest **220 全绿**（annual 35 条）；`capture-annual.mjs` 18 条断言全过（四节齐全、年轮刻度 = 区间天数、Q2 联动、悬浮提示、空态、换主题即时、手机无横向溢出且热力图停在最近几周、正常动效下四节全部入场）；`perf-annual.mjs` 生产构建 + 压力数据：`/year` 首屏中位 **321ms**、区间切换 **73ms**、甘特首屏 310ms。年报代码全部落在 lazy chunk（`YearReportPage` 36.7kB / gzip 12.8kB）。截图 `docs/screenshots/annual/`：桌面深浅各 6 块、手机深浅各 6 块、Q2 封面、悬浮提示、空态，已逐张过目。
+
+## 屏幕时间自动打卡（2026-10-13，待云端建表 + 无线调试实测）
+
+负责人要求：手机（Mate 80）应用使用时长关联到打卡，可自选每个任务关联哪些应用，**全自动、工作日 9:00 确认前一天**，用无线调试。规格见 SPEC §5.1。
+
+**路径排查**（证据都在本机 SDK `PermissionDefinitions.json` 与声明文件）：`usageStatistics` 公共 SDK 是空命名空间、`BUNDLE_ACTIVE_INFO` 仅系统应用；`ACCESSIBILITY_EXTENSION_ABILITY`、`CAPTURE_SCREEN` 同为系统级；`RUNNING_STATE_OBSERVER` 仅企业应用；屏幕时间守护服务只能限制应用、没有读时长接口。`hidumper -s 1907` 在商用版对 shell 不输出。**能走的**：`hdc shell hisysevent -l -o AAFWK -n ABILITY_ONFOREGROUND/ONBACKGROUND` 可按时间窗查历史，配对即得前台时长。对照 2026-10-12 全天：王者荣耀 146.8 分 vs 系统 2 时 26 分、哔哩哔哩 144.3 vs 2 时 24 分。
+
+**实现**：`ScreenTimeDay` 新表（Dexie v3 + 同步 + 备份 zod）；`Task.screenTime` 规则、`CheckIn.source`；纯函数 `computeAppMinutes`（ability 级配对、同应用并集、日界裁剪、缺后台事件止于下一个其它应用前台）+ `planScreenTimeCheckIns`（不改手动卡、墓碑不写回、重采幂等），vitest 12 条；任务抽屉「屏幕时间」区（`ScreenTimeSection.tsx`，候选=近 14 天非系统应用按时长排序）；采集脚本 `npm run screentime -- login|connect|run|show`，凭据/进度在 `%APPDATA%/YearFlow/screentime/`；计划任务 `npm run screentime:install`（wscript 静默启动）。
+
+**上线顺序**：⚠️ 必须先在 Supabase 执行 `0004_screen_time.sql` 再部署前端，否则所有表的同步都会因拉取 `screen_time_days` 报错而停摆。
+
+**验收（已做）**：`tsc -b` + `oxlint` 干净，vitest 232 全绿；`capture-screentime.mjs` 隔离浏览器深浅主题截图 + 规则写入断言 + 系统组件不入候选断言。**待做**：负责人执行 0004 并登录采集脚本后跑一次真实 `run`；手机连 Wi-Fi 后实测无线调试；连跑两个工作日与系统统计对数。
+

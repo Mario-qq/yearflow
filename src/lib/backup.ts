@@ -43,6 +43,9 @@ const taskSchema = z.object({
   order: z.number(),
   trackId: z.string().optional(),
   noFocus: z.boolean().optional(),
+  screenTime: z
+    .object({ apps: z.array(z.string()), mode: z.enum(['reach', 'cap']), minutes: z.number().min(0) })
+    .optional(),
   dependsOn: z.array(z.string()).optional(),
   baseline: z.object({ startDate: dateStr, endDate: dateStr }).optional(),
   updatedAt: z.string(),
@@ -67,7 +70,17 @@ const checkInSchema = z.object({
   status: z.enum(['done', 'partial', 'skipped']),
   minutes: z.number().optional(),
   note: z.string().optional(),
+  source: z.literal('screentime').optional(),
   createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().optional(),
+});
+
+const screenTimeDaySchema = z.object({
+  id: z.string().min(1),
+  date: dateStr,
+  apps: z.record(z.string(), z.number()),
+  collectedAt: z.string(),
   updatedAt: z.string(),
   deletedAt: z.string().optional(),
 });
@@ -178,6 +191,7 @@ const backupSchema = z.object({
     reviews: z.array(reviewSchema),
     // 番茄钟新增：老备份没有这个键，缺省补空数组（否则老备份导入直接校验失败）
     focusSessions: z.array(focusSessionSchema).default([]),
+    screenTimeDays: z.array(screenTimeDaySchema).default([]),
   }),
   settings: settingsSchema.optional(),
 });

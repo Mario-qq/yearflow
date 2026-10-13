@@ -5,10 +5,11 @@ import type {
   Goal,
   Milestone,
   MonthlyReview,
+  ScreenTimeDay,
   Task,
 } from '../types/domain';
 
-/** 七张实体表（settings 单独处理，不进 undo 栈） */
+/** 八张实体表（settings 单独处理，不进 undo 栈） */
 export interface EntityOf {
   goals: Goal;
   tasks: Task;
@@ -17,6 +18,7 @@ export interface EntityOf {
   exemptions: ExemptionPeriod;
   reviews: MonthlyReview;
   focusSessions: FocusSession;
+  screenTimeDays: ScreenTimeDay;
 }
 
 export type TableName = keyof EntityOf;
@@ -33,6 +35,7 @@ export const TABLE_NAMES: TableName[] = [
   'exemptions',
   'reviews',
   'focusSessions',
+  'screenTimeDays',
 ];
 
 /**
@@ -60,6 +63,7 @@ export interface EntityMaps {
   exemptions: Record<string, ExemptionPeriod>;
   reviews: Record<string, MonthlyReview>;
   focusSessions: Record<string, FocusSession>;
+  screenTimeDays: Record<string, ScreenTimeDay>;
 }
 
 /** 全库数据包（导出/导入/种子载入用） */
@@ -71,6 +75,7 @@ export interface DataBundle {
   exemptions: ExemptionPeriod[];
   reviews: MonthlyReview[];
   focusSessions: FocusSession[];
+  screenTimeDays: ScreenTimeDay[];
 }
 
 /** 把 Change 反转（undo 用）：新建↔删除、更新↔回滚 */

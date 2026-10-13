@@ -10,6 +10,7 @@ import { STATUS_LABEL, STATUS_ORDER } from './taskStatus';
 import { goalColor } from '../lib/colors';
 import { baselineDrift } from '../lib/derive';
 import { useGanttUi } from './uiStore';
+import { ScreenTimeSection } from './ScreenTimeSection';
 
 const DRAWER_W = 380;
 const WEEKDAY_ZH = ['日', '一', '二', '三', '四', '五', '六'];
@@ -338,6 +339,11 @@ export function TaskDrawer() {
             </span>
             不需要专注计时（番茄钟选择器里默认不列出）
           </button>
+        </div>
+
+        <div>
+          <Label>屏幕时间</Label>
+          <ScreenTimeSection task={task} field={field} />
         </div>
 
         <div>

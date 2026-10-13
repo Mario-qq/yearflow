@@ -29,6 +29,7 @@ const REMOTE_TABLE: Record<TableName, string> = {
   exemptions: 'exemptions',
   reviews: 'reviews',
   focusSessions: 'focus_sessions', // 需先在 Supabase 执行 0002_focus_sessions.sql
+  screenTimeDays: 'screen_time_days', // 需先执行 0004_screen_time.sql
 };
 
 /** 同步引擎直接读写 Dexie 原始表（属数据层；不得经 repo，repo 会重盖 updatedAt） */

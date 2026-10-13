@@ -18,7 +18,9 @@
     "desktop:shortcut": "powershell -ExecutionPolicy Bypass -File scripts/make-shortcut.ps1",
     "desktop:e2e": "node scripts/desktop-e2e.mjs",
     "desktop:smoke": "node scripts/desktop-smoke.mjs",
-    "electron:spike": "electron electron/spike/main.cjs"
+    "electron:spike": "electron electron/spike/main.cjs",
+    "screentime": "tsx scripts/screentime/collect.ts",
+    "screentime:install": "powershell -ExecutionPolicy Bypass -File scripts/screentime/install-task.ps1"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.7",
@@ -46,6 +48,7 @@
     "oxlint": "^1.71.0",
     "playwright": "^1.61.1",
     "tailwindcss": "^4.3.2",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
     "vite-plugin-pwa": "^1.3.0",
