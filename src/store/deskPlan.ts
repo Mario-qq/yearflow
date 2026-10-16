@@ -49,6 +49,38 @@ export function planPatchItems(s: DeskState, ids: string[], patch: Partial<WorkI
   return out;
 }
 
+/**
+ * 编辑一件事项（编辑卡「保存」）：一次改多个字段 = 一条撤销记录。
+ * - 改成待办 ⇒ 去掉对象与告知/下发；改成跟进却没写对象 ⇒ 仍按待办存（跟进 = 带对象的待办）。
+ * - 改排期日走挪动的口径（derive/desk.moveItem）：往后挪 deferCount + 1，往前/进待处理不加。
+ * - patch 里显式给 undefined = 删掉这个字段（清除截止日、目标、备注）。
+ * 没有任何变化 ⇒ 空数组（不进撤销栈）。
+ */
+export function planEditItem(s: DeskState, id: string, patch: Partial<WorkItem>, stamp: string): Change[] {
+  const before = s.workItems[id];
+  if (!before) return [];
+  let after: WorkItem = { ...before, ...patch };
+  for (const [k, v] of Object.entries(patch)) if (v === undefined) delete (after as unknown as Record<string, unknown>)[k];
+  if ('date' in patch && patch.date !== before.date) {
+    const moved = moveItem(before, patch.date ?? null, stamp).item;
+    after = { ...after, deferCount: moved.deferCount };
+    if (moved.deferCount === undefined) delete after.deferCount;
+  }
+  if (after.kind === 'followup' && !after.person?.trim()) after.kind = 'todo';
+  if (after.kind === 'todo') {
+    delete after.person;
+    delete after.mode;
+  } else {
+    after.person = after.person!.trim();
+    after.mode = after.mode ?? 'inform';
+  }
+  after.title = after.title.trim() || before.title;
+  const changed = (Object.keys({ ...before, ...after }) as (keyof WorkItem)[]).some((k) => k !== 'updatedAt' && before[k] !== after[k]);
+  if (!changed) return [];
+  after.updatedAt = stamp;
+  return [{ table: 'workItems', type: 'put', before, after }];
+}
+
 /** 某人的未完成跟进全部标为已说（人物卡「全部标为已说」） */
 export function planMarkPersonSaid(s: DeskState, person: string, stamp: string): Change[] {
   const ids = Object.values(s.workItems)
@@ -164,7 +196,11 @@ export function planDeleteRoutine(s: DeskState, id: string): Change[] {
 
 export function planPatchRoutine(s: DeskState, id: string, patch: Partial<Routine>, stamp: string): Change[] {
   const before = s.routines[id];
-  return before ? [{ table: 'routines', type: 'put', before, after: { ...before, ...patch, updatedAt: stamp } }] : [];
+  if (!before) return [];
+  const after: Routine = { ...before, ...patch, updatedAt: stamp };
+  // 显式 undefined = 删掉这个字段（清除时间、备注、恢复暂停）
+  for (const [k, v] of Object.entries(patch)) if (v === undefined) delete (after as unknown as Record<string, unknown>)[k];
+  return [{ table: 'routines', type: 'put', before, after }];
 }
 
 /** 标为休息日 / 补班日；type = null 清除标记 */

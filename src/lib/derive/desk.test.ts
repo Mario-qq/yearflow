@@ -17,6 +17,7 @@ import {
   routineLogId,
   routineOccurrencesOn,
   ruleHits,
+  ruleLabel,
 } from './desk';
 
 /* 2026-10 日历参考：10-01 周四；10-12 周一 … 10-16 周五（今天）10-17 周六 10-18 周日；10-30 周五 10-31 周六 */
@@ -267,5 +268,29 @@ describe('日卡计数', () => {
     const idx = indexItemsByDate([item('a'), item('b', { date: TODAY, deletedAt: T0 }), item('c', { date: TODAY })]);
     expect([...idx.keys()]).toEqual([TODAY]);
     expect(idx.get(TODAY)!.map((i) => i.id)).toEqual(['c']);
+  });
+});
+
+describe('ruleLabel 规则的中文说法', () => {
+  it('五种规则', () => {
+    expect(ruleLabel({ type: 'daily' })).toBe('每天');
+    expect(ruleLabel({ type: 'workday' })).toBe('每个工作日');
+    expect(ruleLabel({ type: 'weekly', daysOfWeek: [0, 3, 1] })).toBe('每周一、三、日');
+    expect(ruleLabel({ type: 'weekly', daysOfWeek: [0, 1, 2, 3, 4, 5, 6] })).toBe('每天');
+    expect(ruleLabel({ type: 'monthlyDay', monthDay: 5 })).toBe('每月 5 号');
+    expect(ruleLabel({ type: 'monthlyDay', monthDay: -1 })).toBe('每月最后一天');
+    expect(ruleLabel({ type: 'monthlyNth', nth: 2, weekday: 3 })).toBe('每月第 2 个周三');
+    expect(ruleLabel({ type: 'monthlyNth', nth: -1, weekday: 5 })).toBe('每月最后一个周五');
+  });
+});
+
+describe('不做了', () => {
+  it('单列在 dropped，不进完成也不进未完成，不计数', () => {
+    const items = [item('a', { date: TODAY, status: 'dropped' }), item('b', { date: TODAY, status: 'done' }), item('c', { date: TODAY })];
+    const d = itemsOnDay(items, TODAY, TODAY);
+    expect(d.dropped.map((i) => i.id)).toEqual(['a']);
+    expect(d.done.map((i) => i.id)).toEqual(['b']);
+    expect(d.open.map((i) => i.id)).toEqual(['c']);
+    expect(dayCount(TODAY, TODAY, d, [])).toEqual({ done: 1, total: 2 });
   });
 });

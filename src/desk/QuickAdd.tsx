@@ -9,7 +9,7 @@ import { useStore } from '../store/useStore';
 import { md, relDay, toastUndo } from './format';
 import { useDeskUi } from './uiStore';
 
-const SYNTAX_HINT = '新建（N）\n!! 紧急 · ! 尽快 · @人 · 今天/周三/下周一/10.20 · 截止周五 · #目标 · 每周三/工作日/每月5号 · ~生活 · 待处理';
+const SYNTAX_HINT = '新建（N）\n!! 紧急 · ! 尽快 · @人 · 今天/周三/下周一/10.20 · 截止周五 · #目标 · 每周三/工作日/每月5号（可带 9:00）· ~生活 · 待处理';
 
 export function QuickAdd({ today }: { today: string }) {
   const open = useDeskUi((s) => s.quickAdd);
@@ -47,6 +47,7 @@ export function QuickAdd({ today }: { today: string }) {
     if (parsed.person) chips.push(<span key="p" className="dk-chip">@{parsed.person}</span>);
     if (parsed.urgency !== 'normal') chips.push(<span key="u" className={`dk-chip ${parsed.urgency === 'urgent' ? 'u2' : 'u1'}`}>{parsed.urgency === 'urgent' ? '紧急' : '尽快'}</span>);
     if (parsed.kind !== 'routine') chips.push(<span key="d" className="dk-chip">{parsed.date ? `${relDay(parsed.date, today)} ${md(parsed.date)}` : '待处理'}</span>);
+    if (parsed.time) chips.push(<span key="tm" className="dk-chip tnum">{parsed.time}</span>);
     if (parsed.dueDate) chips.push(<span key="due" className="dk-chip">截止 {md(parsed.dueDate)}</span>);
     if (parsed.goalId) chips.push(<span key="g" className="dk-chip">#{goals[parsed.goalId]?.name}</span>);
     if (parsed.unknownGoal) chips.push(<span key="ug" className="dk-chip warn">没有叫「{parsed.unknownGoal}」的目标</span>);

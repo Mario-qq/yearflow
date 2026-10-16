@@ -618,6 +618,193 @@
   background: var(--accent-soft);
 }
 
+/* ── 学习卡（DESK_SPEC §五）── */
+.dk-study {
+  margin: 2px 2px 6px;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  position: relative;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--c) 12%, var(--bg-panel)), var(--bg-panel) 70%);
+  border: 1px solid color-mix(in srgb, var(--c) 35%, transparent);
+}
+/* 没学之前：描边轻呼吸（第 3 层「首屏醒目」）；减弱动效时由底部的总开关关掉 */
+.dk-study:not(.running)::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: dk-breathe 2.8s var(--ease) infinite alternate;
+}
+@keyframes dk-breathe {
+  from {
+    box-shadow: inset 0 0 0 0 transparent;
+  }
+  to {
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c) 22%, transparent);
+  }
+}
+.dk-st-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+  min-width: 0;
+}
+.dk-st-top > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dk-st-link {
+  font-size: var(--font-11);
+  color: var(--accent);
+  padding: 0;
+}
+.dk-st-link:hover {
+  text-decoration: underline;
+}
+.dk-st-gear {
+  font-size: var(--font-12);
+  color: var(--text-tertiary);
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+}
+.dk-st-gear:hover {
+  color: var(--text-primary);
+  background: var(--row-hover);
+}
+.dk-st-what {
+  font-size: var(--font-16);
+  font-weight: 650;
+  margin: 4px 0 2px;
+  line-height: 1.35;
+}
+.dk-st-why {
+  font-size: var(--font-12);
+  color: var(--text-secondary);
+}
+.dk-st-why b {
+  color: var(--warning);
+  font-weight: 600;
+}
+.dk-st-acts {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.dk-study .dk-btn.primary {
+  background: var(--c);
+  border-color: var(--c);
+}
+.dk-st-timer {
+  font-size: var(--font-32);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  margin: 2px 0;
+}
+/* 学过了 / 今天没排 / 还没设置：收成一行 */
+.dk-st-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: var(--dk-row-h);
+  padding: 0 8px;
+  margin-bottom: 2px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-12);
+  color: var(--text-secondary);
+  text-align: left;
+}
+.dk-st-line:hover {
+  background: var(--row-hover);
+}
+.dk-st-line:hover .dk-play {
+  opacity: 1;
+}
+.dk-st-line.setup {
+  color: var(--text-tertiary);
+  border: 1px dashed var(--border-default);
+  margin: 2px 2px 6px;
+  width: calc(100% - 4px);
+}
+.dk-st-line.setup:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.dk-st-sub {
+  color: var(--text-tertiary);
+}
+/* 一行里只有正文可以收缩（省略号），图标、按钮、点阵不许被挤成竖排 */
+.dk-st-line > * {
+  flex-shrink: 0;
+}
+.dk-st-line > .dk-st-txt {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dk-st-ic {
+  width: 15px;
+  text-align: center;
+  color: var(--text-tertiary);
+}
+.dk-st-ok {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--success);
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+.dk-st-ok::after {
+  content: '';
+  width: 6px;
+  height: 3px;
+  border: 1.6px solid #fff;
+  border-top: 0;
+  border-right: 0;
+  transform: rotate(-45deg) translate(0, -1px);
+}
+.dk-play.show {
+  opacity: 1;
+}
+/* 周目标点阵：学习卡右上角与头部统计卡共用 */
+.dk-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+.dk-dots b {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border-default);
+}
+.dk-dots b.on {
+  background: var(--success);
+}
+.dk-dots span {
+  margin-left: 4px;
+}
+.dk-stat .dk-dots {
+  font-size: var(--font-13);
+  color: var(--text-primary);
+}
+
 /* ── 月历 ── */
 .dk-month {
   position: absolute;
@@ -1003,6 +1190,9 @@
   font-size: var(--font-11);
   color: var(--text-tertiary);
 }
+.dk-dr-act {
+  margin: -4px 16px 8px;
+}
 .dk-dr-b {
   flex: 1;
   overflow-y: auto;
@@ -1132,6 +1322,262 @@
   padding: 10px 8px 0;
   margin-top: 6px;
   border-top: 1px solid var(--border-subtle);
+}
+/* 编辑卡（事项 / 例行） */
+.dk-ed {
+  width: 400px;
+}
+.dk-ed-b {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 8px;
+}
+.dk-ed-title {
+  height: 32px;
+  font-size: var(--font-14);
+  font-weight: 600;
+}
+.dk-ed-f {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: var(--font-12);
+}
+.dk-ed-k {
+  width: 44px;
+  flex-shrink: 0;
+  line-height: 28px;
+  color: var(--text-tertiary);
+}
+.dk-ed-v {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 28px;
+}
+.dk-ed-v .dk-seg button {
+  padding: 0 9px;
+}
+.dk-ed-tip {
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+}
+.dk-ed-tip.warn {
+  color: var(--danger);
+}
+.dk-ed-x {
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+}
+.dk-ed-x:hover {
+  color: var(--text-primary);
+  background: var(--row-hover);
+}
+.dk-ed-note {
+  height: auto;
+  padding: 6px 7px;
+  resize: vertical;
+  line-height: 1.5;
+  font-family: inherit;
+}
+.dk-ed-days {
+  display: flex;
+  gap: 4px;
+}
+.dk-ed-days button {
+  width: 28px;
+  height: 26px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  font-size: var(--font-12);
+}
+.dk-ed-days button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+}
+.dk-ed-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 8px;
+  margin-top: 2px;
+  border-top: 1px solid var(--border-subtle);
+}
+.dk-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* 抽屉「例行」页 */
+.dk-rl {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.dk-rl:hover {
+  background: var(--row-hover);
+}
+.dk-rl.paused .dk-rl-t {
+  color: var(--text-tertiary);
+}
+.dk-rl-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.dk-rl-t {
+  font-size: var(--font-13);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dk-rl-m {
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+}
+.dk-rl-b {
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  opacity: 0;
+}
+.dk-rl:hover .dk-rl-b,
+.dk-rl-b:focus-visible,
+.dk-rl.paused .dk-rl-b:first-of-type {
+  opacity: 1;
+}
+.dk-rl-b:hover {
+  color: var(--text-primary);
+  background: var(--bg-subtle);
+}
+.dk-rl-b.danger:hover {
+  color: var(--danger);
+}
+
+/* 学习设置（浮层与设置页共用 .dk-setup） */
+.dk-su-pop {
+  width: 400px;
+  overflow-y: auto;
+}
+.dk-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 8px;
+  font-size: var(--font-12);
+  color: var(--text-secondary);
+}
+.dk-su-k {
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+  margin-top: 4px;
+}
+.dk-su-goals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dk-su-goal {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 12px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  font-size: var(--font-12);
+}
+.dk-su-goal i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c);
+}
+.dk-su-goal:hover {
+  border-color: var(--border-strong);
+}
+.dk-su-goal.on {
+  color: var(--text-primary);
+  border-color: var(--c);
+  background: color-mix(in srgb, var(--c) 12%, var(--bg-panel));
+}
+.dk-su-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dk-su-row .wd {
+  width: 30px;
+  color: var(--text-tertiary);
+}
+.dk-in {
+  height: 26px;
+  padding: 0 7px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font-size: var(--font-12);
+  min-width: 0;
+}
+.dk-in:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.dk-in.num {
+  width: 52px;
+}
+.dk-in.wide {
+  flex: 1;
+  min-width: 110px;
+}
+.dk-su-tip {
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+}
+.dk-su-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.dk-su-check.inline {
+  flex-wrap: nowrap;
+  color: var(--text-tertiary);
+}
+.dk-su-more {
+  align-self: flex-start;
+  font-size: var(--font-12);
+  color: var(--text-tertiary);
+  padding: 2px 0;
+}
+.dk-su-more:hover {
+  color: var(--text-primary);
+}
+.dk-su-dow {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
 }
 .dk-ghost {
   position: fixed;

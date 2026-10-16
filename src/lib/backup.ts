@@ -239,12 +239,30 @@ const pomodoroSchema = z
   })
   .default(() => ({ ...DEFAULT_SETTINGS.pomodoro }));
 
+const hm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+const studyAnchorSchema = z.object({ time: hm.optional(), text: z.string().max(40).optional(), off: z.boolean().optional() });
+
+/** 工作台偏好：同 pomodoro，整块缺省值引用 DEFAULT_SETTINGS.desk；取值范围在此强制（导入畸形备份不得中毒） */
+const deskSchema = z
+  .object({
+    studyGoalIds: z.array(z.string()).default([]),
+    studyMinutes: z.number().int().min(5).max(180).default(30),
+    shortMinutes: z.number().int().min(5).max(60).default(15),
+    weekTarget: z.number().int().min(1).max(7).default(5),
+    anchor: studyAnchorSchema.default({}),
+    anchorByDow: z.array(studyAnchorSchema.nullable()).max(7).default([]),
+    lastCall: hm.optional(),
+    remind: z.boolean().default(true),
+  })
+  .default(() => ({ ...DEFAULT_SETTINGS.desk }));
+
 const settingsSchema = z.object({
   theme: z.enum(['light', 'dark', 'system']),
   weekStartsOn: z.union([z.literal(0), z.literal(1)]),
   yearInView: z.number().int(),
   ganttView: ganttViewSchema,
   pomodoro: pomodoroSchema,
+  desk: deskSchema,
 });
 
 const backupSchema = z.object({

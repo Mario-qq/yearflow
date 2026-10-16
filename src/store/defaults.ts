@@ -31,4 +31,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
     pipAuto: false,
     pipOpacity: 100,
   },
+  desk: {
+    studyGoalIds: [],
+    studyMinutes: 30,
+    shortMinutes: 15,
+    weekTarget: 5,
+    anchor: {},
+    anchorByDow: [],
+    remind: true,
+  },
 };

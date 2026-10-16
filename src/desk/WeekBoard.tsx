@@ -5,8 +5,9 @@ import { DayCard } from './DayCard';
 import { isWeekendDate } from './format';
 import type { PlanRowData } from './usePlanRows';
 import type { DayData } from './useDeskData';
+import type { StudyView } from './study';
 
-export function WeekBoard({ monday, today, dayOf, plan }: { monday: string; today: string; dayOf: (d: string) => DayData; plan: PlanRowData[] }) {
+export function WeekBoard({ monday, today, dayOf, plan, study }: { monday: string; today: string; dayOf: (d: string) => DayData; plan: PlanRowData[]; study: StudyView }) {
   const days = Array.from({ length: 7 }, (_, n) => dayOf(addDays(monday, n)));
   const cols = days
     .map((d) => {
@@ -17,7 +18,7 @@ export function WeekBoard({ monday, today, dayOf, plan }: { monday: string; toda
   return (
     <div className="dk-board" style={{ gridTemplateColumns: cols }}>
       {days.map((d) => (
-        <DayCard key={d.date} data={d} today={today} plan={d.date === today ? plan : undefined} />
+        <DayCard key={d.date} data={d} today={today} plan={d.date === today ? plan : undefined} study={d.date === today ? study : undefined} />
       ))}
     </div>
   );

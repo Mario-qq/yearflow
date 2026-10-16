@@ -44,6 +44,27 @@ export function ruleHits(rule: RoutineRule, date: string, marks: Record<string, 
 }
 
 /** 例行在这一天是否该出现：未暂停、在起止范围内、规则命中；工作类还要求是工作日 */
+const WD_CN = ['日', '一', '二', '三', '四', '五', '六'];
+const NTH_CN: Record<number, string> = { 1: '第 1 个', 2: '第 2 个', 3: '第 3 个', 4: '第 4 个', 5: '第 5 个', [-1]: '最后一个' };
+
+/** 规则的中文说法：「每周一、三」「每月 5 号」「每月最后一个周五」（例行列表、编辑卡用） */
+export function ruleLabel(rule: RoutineRule): string {
+  switch (rule.type) {
+    case 'daily':
+      return '每天';
+    case 'workday':
+      return '每个工作日';
+    case 'weekly': {
+      const days = [...rule.daysOfWeek].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)); // 周一在前
+      return days.length === 7 ? '每天' : `每周${days.map((d) => WD_CN[d]).join('、')}`;
+    }
+    case 'monthlyDay':
+      return rule.monthDay === -1 ? '每月最后一天' : `每月 ${rule.monthDay} 号`;
+    case 'monthlyNth':
+      return `每月${NTH_CN[rule.nth] ?? `第 ${rule.nth} 个`}周${WD_CN[rule.weekday]}`;
+  }
+}
+
 export function routineActiveOn(r: Routine, date: string, marks: Record<string, DayMark>): boolean {
   if (r.deletedAt || r.paused) return false;
   if (date < r.startDate || (r.endDate && date > r.endDate)) return false;
@@ -160,6 +181,8 @@ export interface DayItems {
   rolled: WorkItem[];
   open: WorkItem[];
   done: WorkItem[];
+  /** 「不做了」的：不计入完成数，折在「已完成」里可找回（再勾一次回到未完成） */
+  dropped: WorkItem[];
 }
 
 export function itemsOnDay(items: WorkItem[], date: string, today: string): DayItems {
@@ -191,6 +214,7 @@ export function dayItemsFrom(index: Map<string, WorkItem[]>, rolled: WorkItem[],
     rolled: date === today ? rolled : [],
     open: own.filter((i) => i.status === 'open').sort((a, b) => compareItems(a, b, today)),
     done: own.filter((i) => i.status === 'done'),
+    dropped: own.filter((i) => i.status === 'dropped'),
   };
 }
 

@@ -83,11 +83,13 @@ export function ItemRow({ item, today, rolled, compact, weekend, showWhen, hideW
   const [checking, check] = useCheckAnim(() => toggleItem(item.id));
 
   const done = item.status === 'done' || checking;
+  const dropped = item.status === 'dropped';
   const u = item.status === 'open' ? effectiveUrgency(item, today) : 'normal';
-  const cls = ['dk-row', done ? 'done' : '', u === 'urgent' ? 'u2' : u === 'soon' ? 'u1' : '', selected ? 'sel' : ''];
+  const cls = ['dk-row', done ? 'done' : '', dropped ? 'skipped' : '', u === 'urgent' ? 'u2' : u === 'soon' ? 'u1' : '', selected ? 'sel' : ''];
   if (personLit) cls.push(item.person === personLit ? 'lit' : 'dim');
 
   const meta: React.ReactNode[] = [];
+  if (dropped) meta.push(<span key="drop">不做了</span>);
   if (!compact) {
     if (item.kind === 'followup' && !hideWho) meta.push(<WhoChip key="who" item={item} />);
     if (hideWho && item.kind === 'followup') meta.push(<span key="mode">{item.mode === 'dispatch' ? '下发' : '告知'}</span>);
@@ -118,7 +120,8 @@ export function ItemRow({ item, today, rolled, compact, weekend, showWhen, hideW
       <button
         type="button"
         className="dk-chk"
-        aria-label={done ? '标为未完成' : '完成'}
+        aria-label={dropped ? '恢复为未完成' : done ? '标为未完成' : '完成'}
+        title={dropped ? '恢复为未完成' : undefined}
         onClick={(e) => {
           e.stopPropagation();
           if (item.status === 'open') check();

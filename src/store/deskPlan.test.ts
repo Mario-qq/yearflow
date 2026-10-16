@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { DayMark, Routine, RoutineLog, WorkItem } from '../types/domain';
 import {
+  planEditItem,
+  planPatchRoutine,
   planMarkPersonSaid,
   planMove,
   planPatchItems,
@@ -61,6 +63,41 @@ describe('事项', () => {
     const fu = (id: string, person: string, status: WorkItem['status'] = 'open') => wi(id, { kind: 'followup', person, mode: 'inform', status });
     const cs = planMarkPersonSaid(state({ items: [fu('1', '张经理'), fu('2', '张经理', 'done'), fu('3', '王芳')] }), '张经理', NOW);
     expect(cs.map((c) => (after(c) as WorkItem).id)).toEqual(['1']);
+  });
+});
+
+describe('编辑事项', () => {
+  const s = state({ items: [wi('a', { date: '2026-10-16', dueDate: '2026-10-20', goalId: 'g' }), wi('f', { kind: 'followup', person: '张经理', mode: 'dispatch' })] });
+  it('一次改多个字段 = 一条 put；显式 undefined 删字段', () => {
+    const cs = planEditItem(s, 'a', { title: ' 新标题 ', note: '备注', dueDate: undefined, goalId: undefined }, NOW);
+    expect(cs).toHaveLength(1);
+    const a = after(cs[0]) as WorkItem;
+    expect(a).toMatchObject({ title: '新标题', note: '备注', updatedAt: NOW });
+    expect('dueDate' in a || 'goalId' in a).toBe(false);
+  });
+  it('改排期日按挪动口径：往后 deferCount+1，往前不加', () => {
+    expect((after(planEditItem(s, 'a', { date: '2026-10-19' }, NOW)[0]) as WorkItem).deferCount).toBe(1);
+    expect('deferCount' in (after(planEditItem(s, 'a', { date: '2026-10-15' }, NOW)[0]) as WorkItem)).toBe(false);
+  });
+  it('待办 ⇄ 跟进：改成待办去掉对象；改成跟进没写对象仍是待办；写了对象缺省待告知', () => {
+    const t = after(planEditItem(s, 'f', { kind: 'todo' }, NOW)[0]) as WorkItem;
+    expect(t.kind).toBe('todo');
+    expect('person' in t || 'mode' in t).toBe(false);
+    expect(planEditItem(s, 'a', { kind: 'followup', person: '  ' }, NOW)).toEqual([]);
+    expect(after(planEditItem(s, 'a', { kind: 'followup', person: '王芳' }, NOW)[0])).toMatchObject({ kind: 'followup', person: '王芳', mode: 'inform' });
+  });
+  it('什么都没变 ⇒ 不进撤销栈；标题清空 ⇒ 保留原标题', () => {
+    expect(planEditItem(s, 'a', { title: 'a', urgency: 'normal' }, NOW)).toEqual([]);
+    expect(planEditItem(s, 'a', { title: '   ' }, NOW)).toEqual([]);
+  });
+});
+
+describe('改例行', () => {
+  it('显式 undefined 删字段（清除时间、恢复暂停）', () => {
+    const r = { ...state(), routines: { r: { ...routine, time: '09:00', paused: true } } };
+    const a = after(planPatchRoutine(r, 'r', { time: undefined, paused: undefined, title: '周巡检' }, NOW)[0]) as Routine;
+    expect(a).toMatchObject({ title: '周巡检', updatedAt: NOW });
+    expect('time' in a || 'paused' in a).toBe(false);
   });
 });
 

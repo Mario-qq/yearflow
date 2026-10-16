@@ -165,6 +165,21 @@ export function DeskMenus({ today, dayOf }: { today: string; dayOf: (d: string) 
         const ids = multi ? selectedItemIds() : [item.id];
         content = (
           <>
+            {!multi && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.querySelector(`[data-key="${CSS.escape(menu.key)}"]`);
+                    const r = el?.getBoundingClientRect();
+                    useDeskUi.getState().set({ menu: null, sel: new Set(), editor: { kind: 'item', id: item.id, left: r?.left ?? menu.x, top: r?.bottom ?? menu.y } });
+                  }}
+                >
+                  编辑…<span>↵</span>
+                </button>
+                <hr />
+              </>
+            )}
             {URGENCY.map(({ u, label, key }) => (
               <button
                 key={u}
@@ -233,6 +248,12 @@ export function DeskMenus({ today, dayOf }: { today: string; dayOf: (d: string) 
         content = (
           <>
             <div className="lbl">例行 · {r.title}</div>
+            <button
+              type="button"
+              onClick={() => useDeskUi.getState().set({ menu: null, editor: { kind: 'routine', id: r.id, left: menu.x, top: menu.y } })}
+            >
+              编辑这个例行…<span>规则、时间</span>
+            </button>
             {moveBtn}
             <button type="button" onClick={() => (skipOccurrence(r.id, k.origDate), close())}>
               跳过这一次 / 取消跳过
@@ -243,7 +264,7 @@ export function DeskMenus({ today, dayOf }: { today: string; dayOf: (d: string) 
               onClick={() => {
                 patchRoutine(r.id, { paused: true }, `暂停例行「${r.title}」`);
                 close();
-                toastUndo(`已暂停「${r.title}」，之后不再出现`);
+                toastUndo(`已暂停「${r.title}」，在「待处理 → 例行」里恢复`);
               }}
             >
               暂停这个例行
@@ -258,6 +279,10 @@ export function DeskMenus({ today, dayOf }: { today: string; dayOf: (d: string) 
               }}
             >
               删除这个例行<span>记录保留</span>
+            </button>
+            <hr />
+            <button type="button" onClick={() => useDeskUi.getState().set({ menu: null, drawer: true, drawerTab: 'routines' })}>
+              管理全部例行…
             </button>
           </>
         );

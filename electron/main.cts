@@ -23,6 +23,9 @@ import {
   ipcMain,
   powerMonitor,
   Notification,
+  Menu,
+  Tray,
+  nativeImage,
   shell,
   type Rectangle,
 } from 'electron';
@@ -70,6 +73,140 @@ interface PipGeom {
 /** 同一时刻只允许一个小窗 */
 let pipWindow: BrowserWindow | null = null;
 let mainWindow: BrowserWindow | null = null;
+
+// ——— 托盘常驻（DESK_SPEC §五 第 2 层：学习到点提醒要靠后台常驻）———
+//
+// 关主窗 = 收进托盘（渲染进程照常跑：backgroundThrottling 已关，提醒与番茄钟计时不停）；
+// 托盘菜单「退出」才真正退出。负责人 2026-10-16 拍板：关窗收托盘、默认不开机自启（托盘/设置里可开）。
+// 偏好存本机 userData/shell-prefs.json：主进程在渲染进程起来之前就要知道「关窗怎么办」，
+// 而且这是这台机器的窗口行为，不该进备份、不该跟着云同步走。
+
+interface ShellPrefs {
+  closeToTray: boolean;
+  /** 第一次收进托盘时弹过一次说明 */
+  trayHintShown: boolean;
+}
+const SHELL_PREFS_DEFAULT: ShellPrefs = { closeToTray: true, trayHintShown: false };
+let shellPrefs: ShellPrefs = { ...SHELL_PREFS_DEFAULT };
+let tray: Tray | null = null;
+/** 托盘「退出」/ 系统关机：放行 close，不再收进托盘 */
+let quitting = false;
+let trayStatus = '';
+/** 开机自启时带这个参数：只进托盘、不弹主窗 */
+const START_HIDDEN = process.argv.includes('--hidden');
+
+function shellPrefsFile(): string {
+  return path.join(app.getPath('userData'), 'shell-prefs.json');
+}
+
+function readShellPrefs(): ShellPrefs {
+  try {
+    return { ...SHELL_PREFS_DEFAULT, ...(JSON.parse(fs.readFileSync(shellPrefsFile(), 'utf8')) as Partial<ShellPrefs>) };
+  } catch {
+    return { ...SHELL_PREFS_DEFAULT };
+  }
+}
+
+function writeShellPrefs(patch: Partial<ShellPrefs>): void {
+  shellPrefs = { ...shellPrefs, ...patch };
+  try {
+    fs.writeFileSync(shellPrefsFile(), JSON.stringify(shellPrefs), 'utf8');
+  } catch {
+    // 写不进去只影响下次启动的默认行为
+  }
+}
+
+/**
+ * 开机自启。没有安装包：快捷方式启动的是 node_modules 里的 electron.exe + 项目目录，
+ * 所以登录项也得原样带上「app 目录」这个参数（再加 --hidden 只进托盘）。开发模式（vite dev）不提供。
+ */
+const canAutoStart = (): boolean => !DEV_URL && process.platform === 'win32';
+const loginArgs = (): string[] => [app.getAppPath(), '--hidden'];
+function getOpenAtLogin(): boolean {
+  if (!canAutoStart()) return false;
+  return app.getLoginItemSettings({ path: process.execPath, args: loginArgs() }).openAtLogin;
+}
+function setOpenAtLogin(on: boolean): void {
+  if (!canAutoStart()) return;
+  app.setLoginItemSettings({ openAtLogin: on, path: process.execPath, args: loginArgs() });
+}
+
+function showMain(route?: string): void {
+  if (!mainWindow || mainWindow.isDestroyed()) mainWindow = createMainWindow();
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+  if (route) mainWindow.webContents.send('app:navigate', route);
+}
+
+function trayIcon(): Electron.NativeImage {
+  const img = nativeImage.createFromPath(path.join(__dirname, '../build/icon.ico'));
+  return img.isEmpty() ? img : img.resize({ width: 16, height: 16 });
+}
+
+function shellPrefsView(): { closeToTray: boolean; openAtLogin: boolean; canAutoStart: boolean } {
+  return { closeToTray: shellPrefs.closeToTray, openAtLogin: getOpenAtLogin(), canAutoStart: canAutoStart() };
+}
+
+function rebuildTrayMenu(): void {
+  if (!tray) return;
+  const menu = Menu.buildFromTemplate([
+    { label: '打开 YearFlow', click: () => showMain() },
+    {
+      label: '开始学习',
+      click: () => {
+        showMain('/desk');
+        mainWindow?.webContents.send('tray:study');
+      },
+    },
+    { type: 'separator' },
+    {
+      label: '关窗时收进托盘',
+      type: 'checkbox',
+      checked: shellPrefs.closeToTray,
+      click: (item) => {
+        writeShellPrefs({ closeToTray: item.checked });
+        broadcastShellPrefs();
+      },
+    },
+    {
+      label: canAutoStart() ? '开机自启（静默在托盘）' : '开机自启（开发模式不可用）',
+      type: 'checkbox',
+      enabled: canAutoStart(),
+      checked: getOpenAtLogin(),
+      click: (item) => {
+        setOpenAtLogin(item.checked);
+        broadcastShellPrefs();
+      },
+    },
+    { type: 'separator' },
+    {
+      label: '退出 YearFlow',
+      click: () => {
+        quitting = true;
+        app.quit();
+      },
+    },
+  ]);
+  tray.setContextMenu(menu);
+}
+
+function createTray(): void {
+  if (tray) return;
+  tray = new Tray(trayIcon());
+  tray.setToolTip(trayStatus ? `YearFlow · ${trayStatus}` : 'YearFlow');
+  tray.on('click', () => showMain());
+  rebuildTrayMenu();
+}
+
+/** 托盘菜单里改了偏好，设置页要同步打勾（反之亦然） */
+function broadcastShellPrefs(): void {
+  rebuildTrayMenu();
+  const view = shellPrefsView();
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send('shell:prefs', view);
+  }
+}
 /**
  * 小窗不透明度（0–1）。渲染进程是权威（存在 settings 里），主进程只缓存最后一次收到的值，
  * 好让「关掉小窗 → 再开」不会闪一下 100% 再变暗。
@@ -380,7 +517,7 @@ function pageURL(route: string): string {
   return DEV_URL ? new URL(route, DEV_URL).toString() : `${APP_ORIGIN}/${route}`;
 }
 
-function createMainWindow(): BrowserWindow {
+function createMainWindow(hidden = false): BrowserWindow {
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -392,10 +529,36 @@ function createMainWindow(): BrowserWindow {
     webPreferences: {
       preload: PRELOAD,
       // 番茄钟到点必须准：主窗最小化时不许节流 timer。Phase 0 实测 20s 漂移 8ms。
+      // 收进托盘（隐藏）时同理：学习提醒的轮询与计时照常跑。
       backgroundThrottling: false,
+      // 托盘「开始学习」不是页面里的手势，到点照样要能响铃
+      autoplayPolicy: 'no-user-gesture-required',
     },
   });
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => {
+    if (!hidden) win.show();
+  });
+  // Windows 注销/关机：放行关闭，否则「收进托盘」会把关机挡住
+  win.on('query-session-end', () => {
+    quitting = true;
+  });
+  win.on('session-end', () => {
+    quitting = true;
+  });
+  // 关窗 = 收进托盘（托盘菜单「退出」才真退出）
+  win.on('close', (e) => {
+    if (quitting || !shellPrefs.closeToTray || !tray) return;
+    e.preventDefault();
+    win.hide();
+    if (!shellPrefs.trayHintShown && Notification.isSupported()) {
+      writeShellPrefs({ trayHintShown: true });
+      new Notification({
+        title: 'YearFlow 收进了托盘',
+        body: '学习提醒和番茄钟照常运行。右键托盘图标可以退出；设置里可以改成关窗即退出。',
+        silent: true,
+      }).show();
+    }
+  });
   win.on('closed', () => {
     mainWindow = null;
   });
@@ -537,22 +700,41 @@ ipcMain.handle('pip:opacity', (_e, percent: number) => {
   return p;
 });
 
-ipcMain.handle('notify', (_e, body: string) => {
+/** 通知被点：拉起主窗；带 route 就跳到那一页（学习提醒 → 工作台） */
+const liveNotices = new Set<Notification>();
+ipcMain.handle('notify', (_e, body: string, opts?: { title?: string; route?: string; sound?: boolean }) => {
   if (!Notification.isSupported()) return false;
-  const n = new Notification({ title: 'YearFlow', body, silent: true });
+  const route = typeof opts?.route === 'string' && opts.route.startsWith('/') ? opts.route : undefined;
+  const title = typeof opts?.title === 'string' && opts.title ? opts.title : 'YearFlow';
+  const n = new Notification({ title, body, silent: opts?.sound !== true });
+  // 持有引用直到被点/关掉：通知对象被回收后 click 事件就收不到了
+  liveNotices.add(n);
   n.on('click', () => {
-    mainWindow?.show();
-    mainWindow?.focus();
+    liveNotices.delete(n);
+    showMain(route);
   });
+  n.on('close', () => liveNotices.delete(n));
   n.show();
   return true;
 });
 
-/** 主窗被小窗/通知唤起 */
-ipcMain.handle('win:focus-main', () => {
-  mainWindow?.show();
-  mainWindow?.focus();
+ipcMain.handle('shell:prefs', () => shellPrefsView());
+ipcMain.handle('shell:set-pref', (_e, key: string, value: boolean) => {
+  if (key === 'closeToTray') writeShellPrefs({ closeToTray: value === true });
+  else if (key === 'openAtLogin') setOpenAtLogin(value === true);
+  else throw new Error(`未知偏好：${String(key)}`);
+  broadcastShellPrefs();
+  return shellPrefsView();
 });
+
+/** 托盘悬停提示（「今天还没学 · 英语」之类）；渲染进程状态变了才发 */
+ipcMain.handle('tray:status', (_e, text: string) => {
+  trayStatus = typeof text === 'string' ? text.slice(0, 100) : '';
+  tray?.setToolTip(trayStatus ? `YearFlow · ${trayStatus}` : 'YearFlow');
+});
+
+/** 主窗被小窗/通知唤起 */
+ipcMain.handle('win:focus-main', () => showMain());
 
 // ——— 本机自动备份（DESK_SPEC §七）———
 //
@@ -641,15 +823,8 @@ ipcMain.handle('backup:open-dir', () => shell.openPath(backupDir()));
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    // 关了主窗只留小窗时 mainWindow 是 null：重开一个，而不是对着空引用调用
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      mainWindow = createMainWindow();
-      return;
-    }
-    mainWindow.show();
-    mainWindow.focus();
-  });
+  // 再点一次快捷方式（主窗收在托盘里，或关了主窗只留小窗时 mainWindow 是 null）：拉起主窗
+  app.on('second-instance', () => showMain());
 
   void app.whenReady().then(() => {
     protocol.handle('app', (req) => {
@@ -662,7 +837,9 @@ if (!app.requestSingleInstanceLock()) {
       return net.fetch(pathToFileURL(file).toString());
     });
 
-    mainWindow = createMainWindow();
+    shellPrefs = readShellPrefs();
+    mainWindow = createMainWindow(START_HIDDEN);
+    createTray();
 
     // OS 睡眠/锁屏唤醒后广播，替代 web 端的 visibilitychange —— 番茄钟据此 catchUp() 补算
     const onResume = (): void => {
@@ -674,7 +851,13 @@ if (!app.requestSingleInstanceLock()) {
     powerMonitor.on('unlock-screen', onResume);
   });
 
-  app.on('window-all-closed', () => app.quit());
+  app.on('before-quit', () => {
+    quitting = true;
+  });
+  // 收进托盘时主窗只是隐藏、不算关闭；走到这里说明真没窗了（关窗即退出模式，或托盘没建成）
+  app.on('window-all-closed', () => {
+    if (!tray || !shellPrefs.closeToTray || quitting) app.quit();
+  });
 
   // 外链一律交给系统浏览器，不在应用内开窗
   app.on('web-contents-created', (_e, contents) => {

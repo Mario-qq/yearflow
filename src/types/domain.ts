@@ -350,6 +350,35 @@ export interface AppSettings {
   pomodoro: PomodoroSettings;
   /** 一次性迁移标记：旧数据（5 色轮转）目标撞色已重新分配过（本地，不同步） */
   colorNormalized?: boolean;
+  /** 工作台偏好（本地，不同步；DESK_SPEC §五 学习防忘） */
+  desk: DeskSettings;
+}
+
+/** 学习锚点：「我会在 [午饭后] [12:30] 学习」。time 缺省 = 没定时间（不发第一次提醒） */
+export interface StudyAnchor {
+  time?: string; // HH:mm
+  text?: string;
+  /** 按星期覆盖时：这天不提醒 */
+  off?: boolean;
+}
+
+export interface DeskSettings {
+  /** 哪些目标算「学习」：学习卡只从这些目标当天该打卡的任务里挑 */
+  studyGoalIds: string[];
+  /** 「开始」一次学多久（分钟），也是「今天学够了」的口径；取值 [5, 180] */
+  studyMinutes: number;
+  /** 短版（分钟）：做完也算今天学过；取值 [5, 60] */
+  shortMinutes: number;
+  /** 每周学几天（周目标环）；取值 [1, 7] */
+  weekTarget: number;
+  /** 固定学习时间（第一次提醒） */
+  anchor: StudyAnchor;
+  /** 按星期分别设：下标 0=周日…6=周六；null/缺省 = 用 anchor */
+  anchorByDow: (StudyAnchor | null)[];
+  /** 最晚提醒 HH:mm：还没学再提醒一次「15 分钟也算」；缺省 = 不提醒 */
+  lastCall?: string;
+  /** 到点提醒总开关（只在桌面版生效） */
+  remind: boolean;
 }
 
 /** 带同步元数据的实体（除 settings 外都满足） */

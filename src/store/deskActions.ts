@@ -9,6 +9,7 @@ import { moveTarget, type MoveHow } from '../lib/derive/desk';
 import type { QuickAddResult } from '../lib/desk/parseQuickAdd';
 import {
   planDeleteRoutine,
+  planEditItem,
   planMarkPersonSaid,
   planMove,
   planPatchItems,
@@ -93,7 +94,7 @@ export function createRoutine(input: NewRoutineInput): string {
 
 /** 一句话新建的落地：例行建 Routine，其余建 WorkItem。返回新 id */
 export function createFromQuickAdd(r: QuickAddResult): string {
-  if (r.kind === 'routine' && r.rule) return createRoutine({ title: r.title, rule: r.rule, scope: r.scope });
+  if (r.kind === 'routine' && r.rule) return createRoutine({ title: r.title, rule: r.rule, scope: r.scope, time: r.time });
   return createItem({
     kind: r.kind === 'followup' ? 'followup' : 'todo',
     title: r.title,
@@ -119,6 +120,15 @@ export function toggleItem(id: string): void {
 export function patchItem(id: string, patch: Partial<WorkItem>, label: string): void {
   const s = useStore.getState();
   s.execute(label, planPatchItems(s, [id], patch, nowIso()));
+}
+
+/** 编辑卡保存：一次改多个字段 = 一条撤销记录。返回是否真有改动 */
+export function editItem(id: string, patch: Partial<WorkItem>): boolean {
+  const s = useStore.getState();
+  const changes = planEditItem(s, id, patch, nowIso());
+  if (changes.length === 0) return false;
+  s.execute(`编辑「${s.workItems[id]?.title ?? ''}」`, changes);
+  return true;
 }
 
 export function setUrgency(ids: string[], urgency: Urgency): void {

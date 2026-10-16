@@ -10,6 +10,9 @@ import { SyncIndicator } from './components/SyncIndicator';
 import { initSync } from './db/sync/syncApi';
 import { initAutoBackup } from './lib/autoBackup';
 import { initPomodoro } from './pomodoro/kernel';
+import { initStudyAutoCheckIn } from './desk/study';
+import { initStudyNudges } from './desk/studyNudge';
+import { DesktopBridge } from './components/DesktopBridge';
 import { initDesktopPip } from './pomodoro/pip';
 import { PomodoroWidget } from './pomodoro/PomodoroWidget';
 import { CommandPalette } from './components/CommandPalette';
@@ -119,7 +122,12 @@ export default function App() {
   // 番茄钟计时内核：恢复判定与结算必须在 hydrate 之后（否则结算会进了库却不在内存）。
   // 内核本身是模块单例，与本组件的挂载/卸载无关，这里只负责挑对时机初始化一次。
   useEffect(() => {
-    if (hydrated) initPomodoro();
+    if (!hydrated) return;
+    // 先挂上「学习专注结束自动打卡」，再初始化内核：恢复路径里补结算的那段也要能打上卡
+    initStudyAutoCheckIn();
+    initPomodoro();
+    // 学习到点提醒（只在桌面版跑；关窗收进托盘后照常提醒）
+    initStudyNudges();
   }, [hydrated]);
 
   // 桌面版：小窗是原生窗口，用户从窗内的 × 关掉时只有主进程知道，靠这条广播回填 pipOpen
@@ -176,6 +184,7 @@ export default function App() {
 
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+      <DesktopBridge />
       <div className="flex h-full flex-col">
         <header
           className="flex h-12 shrink-0 items-center gap-4 border-b px-4"

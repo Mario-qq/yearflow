@@ -6,6 +6,8 @@ import { useStore } from '../store/useStore';
 import { PAST_DONE_PREVIEW } from './constants';
 import { isWeekendDate, weekdayCn } from './format';
 import { PlanRows } from './PlanSection';
+import { StudyCard } from './StudyCard';
+import type { StudyView } from './study';
 import type { PlanRowData } from './usePlanRows';
 import { ItemRow, RoutineRow } from './Rows';
 import type { DayData } from './useDeskData';
@@ -31,7 +33,7 @@ function toggleFold(date: string) {
   ui.set({ openFolds: next });
 }
 
-export function DayCard({ data, today, plan }: { data: DayData; today: string; plan?: PlanRowData[] }) {
+export function DayCard({ data, today, plan, study }: { data: DayData; today: string; plan?: PlanRowData[]; study?: StudyView }) {
   const { date, day, occ, count } = data;
   const mark = useStore((s) => s.dayMarks[date]);
   const folded = !useDeskUi((s) => s.openFolds.has(date));
@@ -45,6 +47,7 @@ export function DayCard({ data, today, plan }: { data: DayData; today: string; p
     const doneOcc = occ.filter((o) => o.status === 'done');
     const shown = folded ? day.done.slice(0, PAST_DONE_PREVIEW) : day.done;
     const hidden = folded ? day.done.length - shown.length + doneOcc.length : 0;
+    const dropN = day.dropped.length;
     const openN = day.open.length;
     const missed = occ.filter((o) => o.status === 'open' && (o.routine.rule.type === 'weekly' || o.routine.rule.type.startsWith('monthly')));
     body = (
@@ -53,19 +56,22 @@ export function DayCard({ data, today, plan }: { data: DayData; today: string; p
         {shown.map((i) => (
           <ItemRow key={i.id} item={i} today={today} compact />
         ))}
-        {hidden > 0 && (
+        {!folded && day.dropped.map((i) => <ItemRow key={i.id} item={i} today={today} compact />)}
+        {(hidden > 0 || (folded && dropN > 0)) && (
           <button type="button" className="dk-fold tnum" onClick={() => toggleFold(date)}>
-            还有 {hidden} 件已完成
+            {hidden > 0 ? `还有 ${hidden} 件已完成` : ''}
+            {hidden > 0 && dropN > 0 ? ' · ' : ''}
+            {dropN > 0 ? `不做了 ${dropN}` : ''}
           </button>
         )}
-        {!folded && day.done.length + doneOcc.length > PAST_DONE_PREVIEW && (
+        {!folded && day.done.length + doneOcc.length + dropN > PAST_DONE_PREVIEW && (
           <button type="button" className="dk-fold" onClick={() => toggleFold(date)}>
             收起
           </button>
         )}
         {openN > 0 && <div className="dk-note">↻ {openN} 件没做完，挂到了今天</div>}
         {missed.length > 0 && <div className="dk-note">↻ {missed.map((o) => o.routine.title).join('、')} 漏了</div>}
-        {shown.length === 0 && hidden === 0 && openN === 0 && missed.length === 0 && <div className="dk-empty">—</div>}
+        {shown.length === 0 && hidden === 0 && dropN === 0 && openN === 0 && missed.length === 0 && <div className="dk-empty">—</div>}
       </>
     );
   } else {
@@ -74,6 +80,7 @@ export function DayCard({ data, today, plan }: { data: DayData; today: string; p
     const items = [...day.rolled, ...day.open];
     body = (
       <>
+        {isToday && study && <StudyCard v={study} today={today} />}
         {isToday && plan && plan.length > 0 && (
           <Sec title="年度计划" n={`${plan.filter((p) => p.status === 'done' || p.status === 'skipped').length}/${plan.length}`}>
             <PlanRows rows={plan} today={today} />
@@ -87,7 +94,7 @@ export function DayCard({ data, today, plan }: { data: DayData; today: string; p
             {doneOccHidden > 0 && <div className="dk-empty">已做完 {doneOccHidden} 项</div>}
           </Sec>
         )}
-        {(items.length > 0 || day.done.length > 0) && (
+        {(items.length > 0 || day.done.length > 0 || day.dropped.length > 0) && (
           <Sec title="事项" n={items.length}>
             {day.rolled.map((i) => (
               <ItemRow key={i.id} item={i} today={today} rolled />
@@ -95,15 +102,16 @@ export function DayCard({ data, today, plan }: { data: DayData; today: string; p
             {day.open.map((i) => (
               <ItemRow key={i.id} item={i} today={today} weekend={weekend} />
             ))}
-            {day.done.length > 0 && (
+            {day.done.length + day.dropped.length > 0 && (
               <button type="button" className="dk-fold tnum" onClick={() => toggleFold(date)}>
-                已完成 {day.done.length} {folded ? '▸' : '▾'}
+                {[day.done.length ? `已完成 ${day.done.length}` : '', day.dropped.length ? `不做了 ${day.dropped.length}` : ''].filter(Boolean).join(' · ')} {folded ? '▸' : '▾'}
               </button>
             )}
             {!folded && day.done.map((i) => <ItemRow key={i.id} item={i} today={today} weekend={weekend} />)}
+            {!folded && day.dropped.map((i) => <ItemRow key={i.id} item={i} today={today} weekend={weekend} />)}
           </Sec>
         )}
-        {occ.length === 0 && items.length === 0 && day.done.length === 0 && !(isToday && plan?.length) && <div className="dk-empty">空</div>}
+        {occ.length === 0 && items.length === 0 && day.done.length === 0 && day.dropped.length === 0 && !(isToday && (plan?.length || study?.pick)) && <div className="dk-empty">空</div>}
       </>
     );
   }

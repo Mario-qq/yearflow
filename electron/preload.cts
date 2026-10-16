@@ -1,10 +1,16 @@
 /**
  * 渲染进程能看到的全部原生能力。刻意窄：跨窗口的状态同步走 localStorage + storage
- * 事件（见 main.cts 顶部注释），这里只暴露 web 侧根本做不到的四件事。
+ * 事件（见 main.cts 顶部注释），这里只暴露 web 侧根本做不到的事（开关窗、通知、托盘、备份文件）。
  *
  * `window.yearflowDesktop` 存在即代表跑在桌面壳里 —— src/lib/desktop.ts 据此分叉。
  */
 import { contextBridge, ipcRenderer } from 'electron';
+
+interface ShellPrefsView {
+  closeToTray: boolean;
+  openAtLogin: boolean;
+  canAutoStart: boolean;
+}
 
 const api = {
   openPip: (): Promise<boolean> => ipcRenderer.invoke('pip:open'),
@@ -17,7 +23,32 @@ const api = {
   undockPip: (): Promise<void> => ipcRenderer.invoke('pip:undock'),
   peekPip: (on: boolean): Promise<void> => ipcRenderer.invoke('pip:peek', on),
   focusMain: (): Promise<void> => ipcRenderer.invoke('win:focus-main'),
-  notify: (body: string): Promise<boolean> => ipcRenderer.invoke('notify', body),
+  /** 系统通知。route = 点通知后主窗跳到哪一页 */
+  notify: (body: string, opts?: { title?: string; route?: string; sound?: boolean }): Promise<boolean> =>
+    ipcRenderer.invoke('notify', body, opts),
+  /** 托盘常驻偏好（主进程持有，存本机 shell-prefs.json） */
+  getShellPrefs: (): Promise<ShellPrefsView> => ipcRenderer.invoke('shell:prefs'),
+  setShellPref: (key: 'closeToTray' | 'openAtLogin', value: boolean): Promise<ShellPrefsView> =>
+    ipcRenderer.invoke('shell:set-pref', key, value),
+  onShellPrefs: (cb: (v: ShellPrefsView) => void): (() => void) => {
+    const handler = (_e: unknown, v: ShellPrefsView): void => cb(v);
+    ipcRenderer.on('shell:prefs', handler);
+    return () => ipcRenderer.off('shell:prefs', handler);
+  },
+  /** 托盘悬停提示 */
+  setTrayStatus: (text: string): Promise<void> => ipcRenderer.invoke('tray:status', text),
+  /** 点通知 / 托盘「开始学习」：主窗跳到某一页 */
+  onNavigate: (cb: (route: string) => void): (() => void) => {
+    const handler = (_e: unknown, route: string): void => cb(route);
+    ipcRenderer.on('app:navigate', handler);
+    return () => ipcRenderer.off('app:navigate', handler);
+  },
+  /** 托盘菜单「开始学习」 */
+  onTrayStudy: (cb: () => void): (() => void) => {
+    const handler = (): void => cb();
+    ipcRenderer.on('tray:study', handler);
+    return () => ipcRenderer.off('tray:study', handler);
+  },
   /** 本机自动备份：写入（返回文件名）/ 列出 / 读回 / 打开目录。文件在 userData/backups */
   backupWrite: (json: string, kind: 'daily' | 'pre'): Promise<string> =>
     ipcRenderer.invoke('backup:write', json, kind),

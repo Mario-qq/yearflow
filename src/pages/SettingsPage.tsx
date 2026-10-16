@@ -8,6 +8,9 @@ import { BackupSection } from '../components/BackupSection';
 import { replaceAllWithBackup } from '../lib/autoBackup';
 import { isDesktop } from '../lib/desktop';
 import { PomodoroSettings } from '../pomodoro/PomodoroSettings';
+import { StudySetupForm } from '../desk/StudySetup';
+import { DesktopShellSection } from '../components/DesktopShellSection';
+import '../desk/desk.css';
 import { buildBackupJSON, parseBackupJSON } from '../lib/backup';
 import { buildSeedBundle } from '../seed/seedData';
 import { todayStr } from '../lib/date';
@@ -185,6 +188,17 @@ export default function SettingsPage() {
       <Section title="番茄钟">
         <PomodoroSettings />
       </Section>
+
+      {/* 学习提醒（工作台学习卡右上角 ⚙ 是同一张表） */}
+      <Section title="学习提醒">
+        <StudySetupForm />
+      </Section>
+
+      {isDesktop() && (
+        <Section title="桌面常驻">
+          <DesktopShellSection />
+        </Section>
+      )}
 
       <Section title="数据">
         <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1">

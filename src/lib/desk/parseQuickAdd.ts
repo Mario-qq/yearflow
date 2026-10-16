@@ -4,6 +4,7 @@
  *
  *   !! 紧急 · ! 尽快 · @人（后面加空格）· 今天/明天/后天/周三/下周一/10.20/10月20日 · 截止周五 / ddl 10.31
  *   #目标名 · 每天/工作日/每周一三/每月5号/每月最后一天/每月第二个周三/每月最后一个周五 · ~生活 · 待处理
+ *   例行可带时间：9:00 / 9点 / 9点半 / 14点30（只在例行里认，待办标题里的「3点」原样保留）
  *
  * 不写日子 = 今天；写「待处理」= 不排日子。日期词在句首/句尾可以不加空格，句中要用空格隔开
  * （否则「今天的报表」会被吃掉一个「今天」）。
@@ -27,6 +28,8 @@ export interface QuickAddResult {
   rule?: RoutineRule;
   /** 例行规则的原话，如「每周一三」 */
   ruleLabel?: string;
+  /** 例行的时间点 HH:mm（排序与提醒用） */
+  time?: string;
 }
 
 const WD: Record<string, number> = { 日: 0, 天: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6 };
@@ -106,6 +109,19 @@ export function parseQuickAdd(input: string, ctx: { today: string; goals: { id: 
   const routine = parseRule(t);
   if (routine) cut(routine.label);
 
+  let time: string | undefined;
+  if (routine) {
+    const tm = /\s(\d{1,2})(?:[:：](\d{2})|点(半|(\d{1,2})分?)?)(?=\s)/.exec(t);
+    if (tm) {
+      const h = Number(tm[1]);
+      const min = tm[2] !== undefined ? Number(tm[2]) : tm[3] === '半' ? 30 : tm[4] !== undefined ? Number(tm[4]) : 0;
+      if (h <= 23 && min <= 59) {
+        time = `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+        t = t.replace(tm[0], ' ');
+      }
+    }
+  }
+
   let dueDate: string | undefined;
   let m = new RegExp(`(?:截止|ddl\\s*)(${DATE_WORD})`, 'i').exec(t);
   if (m) {
@@ -183,6 +199,7 @@ export function parseQuickAdd(input: string, ctx: { today: string; goals: { id: 
       date: null,
       rule: routine.rule,
       ruleLabel: routine.label,
+      ...(time ? { time } : {}),
       ...(goalId ? { goalId } : {}),
       ...(unknownGoal ? { unknownGoal } : {}),
     };

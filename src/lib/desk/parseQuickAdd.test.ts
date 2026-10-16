@@ -95,6 +95,15 @@ describe('一句话新建', () => {
     expect(p('每天 背单词')).toMatchObject({ rule: { type: 'daily' } });
   });
 
+  it('例行可带时间点；待办里的「3点」原样留在标题', () => {
+    expect(p('每周一 9:00 提交周报')).toMatchObject({ kind: 'routine', time: '09:00', title: '提交周报' });
+    expect(p('工作日 9点半 看 MRP 批次')).toMatchObject({ time: '09:30', title: '看 MRP 批次' });
+    expect(p('每月5号 14点30 对账')).toMatchObject({ time: '14:30', title: '对账' });
+    expect(p('每天 25:00 乱写')).toMatchObject({ kind: 'routine', title: '25:00 乱写' });
+    expect(p('明天 3点 开会')).toMatchObject({ kind: 'todo', title: '3点 开会' });
+    expect(p('明天 3点 开会').time).toBeUndefined();
+  });
+
   it('规则词夹在正文里不算例行', () => {
     expect(p('统计工作日加班')).toMatchObject({ kind: 'todo', title: '统计工作日加班' });
     expect(p('整理每天的巡检记录')).toMatchObject({ kind: 'todo' });

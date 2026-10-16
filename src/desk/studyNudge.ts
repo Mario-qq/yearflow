@@ -1,0 +1,112 @@
+/**
+ * 学习到点提醒（DESK_SPEC §五 第 2 层）：只在桌面版主窗口跑（收进托盘时渲染进程照常跑）。
+ * 每 30 秒判一次 lib/derive/study.studyNudgeDue：到锚点时间还没开始 → 第一次提醒；到最晚时间还没学 →
+ * 第二次「15 分钟也算」。每天每种最多一次，记在 localStorage（按日期分键，只留最近几天）。
+ * 顺带把「今天学没学」写到托盘悬停提示里。
+ */
+import { todayStr } from '../lib/date';
+import { desktop } from '../lib/desktop';
+import { studyNudgeDue, type StudyNudge } from '../lib/derive/study';
+import { useStore } from '../store/useStore';
+import { nowHm, studyNow, type StudyView } from './study';
+
+const POLL_MS = 30_000;
+const KEY_PREFIX = 'yearflow:desk:nudge:';
+
+type Sent = { anchor?: boolean; lastCall?: boolean };
+
+function readSent(date: string): Sent {
+  try {
+    return JSON.parse(localStorage.getItem(KEY_PREFIX + date) ?? '{}') as Sent;
+  } catch {
+    return {};
+  }
+}
+
+function writeSent(date: string, sent: Sent): void {
+  try {
+    localStorage.setItem(KEY_PREFIX + date, JSON.stringify(sent));
+    // 只留今天这一键：旧日期的记录没用了
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(KEY_PREFIX) && k !== KEY_PREFIX + date) localStorage.removeItem(k);
+    }
+  } catch {
+    // 记不住最多是同一天多提醒一次
+  }
+}
+
+function pickLabel(v: StudyView): string {
+  const p = v.pick;
+  if (!p) return '学习';
+  const g = useStore.getState().goals[p.goalId];
+  return `${g?.name ?? ''} · ${p.taskName}`;
+}
+
+/** 通知文案（纯拼字，单独导出给自查脚本对照） */
+export function nudgeText(kind: StudyNudge, v: StudyView): { title: string; body: string } {
+  const what = pickLabel(v);
+  if (kind === 'anchor') {
+    const where = v.anchor.text ? `${v.anchor.text}，` : '';
+    return {
+      title: '到点学习了',
+      body: `${where}学 ${v.prefs.studyMinutes} 分钟：${what}${v.broke ? '。昨天断了一天，今天别连断' : ''}`,
+    };
+  }
+  return { title: '今天还没学', body: `${v.prefs.shortMinutes} 分钟也算：${what}。点这里开始` };
+}
+
+function trayText(v: StudyView): string {
+  if (!v.configured) return '';
+  if (v.running) return '正在学习';
+  if (v.studied) return v.minutes > 0 ? `今天学过了 · ${v.minutes} 分钟` : '今天学过了';
+  if (v.dueToday) return `今天还没学 · ${pickLabel(v)}`;
+  return '';
+}
+
+let started = false;
+let lastTray: string | null = null;
+
+/** 一次判定（导出给自查脚本直接驱动）。返回这次发出的提醒种类 */
+export function tickStudyNudge(now = new Date()): StudyNudge | null {
+  const d = desktop();
+  if (!d || !useStore.getState().hydrated) return null;
+  const today = todayStr();
+  const v = studyNow(today);
+
+  const tray = trayText(v);
+  if (tray !== lastTray) {
+    lastTray = tray;
+    void d.setTrayStatus(tray);
+  }
+
+  if (!v.configured) return null;
+  const sent = readSent(today);
+  const kind = studyNudgeDue({
+    nowHm: nowHm(now),
+    anchor: v.anchor,
+    lastCall: v.prefs.lastCall,
+    remind: v.prefs.remind,
+    due: v.dueToday,
+    studied: v.studied,
+    running: Boolean(v.running),
+    sent,
+  });
+  if (!kind) return null;
+  // 发了最晚那次，锚点那次也算发过（不会回头再补）
+  writeSent(today, kind === 'lastCall' ? { anchor: true, lastCall: true } : { ...sent, anchor: true });
+  const { title, body } = nudgeText(kind, v);
+  void d.notify(body, { title, route: '/desk', sound: true });
+  return kind;
+}
+
+export function initStudyNudges(): void {
+  const d = desktop();
+  if (!d || started) return;
+  started = true;
+  // 刚启动别立刻弹（同步、hydrate 还在收尾），等一个轮询周期的零头
+  setTimeout(() => tickStudyNudge(), 5_000);
+  setInterval(() => tickStudyNudge(), POLL_MS);
+  // 合盖/睡眠醒来：立刻补判一次，不等下一个 30 秒
+  d.onPowerResume(() => tickStudyNudge());
+}

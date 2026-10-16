@@ -82,6 +82,27 @@ export function setChimeHandler(fn: ((kind: ChimeKind) => void) | null): void {
   chimeHandler = fn;
 }
 
+/**
+ * 一段专注落库之后（工作台据此给学习任务自动打卡）。remote = 别的窗口落的库、经 storage 广播过来的
+ * （桌面版小窗里点停止就是这种）；由注册方决定要不要处理，内核只负责通知。异常绝不能影响结算本身。
+ */
+export type CommitHandler = (session: FocusSession, remote: boolean) => void;
+let commitHandler: CommitHandler | null = null;
+export function setCommitHandler(fn: CommitHandler | null): void {
+  commitHandler = fn;
+}
+function notifyCommitted(session: FocusSession, remote: boolean): void {
+  if (!commitHandler) return;
+  const fn = commitHandler;
+  queueMicrotask(() => {
+    try {
+      fn(session, remote);
+    } catch {
+      // 自动打卡失败不影响专注记录
+    }
+  });
+}
+
 // ── 视图同步（状态迁移时才写 store） ─────────────────────────────────────
 
 function toView(r: RunningState, now: number): RunningView {
@@ -251,6 +272,7 @@ function terminate(outcome: FocusSession['outcome'], opts: TerminateOpts = {}): 
       // 否则它的「今日 N 段」和结果卡永远差最后这一段
       writeCommitted(session);
       usePomodoroStore.setState({ lastResult: session });
+      notifyCommitted(session, false);
       if (session.outcome === 'completed') {
         const completed = bumpCycleCompleted(now);
         usePomodoroStore.setState({ cycleCompleted: completed });
@@ -518,6 +540,7 @@ function onStorage(e: StorageEvent): void {
     if (s) {
       useStore.getState().applyRemote({ focusSessions: { puts: [s], deletes: [] } });
       usePomodoroStore.setState({ lastResult: s });
+      notifyCommitted(s, true);
     }
     return;
   }

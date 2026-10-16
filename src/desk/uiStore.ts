@@ -12,6 +12,11 @@ export type DeskMenu =
   | { kind: 'row'; key: string; day?: string; x: number; y: number }
   | { kind: 'urgency'; x: number; y: number };
 
+/** 编辑卡：事项 / 例行（id = null 表示新建例行）；left/top = 锚点（打开它的那一行或按钮） */
+export type DeskEditor =
+  | { kind: 'item'; id: string; left: number; top: number }
+  | { kind: 'routine'; id: string | null; left: number; top: number };
+
 export interface MoverState {
   mode: 'drag' | 'click';
   keys: string[];
@@ -30,12 +35,19 @@ interface DeskUi {
   personLit: string | null;
   person: { name: string; left: number; top: number } | null;
   drawer: boolean;
+  /** 抽屉里看哪一页：待处理 / 例行（管理全部例行，含暂停的） */
+  drawerTab: 'pending' | 'routines';
+  editor: DeskEditor | null;
   quickAdd: boolean;
   menu: DeskMenu | null;
   mover: MoverState | null;
   dragging: boolean;
   /** 正在行内改名的 key */
   editing: string | null;
+  /** 学习卡「换一个」轮到第几个候选 */
+  studyPick: number;
+  /** 学习设置浮层（锚在哪儿） */
+  studySetup: { left: number; top: number } | null;
 
   setView: (v: DeskView) => void;
   set: (patch: Partial<Omit<DeskUi, 'set' | 'setView'>>) => void;
@@ -59,11 +71,15 @@ export const useDeskUi = create<DeskUi>()((set) => ({
   personLit: null,
   person: null,
   drawer: false,
+  drawerTab: 'pending',
+  editor: null,
   quickAdd: false,
   menu: null,
   mover: null,
   dragging: false,
   editing: null,
+  studyPick: 0,
+  studySetup: null,
   setView: (view) => {
     try {
       localStorage.setItem(VIEW_KEY, view);
@@ -78,5 +94,5 @@ export const useDeskUi = create<DeskUi>()((set) => ({
 
 /** 关掉所有浮层（Esc / 点空白） */
 export function closeOverlays(): void {
-  useDeskUi.getState().set({ menu: null, mover: null, person: null, personLit: null, quickAdd: false });
+  useDeskUi.getState().set({ menu: null, mover: null, person: null, personLit: null, quickAdd: false, studySetup: null, editor: null });
 }

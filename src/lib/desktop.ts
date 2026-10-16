@@ -30,6 +30,13 @@ export interface BackupEntry {
   size: number;
 }
 
+/** 托盘常驻偏好（主进程持有）。canAutoStart = false：开发模式或非 Windows，开机自启不可用 */
+export interface ShellPrefsView {
+  closeToTray: boolean;
+  openAtLogin: boolean;
+  canAutoStart: boolean;
+}
+
 export interface DesktopApi {
   openPip(): Promise<boolean>;
   closePip(): Promise<boolean>;
@@ -42,7 +49,14 @@ export interface DesktopApi {
   /** 收起态的鼠标进出：true 临时展开，false 收回 */
   peekPip(on: boolean): Promise<void>;
   focusMain(): Promise<void>;
-  notify(body: string): Promise<boolean>;
+  /** 系统通知。route = 点通知后主窗跳到哪一页；sound = 带系统提示音（缺省静音） */
+  notify(body: string, opts?: { title?: string; route?: string; sound?: boolean }): Promise<boolean>;
+  getShellPrefs(): Promise<ShellPrefsView>;
+  setShellPref(key: 'closeToTray' | 'openAtLogin', value: boolean): Promise<ShellPrefsView>;
+  onShellPrefs(cb: (v: ShellPrefsView) => void): () => void;
+  setTrayStatus(text: string): Promise<void>;
+  onNavigate(cb: (route: string) => void): () => void;
+  onTrayStudy(cb: () => void): () => void;
   /** 本机自动备份（lib/autoBackup.ts）。kind：daily = 每天首次启动；pre = 导入/清空/回滚前 */
   backupWrite(json: string, kind: BackupKind): Promise<string>;
   backupList(): Promise<BackupEntry[]>;

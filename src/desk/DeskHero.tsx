@@ -1,7 +1,7 @@
 /**
  * 头部：左边日期 + 今日脉搏（一句话说清今天的局面，@人可点开人物卡）；
- * 右边一张安静的统计卡：本周完成环 + 每天完成数小柱、最近两个里程碑倒计时（甘特联动，保留紧迫感）。
- * 学习天数（W2）、收尾本周（W3）到时候各自加一格。
+ * 右边一张安静的统计卡：本周完成环 + 每天完成数小柱、学习周目标点阵、最近两个里程碑倒计时（甘特联动，保留紧迫感）。
+ * 收尾本周（W3）到时候再加一格。
  */
 import { useMemo } from 'react';
 import { useStore } from '../store/useStore';
@@ -14,11 +14,13 @@ import type { PlanRowData } from './usePlanRows';
 import type { DayData } from './useDeskData';
 import { useDeskUi } from './uiStore';
 import type { WorkItem } from '../types/domain';
+import type { StudyView } from './study';
+import { StudyDots } from './StudyCard';
 
 const RING_R = 15;
 const RING_C = 2 * Math.PI * RING_R;
 
-export function DeskHero({ today, items, dayOf, plan }: { today: string; items: WorkItem[]; dayOf: (d: string) => DayData; plan: PlanRowData[] }) {
+export function DeskHero({ today, items, dayOf, plan, study }: { today: string; items: WorkItem[]; dayOf: (d: string) => DayData; plan: PlanRowData[]; study: StudyView }) {
   const milestones = useStore((s) => s.milestones);
   const goals = useStore((s) => s.goals);
 
@@ -44,6 +46,8 @@ export function DeskHero({ today, items, dayOf, plan }: { today: string; items: 
   );
 
   const d = toDay(today);
+  const sg = study.running?.goalId ?? study.pick?.goalId;
+  const studyGoal = sg ? goals[sg] : undefined;
   return (
     <section className="dk-hero">
       <div>
@@ -77,6 +81,22 @@ export function DeskHero({ today, items, dayOf, plan }: { today: string; items: 
                 {top.person}
               </button>
               那有 {top.items.length} 件要说
+            </span>
+          )}
+          {study.configured && (study.studied || study.running || study.dueToday) && (
+            <span>
+              <i style={{ '--c': study.studied ? 'var(--success)' : goalColor(studyGoal?.color ?? 'goal-1') } as React.CSSProperties} />
+              {study.studied ? (
+                '今天学过了'
+              ) : study.running ? (
+                <>
+                  正在学 <b>{studyGoal?.name}</b>
+                </>
+              ) : (
+                <>
+                  <b>{studyGoal?.name}</b> 还没学{study.broke ? '，昨天也断了' : ''}
+                </>
+              )}
             </span>
           )}
           {plan.length > 0 && (
@@ -130,6 +150,14 @@ export function DeskHero({ today, items, dayOf, plan }: { today: string; items: 
             ))}
           </div>
         </div>
+        {study.configured && (
+          <div className="dk-stat">
+            <div className="k">学习</div>
+            <div className="v">
+              <StudyDots v={study} />
+            </div>
+          </div>
+        )}
         {nextMs.length > 0 && (
           <div className="dk-stat">
             <div className="k">里程碑</div>
