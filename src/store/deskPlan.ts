@@ -40,7 +40,10 @@ export function planPatchItems(s: DeskState, ids: string[], patch: Partial<WorkI
     const before = s.workItems[id];
     if (!before) continue;
     const after: WorkItem = { ...before, ...patch, updatedAt: stamp };
+    // patch 里显式给 undefined = 删掉这个字段（如清除截止日），不留 undefined 键进库/同步
+    for (const [k, v] of Object.entries(patch)) if (v === undefined) delete (after as unknown as Record<string, unknown>)[k];
     if (patch.status === 'done' || patch.status === 'dropped') after.doneAt = stamp;
+    if (patch.status === 'open') delete after.doneAt;
     out.push({ table: 'workItems', type: 'put', before, after });
   }
   return out;

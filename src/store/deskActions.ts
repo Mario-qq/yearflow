@@ -138,9 +138,16 @@ export function dropItems(ids: string[]): void {
 }
 
 export function deleteItem(id: string): void {
+  deleteItems([id]);
+}
+
+/** 批量删除（软删），一条撤销记录 */
+export function deleteItems(ids: string[]): void {
   const s = useStore.getState();
-  const before = s.workItems[id];
-  if (before) s.execute(`删除「${before.title}」`, [{ table: 'workItems', type: 'delete', before }]);
+  const befores = ids.map((id) => s.workItems[id]).filter(Boolean);
+  if (befores.length === 0) return;
+  const label = befores.length === 1 ? `删除「${befores[0].title}」` : `删除 ${befores.length} 件`;
+  s.execute(label, befores.map((before) => ({ table: 'workItems' as const, type: 'delete' as const, before })));
 }
 
 export function markPersonSaid(person: string): void {

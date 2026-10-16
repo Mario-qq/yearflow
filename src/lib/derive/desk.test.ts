@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { DayMark, Routine, RoutineLog, WorkItem } from '../../types/domain';
 import {
+  dayCount,
+  dayItemsFrom,
   effectiveUrgency,
+  indexItemsByDate,
+  rolledItems,
   followupsByPerson,
   isStale,
   isWorkday,
@@ -243,5 +247,25 @@ describe('挪动', () => {
   it('挪到截止日之后要提示', () => {
     expect(moveItem(item('a', { date: TODAY, dueDate: '2026-10-17' }), '2026-10-19', T0).pastDue).toBe(true);
     expect(moveItem(item('a', { date: TODAY, dueDate: '2026-10-19' }), '2026-10-19', T0).pastDue).toBe(false);
+  });
+});
+
+describe('日卡计数', () => {
+  const occ = (status: 'open' | 'done' | 'skipped') => ({ routine: routine('r'), origDate: TODAY, status, makeup: false, movedIn: false });
+  it('过去的日子只算做完的；今天含顺延；跳过不算', () => {
+    const items = [item('a', { date: '2026-10-12', status: 'done' }), item('b', { date: '2026-10-12' }), item('c', { date: TODAY })];
+    const idx = indexItemsByDate(items);
+    const rolled = rolledItems(items, TODAY);
+    const past = dayItemsFrom(idx, rolled, '2026-10-12', TODAY);
+    expect(dayCount('2026-10-12', TODAY, past, [occ('open')])).toEqual({ done: 1, total: 1 });
+    const today = dayItemsFrom(idx, rolled, TODAY, TODAY);
+    expect(today.rolled.map((i) => i.id)).toEqual(['b']);
+    expect(dayCount(TODAY, TODAY, today, [occ('done'), occ('open'), occ('skipped')])).toEqual({ done: 1, total: 4 });
+  });
+
+  it('索引不收待处理与已删除', () => {
+    const idx = indexItemsByDate([item('a'), item('b', { date: TODAY, deletedAt: T0 }), item('c', { date: TODAY })]);
+    expect([...idx.keys()]).toEqual([TODAY]);
+    expect(idx.get(TODAY)!.map((i) => i.id)).toEqual(['c']);
   });
 });

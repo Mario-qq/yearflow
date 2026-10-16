@@ -163,14 +163,52 @@ export interface DayItems {
 }
 
 export function itemsOnDay(items: WorkItem[], date: string, today: string): DayItems {
-  const cmp = (a: WorkItem, b: WorkItem) => compareItems(a, b, today);
-  const own = items.filter((i) => live(i) && i.date === date);
+  return dayItemsFrom(indexItemsByDate(items), rolledItems(items, today), date, today);
+}
+
+/** 按排期日建索引（周历 7 天 / 月历 42 天共用一次扫描）；待处理与已删除不进索引 */
+export function indexItemsByDate(items: WorkItem[]): Map<string, WorkItem[]> {
+  const map = new Map<string, WorkItem[]>();
+  for (const i of items) {
+    if (!live(i) || !i.date) continue;
+    const list = map.get(i.date);
+    if (list) list.push(i);
+    else map.set(i.date, [i]);
+  }
+  return map;
+}
+
+/** 过去没做完、顺延到今天的事项（按紧急度排） */
+export function rolledItems(items: WorkItem[], today: string): WorkItem[] {
+  return items
+    .filter((i) => live(i) && i.status === 'open' && i.date !== undefined && i.date < today)
+    .sort((a, b) => compareItems(a, b, today));
+}
+
+export function dayItemsFrom(index: Map<string, WorkItem[]>, rolled: WorkItem[], date: string, today: string): DayItems {
+  const own = index.get(date) ?? [];
   return {
-    rolled:
-      date === today ? items.filter((i) => live(i) && i.status === 'open' && i.date !== undefined && i.date < today).sort(cmp) : [],
-    open: own.filter((i) => i.status === 'open').sort(cmp),
+    rolled: date === today ? rolled : [],
+    open: own.filter((i) => i.status === 'open').sort((a, b) => compareItems(a, b, today)),
     done: own.filter((i) => i.status === 'done'),
   };
+}
+
+export interface DayCount {
+  done: number;
+  total: number;
+}
+
+/**
+ * 日卡计数（卡头「3/10」与进度线、头部本周统计共用）。
+ * 过去的日子只算做完的（没做完的事项已挂到今天，漏掉的例行就是漏了）⇒ total = done；
+ * 今天和以后 = 做完 + 没做完（今天含顺延来的）。跳过的例行与「不做了」的事项两边都不算。
+ */
+export function dayCount(date: string, today: string, day: DayItems, occ: RoutineOccurrence[]): DayCount {
+  const done = day.done.length + occ.filter((o) => o.status === 'done').length;
+  if (date < today) return { done, total: done };
+  const open = day.open.length + day.rolled.length + occ.filter((o) => o.status === 'open').length;
+  return { done, total: done + open };
 }
 
 /** 待处理 = 未完成且还没排日子 */

@@ -52,6 +52,11 @@ describe('事项', () => {
     expect(after(cs[0])).toMatchObject({ status: 'dropped', doneAt: NOW });
   });
 
+  it('patch 里给 undefined = 删掉字段（清除截止日）', () => {
+    const cs = planPatchItems(state({ items: [wi('a', { dueDate: '2026-10-20' })] }), ['a'], { dueDate: undefined }, NOW);
+    expect('dueDate' in (after(cs[0]) as WorkItem)).toBe(false);
+  });
+
   it('某人的未完成跟进全部标为已说，别人的与已完成的不动', () => {
     const fu = (id: string, person: string, status: WorkItem['status'] = 'open') => wi(id, { kind: 'followup', person, mode: 'inform', status });
     const cs = planMarkPersonSaid(state({ items: [fu('1', '张经理'), fu('2', '张经理', 'done'), fu('3', '王芳')] }), '张经理', NOW);

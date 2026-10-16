@@ -11,6 +11,7 @@ export function Toasts() {
       {items.map((t) => (
         <div
           key={t.id}
+          className={t.action ? 'pointer-events-auto flex items-center gap-3' : undefined}
           style={{
             padding: '6px 12px',
             fontSize: 'var(--font-12)',
@@ -23,6 +24,16 @@ export function Toasts() {
           }}
         >
           {t.text}
+          {t.action && (
+            <button
+              type="button"
+              onClick={t.action.run}
+              className="cursor-pointer"
+              style={{ color: 'var(--accent)', fontWeight: 600, fontSize: 'var(--font-12)' }}
+            >
+              {t.action.label}
+            </button>
+          )}
         </div>
       ))}
     </div>

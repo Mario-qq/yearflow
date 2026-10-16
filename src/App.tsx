@@ -17,6 +17,7 @@ import { ShortcutHelp } from './components/ShortcutHelp';
 import { GanttToolbar } from './gantt/GanttToolbar';
 import GanttPage from './pages/GanttPage';
 import CheckInPage from './pages/CheckInPage';
+import DeskPage from './pages/DeskPage';
 import SettingsPage from './pages/SettingsPage';
 
 // 复盘页含 recharts，路由级代码分割避免拖慢甘特首屏
@@ -25,6 +26,8 @@ const ReviewPage = lazy(() => import('./pages/ReviewPage'));
 const YearReportPage = lazy(() => import('./pages/YearReportPage'));
 
 const NAV = [
+  // 工作台只在电脑宽度出现（负责人：手机端不显示），见 MobileTabBar 的过滤
+  { to: '/desk', label: '工作台', icon: '🗂', desktopOnly: true },
   { to: '/gantt', label: '甘特图', icon: '📊' },
   { to: '/checkin', label: '打卡', icon: '✓' },
   { to: '/review', label: '复盘', icon: '📈' },
@@ -43,7 +46,7 @@ function MobileTabBar() {
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
-      {NAV.map((item) => (
+      {NAV.filter((item) => !item.desktopOnly).map((item) => (
         <NavLink
           key={item.to}
           to={item.to}
@@ -72,10 +75,10 @@ function GanttToolbarSlot() {
   return <GanttToolbar />;
 }
 
-/** 移动端（<768px）默认路由落打卡面板（SPEC 第五节） */
+/** 移动端（<768px）默认路由落打卡面板（SPEC 第五节）；电脑默认落工作台（DESK_SPEC §2.3） */
 function HomeRedirect() {
   const isMobile = window.matchMedia('(max-width: 767px)').matches;
-  return <Navigate to={isMobile ? '/checkin' : '/gantt'} replace />;
+  return <Navigate to={isMobile ? '/checkin' : '/desk'} replace />;
 }
 
 export default function App() {
@@ -239,6 +242,7 @@ export default function App() {
         <main className="min-h-0 flex-1 overflow-auto">
           <Routes>
             <Route path="/" element={<HomeRedirect />} />
+            <Route path="/desk" element={<DeskPage />} />
             <Route path="/gantt" element={<GanttPage />} />
             <Route path="/checkin" element={<CheckInPage />} />
             <Route

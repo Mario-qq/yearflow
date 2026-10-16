@@ -50,15 +50,19 @@ check('有真实 origin（localStorage/IDB/Web Locks 的前提）', origin === '
 check('secure context（navigator.locks 要求）', await main.evaluate(() => window.isSecureContext));
 check('service worker 未注册（桌面构建已关 PWA）', (await main.evaluate(() => navigator.serviceWorker?.controller ?? null)) === null);
 
-// BrowserRouter 在自定义 origin 下必须能正常 pushState 并落到 /gantt
-const routed = await until(() => main.evaluate(() => location.pathname.startsWith('/gantt')));
-check('BrowserRouter 落到 /gantt', !!routed, await main.evaluate(() => location.pathname));
+// BrowserRouter 在自定义 origin 下必须能正常 pushState 并落到首页 /desk（工作台，2026-10 起电脑默认首页）
+const routed = await until(() => main.evaluate(() => location.pathname.startsWith('/desk')));
+check('BrowserRouter 落到 /desk', !!routed, await main.evaluate(() => location.pathname));
 
 // ⚠️ 生产构建里没有 window.__store（那是 import.meta.env.DEV 才挂的观测句柄），
 // 所以这个脚本一律走 UI 与 DOM，不碰任何 dev 句柄。
 //
 // 桌面壳是全新 origin（app://local），IndexedDB 是空的 —— 这正是「数据要靠备份 JSON
 // 迁移过来」的那个状态。自查里先从 UI 载入示例数据，否则甘特图只有空态可截。
+// 首页现在是工作台：先切到甘特图，再看是不是空库
+await main.getByRole('link', { name: /甘特图/ }).click();
+await until(() => main.evaluate(() => location.pathname.startsWith('/gantt')));
+await new Promise((r) => setTimeout(r, 500));
 const empty = await main.evaluate(() => document.body.innerText.includes('还没有目标'));
 if (empty) {
   await main.getByRole('link', { name: /设置/ }).click();
@@ -68,7 +72,7 @@ if (empty) {
   check('空库时可从 UI 载入示例数据（迁移前的初始状态）', !!seeded);
 }
 
-const ganttReady = await until(() => main.evaluate(() => !!document.querySelector('svg')));
+const ganttReady = await until(() => main.evaluate(() => location.pathname.startsWith('/gantt') && document.querySelectorAll('svg rect').length > 0));
 check('甘特图渲染出 SVG', !!ganttReady);
 
 const errs = [];

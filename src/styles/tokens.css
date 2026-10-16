@@ -66,6 +66,8 @@
   --warning: #d9910f;
   --danger: #d4453a;          /* 今日线、缺卡点、冲突连线 */
   --danger-soft: color-mix(in srgb, var(--danger) 15%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 15%, transparent); /* 工作台：补班标记、拖延提示底 */
+  --success-soft: color-mix(in srgb, var(--success) 13%, transparent); /* 工作台：休息日标记、「今天清空了」底 */
   --info: #3a8fd4;
   --text-on-accent: #ffffff;  /* accent/danger 实底上的文字（今天圆底、「今」标签） */
 
