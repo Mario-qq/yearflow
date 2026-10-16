@@ -4,7 +4,7 @@
  * Goal.color 存 tokens.css 的色板键（goal-1..goal-5），UI 用 var(--goal-N) 解析。
  */
 import type { CheckIn, ExemptionPeriod, Goal, Milestone, Task } from '../types/domain';
-import type { DataBundle } from '../store/types';
+import { emptyBundle, type DataBundle } from '../store/types';
 import { dayjs, toDay } from '../lib/date';
 import { expandScheduledDays } from '../lib/derive';
 
@@ -112,7 +112,7 @@ export function buildSeedBundle(today: string): DataBundle {
   ];
 
   // focusSessions 恒空：示例数据不伪造专注记录（真实投入时长只能由计时器产生）
-  return { goals, tasks, milestones, checkIns, exemptions, reviews: [], focusSessions: [], screenTimeDays: [] };
+  return { ...emptyBundle(), goals, tasks, milestones, checkIns, exemptions };
 }
 
 /** 判断当前库是否是（或包含）示例数据（"清空示例数据"入口用） */

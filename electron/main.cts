@@ -554,6 +554,87 @@ ipcMain.handle('win:focus-main', () => {
   mainWindow?.focus();
 });
 
+// ——— 本机自动备份（DESK_SPEC §七）———
+//
+// 渲染进程负责「什么时候备份、备份什么」（全库 JSON = lib/backup.ts 的导出格式），
+// 这里只管文件：落盘、按种类保留最近 N 份、列出、读回、打开目录。
+// 文件名即元数据：yearflow-YYYYMMDD-HHmmssSSS-<daily|pre>.json，读写都只认这个形状（防目录穿越）。
+// 带毫秒且撞名就顺延 1ms：同一秒内两次备份（操作前备份紧跟回滚）不能互相覆盖。
+// 老的 HHmmss 形状（无毫秒）照样认。
+
+const BACKUP_KEEP = { daily: 30, pre: 10 } as const;
+type BackupKind = keyof typeof BACKUP_KEEP;
+const BACKUP_NAME = /^yearflow-(\d{8})-(\d{6})(?:\d{3})?-(daily|pre)\.json$/;
+
+function backupDir(): string {
+  const dir = path.join(app.getPath('userData'), 'backups');
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+function pruneBackups(kind: BackupKind): void {
+  const dir = backupDir();
+  const mine = fs
+    .readdirSync(dir)
+    .filter((f) => BACKUP_NAME.exec(f)?.[3] === kind)
+    .sort()
+    .reverse(); // 文件名里的时间是定宽的，字典序 = 时间序
+  for (const f of mine.slice(BACKUP_KEEP[kind])) {
+    try {
+      fs.unlinkSync(path.join(dir, f));
+    } catch {
+      // 删不掉（被占用）就留到下次
+    }
+  }
+}
+
+ipcMain.handle('backup:write', (_e, json: string, kind: BackupKind) => {
+  if (kind !== 'daily' && kind !== 'pre') throw new Error(`未知备份种类：${String(kind)}`);
+  if (typeof json !== 'string' || json.length === 0) throw new Error('备份内容为空');
+  const dir = backupDir();
+  let t = Date.now();
+  let name: string;
+  for (;;) {
+    const d = new Date(t);
+    const stamp = `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}${String(d.getMilliseconds()).padStart(3, '0')}`;
+    name = `yearflow-${stamp}-${kind}.json`;
+    if (!fs.existsSync(path.join(dir, name))) break;
+    t += 1;
+  }
+  const tmp = path.join(dir, `${name}.tmp`);
+  // 先写临时文件再改名：写到一半断电不会留下一份「看起来完整」的坏备份
+  fs.writeFileSync(tmp, json, 'utf8');
+  fs.renameSync(tmp, path.join(dir, name));
+  pruneBackups(kind);
+  return name;
+});
+
+ipcMain.handle('backup:list', () => {
+  const dir = backupDir();
+  return fs
+    .readdirSync(dir)
+    .map((name) => {
+      const m = BACKUP_NAME.exec(name);
+      if (!m) return null;
+      const [, ymd, hms] = m;
+      const at = `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}T${hms.slice(0, 2)}:${hms.slice(2, 4)}:${hms.slice(4, 6)}`;
+      return { name, kind: m[3] as BackupKind, at, size: fs.statSync(path.join(dir, name)).size };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+    .sort((a, b) => b.name.localeCompare(a.name));
+});
+
+ipcMain.handle('backup:read', (_e, name: string) => {
+  if (typeof name !== 'string' || !BACKUP_NAME.test(name)) throw new Error('非法备份文件名');
+  return fs.readFileSync(path.join(backupDir(), name), 'utf8');
+});
+
+ipcMain.handle('backup:open-dir', () => shell.openPath(backupDir()));
+
 // ——— 生命周期 ———
 
 // 单实例：多开会出现两套 leader 选举与两份 Dexie 连接

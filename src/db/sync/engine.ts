@@ -9,6 +9,13 @@ import { useStore } from '../../store/useStore';
 import { flushNow } from '../../store/persist';
 import { TABLE_NAMES, type TableName } from '../../store/types';
 import type { SyncableEntity } from '../../types/domain';
+import {
+  advancePush,
+  describeFailures,
+  pushCursorOf,
+  type Cursors,
+  type TableFailure,
+} from './cursors';
 
 /**
  * 云同步引擎（SPEC 第十节）— 本地优先。
@@ -18,6 +25,8 @@ import type { SyncableEntity } from '../../types/domain';
  *   冲突 = 整行 LWW：拉取侧在 merge.ts 客户端裁决；推送侧由 upsert_rows RPC
  *   的 on conflict ... where excluded.updated_at > 现值 兜底（旧行推不倒新行）。
  * 顺序固定「先拉后推」：本地旧改动先被远端新版覆盖，再推送时自然只剩赢家。
+ * 逐表隔离：某张表失败（典型是云端还没执行新迁移、表不存在）只跳过那一张、不前移它的游标，
+ * 其余表照常同步；状态点报错并说明缺哪张表（0004 时一张表缺失曾让所有表停摆）。
  */
 
 /** 本地表名 → Supabase 表名（snake_case） */
@@ -30,6 +39,10 @@ const REMOTE_TABLE: Record<TableName, string> = {
   reviews: 'reviews',
   focusSessions: 'focus_sessions', // 需先在 Supabase 执行 0002_focus_sessions.sql
   screenTimeDays: 'screen_time_days', // 需先执行 0004_screen_time.sql
+  workItems: 'work_items', // 以下四张需先执行 0005_desk.sql
+  routines: 'routines',
+  routineLogs: 'routine_logs',
+  dayMarks: 'day_marks',
 };
 
 /** 同步引擎直接读写 Dexie 原始表（属数据层；不得经 repo，repo 会重盖 updatedAt） */
@@ -45,12 +58,7 @@ const EPOCH = '1970-01-01T00:00:00Z';
 
 export const isSyncConfigured = supabase !== null;
 
-/** 增量游标，按用户隔离存 localStorage；丢失只导致一次全量重同步（幂等） */
-interface Cursors {
-  push: string | null;
-  pull: Partial<Record<TableName, string>>;
-}
-
+/** 增量游标（结构见 cursors.ts），按用户隔离存 localStorage；丢失只导致一次全量重同步（幂等） */
 const cursorKey = (userId: string) => `yearflow:sync:${userId}`;
 
 function loadCursors(userId: string): Cursors {
@@ -94,13 +102,19 @@ export async function syncNow(): Promise<void> {
   try {
     await flushNow(); // 先把防抖中的本地写入落库，再基于 Dexie 做推拉
     const cursors = loadCursors(user.id);
-    await pullAll(supabase, user.id, cursors);
-    await pushAll(supabase, user.id, cursors);
-    if (!cleanedThisSession) {
+    const failures: TableFailure[] = [];
+    await pullAll(supabase, user.id, cursors, failures);
+    await pushAll(supabase, user.id, cursors, failures);
+    if (!cleanedThisSession && failures.length === 0) {
       cleanedThisSession = true;
-      await cleanupTombstones(supabase, cursors);
+      await cleanupTombstones(supabase, cursors, failures);
     }
-    useSyncStore.setState({ status: 'idle', lastSyncAt: new Date().toISOString() });
+    const lastSyncAt = new Date().toISOString();
+    useSyncStore.setState(
+      failures.length === 0
+        ? { status: 'idle', lastSyncAt }
+        : { status: 'error', lastSyncAt, error: describeFailures(failures) },
+    );
   } catch (e) {
     useSyncStore.setState({
       status: 'error',
@@ -115,10 +129,15 @@ export async function syncNow(): Promise<void> {
   }
 }
 
-/** 增量拉取：server_updated_at 升序分页，LWW 对照 Dexie 原始行后应用到库与内存 */
-async function pullAll(sb: SupabaseClient, userId: string, cursors: Cursors): Promise<void> {
+/** 增量拉取：server_updated_at 升序分页，LWW 对照 Dexie 原始行后应用到库与内存。失败的表记进 failures 并跳过 */
+async function pullAll(
+  sb: SupabaseClient,
+  userId: string,
+  cursors: Cursors,
+  failures: TableFailure[],
+): Promise<void> {
   const ops: Partial<Record<TableName, { puts: SyncableEntity[]; deletes: string[] }>> = {};
-  for (const t of TABLE_NAMES) {
+  tables: for (const t of TABLE_NAMES) {
     let cursor = cursors.pull[t] ?? EPOCH;
     const pulled: SyncableEntity[] = [];
     for (;;) {
@@ -128,7 +147,11 @@ async function pullAll(sb: SupabaseClient, userId: string, cursors: Cursors): Pr
         .gt('server_updated_at', cursor)
         .order('server_updated_at', { ascending: true })
         .limit(PULL_PAGE_SIZE);
-      if (error) throw new Error(`拉取 ${REMOTE_TABLE[t]} 失败：${error.message}`);
+      if (error) {
+        // 不前移游标、不应用这张表已拉到的半截数据：下一轮从原游标重来
+        failures.push({ table: REMOTE_TABLE[t], message: error.message, code: error.code });
+        continue tables;
+      }
       const rows = (data ?? []) as RemotePullRow[];
       if (rows.length === 0) break;
       pulled.push(...rows.map((r) => r.data));
@@ -152,14 +175,22 @@ async function pullAll(sb: SupabaseClient, userId: string, cursors: Cursors): Pr
   if (Object.keys(ops).length > 0) useStore.getState().applyRemote(ops);
 }
 
-/** 增量推送：updatedAt > 游标的行（含墓碑）分块经 upsert_rows RPC 上行；无游标 = 首次登录全量上传合并 */
-async function pushAll(sb: SupabaseClient, userId: string, cursors: Cursors): Promise<void> {
+/**
+ * 增量推送：updatedAt > 该表游标的行（含墓碑）分块经 upsert_rows RPC 上行；无游标 = 首次登录全量上传合并。
+ * 游标按表前移：失败的表不前移 ⇒ 它的脏行留到下一轮（upsert 幂等，已推的块重推无害）。
+ */
+async function pushAll(
+  sb: SupabaseClient,
+  userId: string,
+  cursors: Cursors,
+  failures: TableFailure[],
+): Promise<void> {
   const t0 = new Date().toISOString(); // 推送期间的新写入 updatedAt ≥ t0，留给下一轮
-  for (const t of TABLE_NAMES) {
+  let allOk = true;
+  tables: for (const t of TABLE_NAMES) {
     const table = rawTable(t);
-    const dirty = cursors.push
-      ? await table.where('updatedAt').above(cursors.push).toArray()
-      : await table.toArray();
+    const since = pushCursorOf(cursors, t);
+    const dirty = since ? await table.where('updatedAt').above(since).toArray() : await table.toArray();
     for (let i = 0; i < dirty.length; i += PUSH_CHUNK_SIZE) {
       const chunk = dirty.slice(i, i + PUSH_CHUNK_SIZE).map((e) => ({
         id: e.id,
@@ -171,23 +202,33 @@ async function pushAll(sb: SupabaseClient, userId: string, cursors: Cursors): Pr
         p_table: REMOTE_TABLE[t],
         p_rows: chunk,
       });
-      if (error) throw new Error(`推送 ${REMOTE_TABLE[t]} 失败：${error.message}`);
+      if (error) {
+        failures.push({ table: REMOTE_TABLE[t], message: error.message, code: error.code });
+        allOk = false;
+        continue tables;
+      }
     }
+    advancePush(cursors, t, t0);
   }
-  cursors.push = t0;
+  if (allOk) cursors.push = t0; // 全局游标只在全部表都推成功时前移（它对所有表都必须成立）
   saveCursors(userId, cursors);
 }
 
 /** 墓碑清理（每会话跑一次）：本地已推送且删除超 30 天的物理删除；云端同规则（RLS 限定本人行） */
-async function cleanupTombstones(sb: SupabaseClient, cursors: Cursors): Promise<void> {
+async function cleanupTombstones(
+  sb: SupabaseClient,
+  cursors: Cursors,
+  failures: TableFailure[],
+): Promise<void> {
   const cutoff = new Date(Date.now() - TOMBSTONE_TTL_MS).toISOString();
   for (const t of TABLE_NAMES) {
+    const pushed = pushCursorOf(cursors, t);
     const stale = (await rawTable(t).toArray()).filter(
-      (e) => e.deletedAt && e.deletedAt < cutoff && cursors.push && e.updatedAt <= cursors.push,
+      (e) => e.deletedAt && e.deletedAt < cutoff && pushed && e.updatedAt <= pushed,
     );
     if (stale.length > 0) await rawTable(t).bulkDelete(stale.map((e) => e.id));
     const { error } = await sb.from(REMOTE_TABLE[t]).delete().lt('deleted_at', cutoff);
-    if (error) throw new Error(`清理 ${REMOTE_TABLE[t]} 失败：${error.message}`);
+    if (error) failures.push({ table: REMOTE_TABLE[t], message: error.message, code: error.code });
   }
 }
 

@@ -925,4 +925,22 @@ Document PiP 与主页面**同一个 JS realm**，所以旧实现是 `createPort
 
 自查（Playwright 系统 Chrome）：深浅 × 1440/1920 × 周/月 8 张无横向溢出；拖动浮出/松手消失/落到下周三、多选 2 件挪到下周一、点 @人 高亮、新建解析共 14 条断言全过，无页面错误。逐张看图抓到并修掉四个真 bug：拖拽影子类名 `.ghost` 与按钮 `.btn.ghost` 撞名把「今天」按钮甩到左上角；新建框 10ms 延迟聚焦导致先打的字被当成快捷键（`M` 把视图切成了月历）；关人物卡触发重绘后「挪到…」与人物卡的锚点节点被换掉、定位成 (8,8)；收起的抽屉 `translateX(105%)` 撑出 336px 横向溢出。
 
-**下一步**：负责人确认版式 → W1①（数据层，提交前确认）。
+负责人 2026-10-16 拍板 v2 版式。
+
+### W1① 数据层（2026-10-16）
+
+**模型**（`types/domain.ts`）：`WorkItem`（待办与跟进同表，date 缺省 = 待处理，`deferCount` 拖延计数）、`Routine`（规则是可辨识联合：每天/工作日/每周几/每月几号含月末/每月第 N 个周几含最后一个）、`RoutineLog`（确定性 id `routineId:date`，done/skipped/moved，`doneOn` 记补做日）、`DayMark`（休/班）。Dexie v4 只声明新表。
+
+**加表不再漏改**：`TABLE_NAMES` 改由 `Record<TableName, true>` 生成、`EntityMaps`/`DataBundle` 改为由 `EntityOf` 映射、`hydrate` 改由 `TABLE_NAMES + repoByTable` 驱动、新增 `emptyBundle()`。这次加表时编译器直接指出了剩下两处（同步表名映射、备份 zod），以前这三处漏改都不报错。
+
+**同步逐表隔离**（`db/sync/cursors.ts` + engine）：拉取/推送/墓碑清理逐表 try，失败的表记下原因、不前移它的游标，其余表照常；状态点说「云端缺少表 xx，请执行最新迁移（其余数据已正常同步）」。**推送游标改为按表分**——原来的全局游标在「跳过失败表」时会把那张表的脏行跨过去、永远推不上去；老游标兼容：分表游标缺省时回落到全局游标。`supabase/migrations/0005_desk.sql`：四张表 + 索引 + RLS + 触发器 + `upsert_rows` 白名单（0004 的超集），幂等。
+
+**每日备份与整库回滚**：主进程 `backup:write/list/read/open-dir`（文件名即元数据，带毫秒且撞名顺延，正则校验防目录穿越，按种类保留 30/10 份，先写 .tmp 再改名）；渲染进程 `lib/autoBackup.ts`（每天首次启动 + 每小时检查；「载入示例/清空/导入/回滚」统一走 `replaceAllWithBackup`，操作前备份失败就不替换）；设置页「备份与回滚」（仅桌面版）：选一份先看「回滚会改动：目标 5、任务 12…」再回滚，回滚只换数据不动本机设置。回滚传播到所有设备的两个前提（墓碑 + repo 重盖 updatedAt）抽成 `store/replace.ts` 并加测试锁住。
+
+**派生与写操作**：`lib/derive/desk.ts`（例行出现/补做/改期顺延、紧急度提档、事项分组、待处理、拖延信号、按人聚合、挪动目标日与 deferCount 口径）、`lib/desk/parseQuickAdd.ts`（日期词、截止、!!/!、@人与下发/告知、#目标、~生活、待处理、六种例行写法；规则词须独立成词、日期按命中位置切）、`store/deskPlan.ts`（纯函数算 Change[]）+ `store/deskActions.ts`（走 execute 进 undo）。
+
+**验收**：`tsc -b` + `tsc -p electron` + `oxlint` 干净；vitest **292 全绿**（新增 60 条：desk 22、parseQuickAdd 14、deskPlan 11、cursors 5、replace 3、backupDiff 2、backup 3）。**真实升级**：同端口先跑旧构建（ed87bf6）载入示例数据、再换新构建打开 —— IndexedDB 30→40、旧 8 表计数一条不少、新 4 表建好、甘特照常、零报错。**桌面打包形态** `node scripts/check-desk-backup.mjs`（独立 userData）11 项全过：首次启动写每日备份、备份含新四表、载入示例前写操作前备份、列表自动刷新、差异提示、回滚清零、回滚前再备份、操作前只留 10 份、读备份拒绝 `../` 穿越、无页面错误。自查抓到一个真 bug：备份文件名只精确到秒，同一秒内两次备份互相覆盖（12 次连写只剩 2 份）→ 改为带毫秒 + 撞名顺延。
+
+**上线前（负责人）**：在 Supabase SQL Editor 执行 `supabase/migrations/0005_desk.sql`。没执行前桌面版/网页版状态点会报「云端缺少表」，其余数据照常同步。
+
+**下一步**：W1② `/desk` 主界面（按 W0 原型 v2）。

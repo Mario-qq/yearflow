@@ -21,6 +21,15 @@ export interface PipModeInfo {
   edge: PipEdge | null;
 }
 
+export type BackupKind = 'daily' | 'pre';
+/** 一份本机备份；at = 本地时间 YYYY-MM-DDTHH:mm:ss（取自文件名） */
+export interface BackupEntry {
+  name: string;
+  kind: BackupKind;
+  at: string;
+  size: number;
+}
+
 export interface DesktopApi {
   openPip(): Promise<boolean>;
   closePip(): Promise<boolean>;
@@ -34,6 +43,11 @@ export interface DesktopApi {
   peekPip(on: boolean): Promise<void>;
   focusMain(): Promise<void>;
   notify(body: string): Promise<boolean>;
+  /** 本机自动备份（lib/autoBackup.ts）。kind：daily = 每天首次启动；pre = 导入/清空/回滚前 */
+  backupWrite(json: string, kind: BackupKind): Promise<string>;
+  backupList(): Promise<BackupEntry[]>;
+  backupRead(name: string): Promise<string>;
+  backupOpenDir(): Promise<string>;
   onPowerResume(cb: () => void): () => void;
   onPipState(cb: (open: boolean) => void): () => void;
   onPipMode(cb: (info: PipModeInfo) => void): () => void;

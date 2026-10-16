@@ -235,11 +235,13 @@ export interface DayMark {
 - 落库：Dexie **v4** 新增 4 表 → 加进 `TABLE_NAMES`（`src/store/types.ts`，它同时驱动同步、备份、清库）→ `lib/backup.ts` zod → Supabase 迁移 `0005_desk.sql`（建 4 表 + RLS + 把表名加进 `upsert_rows` 白名单；按 0001 的告诫，**只追加不重写**）。
 - ⚠️ 上线顺序：负责人先在 Supabase 执行 0005，再部署前端。**W1 同时修掉「云端缺一张表 ⇒ 所有表同步停摆」**（0004 时暴露过）：拉取/推送逐表隔离失败，缺表只跳过那一张，状态点提示「云端缺表 xx，请执行迁移」。
 - **每日自动备份 + 整库回滚**：
-  - 桌面版每天首次启动（及每次「导入/清空/载入示例」之前）把全库 JSON 写到 `%APPDATA%/YearFlow/backups/yearflow-YYYYMMDD-HHmm.json`，保留最近 30 份每日备份 + 最近 10 份操作前备份；走现有 `exportBundle` ⇒ 所有表自动包含，不再区分表。
+  - 桌面版每天首次启动（常驻跨午夜则每小时检查一次），以及每次「载入示例/清空/导入/回滚」之前，把全库 JSON 写到 `userData/backups/yearflow-YYYYMMDD-HHmmssSSS-<daily|pre>.json`（userData = Electron 的应用数据目录），保留最近 30 份每日备份 + 10 份操作前备份；走现有 `exportBundle` ⇒ 所有表自动包含，不再区分表。操作前备份写不进去就**不执行**那次整库替换。
   - 设置页「备份与回滚」：列出备份（时间、各表行数、与当前相比的差异条数），选一份「回滚到这一刻」——回滚前先自动备份当前状态，回滚本身可再回滚。
   - 回滚会传播到所有设备：恢复走 `replaceAllData`，repo 写入时重盖 `updatedAt`（`src/db/repos/baseRepo.ts:34`），被替换的行打墓碑 ⇒ 下次同步以回滚版本为准。W1 加一条测试锁住这个行为。
   - 网页版没有文件系统权限，不做自动备份（桌面版是主力机，备份放这一处足够）。
-- 派生全部放 `src/lib/derive/desk.ts`（纯函数 + vitest）：某天出现哪些例行、顺延与拖了几天、跟进按人聚合、今日脉搏句子、学习今日推荐与完成判定、本周小结。
+- 派生全部放 `src/lib/derive/desk.ts`（纯函数 + vitest）：某天出现哪些例行（含补做/改期）、顺延与拖延、紧急度提档、跟进按人聚合、挪动目标日（W1① 已落地）；今日脉搏、学习推荐、日/周统计随 W1②/W2 补。一周固定从周一开始（负责人的手工周历是周一~周日），不跟随设置里的 weekStartsOn。
+- 写操作：纯函数 `src/store/deskPlan.ts` 算 Change[]（vitest），`src/store/deskActions.ts` 走 execute；快速添加解析 `src/lib/desk/parseQuickAdd.ts`。
+- 同步：推送游标按表分（`src/db/sync/cursors.ts`），某表失败只跳过它、不前移它的游标。
 - 全部写操作走 `execute(command)` 进 undo 栈；删除软删除。
 - 容量：按每天 20 条估一年约 7 000 行，内存全量 + 派生 memo，无需分页。
 

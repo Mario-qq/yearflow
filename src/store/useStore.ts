@@ -1,17 +1,8 @@
 import { create } from 'zustand';
 import type { AppSettings, GanttViewState, SyncableEntity } from '../types/domain';
-import {
-  checkInRepo,
-  exemptionRepo,
-  focusRepo,
-  goalRepo,
-  milestoneRepo,
-  reviewRepo,
-  screenTimeRepo,
-  settingsRepo,
-  taskRepo,
-} from '../db/repos';
+import { settingsRepo } from '../db/repos';
 import { queuePersist, queuePersistSettings, repoByTable } from './persist';
+import { planReplaceAll } from './replace';
 import { emitLocalWrite } from '../db/sync/signal';
 import { DEFAULT_SETTINGS } from './defaults';
 import {
@@ -32,16 +23,7 @@ export type RemoteOps = Partial<
 const HISTORY_LIMIT = 100; // SPEC 要求 ≥50 步
 
 function emptyMaps(): EntityMaps {
-  return {
-    goals: {},
-    tasks: {},
-    milestones: {},
-    checkIns: {},
-    exemptions: {},
-    reviews: {},
-    focusSessions: {},
-    screenTimeDays: {},
-  };
+  return Object.fromEntries(TABLE_NAMES.map((t) => [t, {}])) as unknown as EntityMaps;
 }
 
 function toMap<T extends SyncableEntity>(list: T[]): Record<string, T> {
@@ -93,32 +75,14 @@ export const useStore = create<StoreState>()((set, get) => ({
   redoStack: [],
 
   hydrate: async () => {
-    // ⚠️ 加表时这里有三处要一起改：import、Promise.all 数组项、下面 set() 的键。
-    // set() 缺键不会编译报错（Partial 语义），后果是「表存在但内存永远为空」。
-    const [goals, tasks, milestones, checkIns, exemptions, reviews, focusSessions, screenTimeDays, settings] =
-      await Promise.all([
-        goalRepo.getAllActive(),
-        taskRepo.getAllActive(),
-        milestoneRepo.getAllActive(),
-        checkInRepo.getAllActive(),
-        exemptionRepo.getAllActive(),
-        reviewRepo.getAllActive(),
-        focusRepo.getAllActive(),
-        screenTimeRepo.getAllActive(),
-        settingsRepo.get(),
-      ]);
-    set({
-      goals: toMap(goals),
-      tasks: toMap(tasks),
-      milestones: toMap(milestones),
-      checkIns: toMap(checkIns),
-      exemptions: toMap(exemptions),
-      reviews: toMap(reviews),
-      focusSessions: toMap(focusSessions),
-      screenTimeDays: toMap(screenTimeDays),
-      settings,
-      hydrated: true,
-    });
+    // 由 TABLE_NAMES + repoByTable 驱动（两者都编译期穷举），加表不必再改这里。
+    // 以前是手写的 Promise.all + set() 键，set() 缺键不报错（Partial 语义）⇒「表存在但内存永远为空」。
+    const [lists, settings] = await Promise.all([
+      Promise.all(TABLE_NAMES.map((t) => repoByTable[t].getAllActive())),
+      settingsRepo.get(),
+    ]);
+    const maps = Object.fromEntries(TABLE_NAMES.map((t, i) => [t, toMap(lists[i])])) as unknown as EntityMaps;
+    set({ ...maps, settings, hydrated: true });
   },
 
   execute: (label, changes) => {
@@ -170,19 +134,9 @@ export const useStore = create<StoreState>()((set, get) => ({
   },
 
   replaceAllData: async (bundle) => {
-    // 墓碑式清库：被替换掉的行打 deletedAt 保留而非物理清空，
-    // 云同步才能把「清空/导入」造成的删除传播到其它设备（30 天后由同步引擎真删）
-    const state = get();
-    const deletedAt = new Date().toISOString();
-    await Promise.all(
-      TABLE_NAMES.map((t) => {
-        const keep = new Set(bundle[t].map((e) => e.id));
-        const tombstones = (Object.values(state[t]) as SyncableEntity[])
-          .filter((e) => !keep.has(e.id))
-          .map((e) => ({ ...e, deletedAt }));
-        return repoByTable[t].bulkPut([...tombstones, ...(bundle[t] as SyncableEntity[])]);
-      }),
-    );
+    // 墓碑式清库 + repo 重盖 updatedAt ⇒ 替换结果传播到所有设备（口径见 replace.ts）
+    const writes = planReplaceAll(get(), bundle, new Date().toISOString());
+    await Promise.all(TABLE_NAMES.map((t) => repoByTable[t].bulkPut(writes[t])));
     emitLocalWrite();
     // 内存 map 与上面的写盘循环一样由 TABLE_NAMES 驱动：曾经这里是硬编码的表名列表，
     // 漏一张表不会编译报错，而 Dexie 已被墓碑化 ⇒ 内存与库当场分叉，

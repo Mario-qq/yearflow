@@ -192,6 +192,92 @@ export interface CycleState {
   lastAt: number;
 }
 
+// ── 工作台（docs/DESK_SPEC.md §七）─────────────────────────────────────────
+
+/** 紧急度三档：urgent 紧急（今天必须）/ soon 尽快（本周内）/ normal 普通 */
+export type Urgency = 'urgent' | 'soon' | 'normal';
+/** 工作 / 生活。工作类例行只在工作日出现（遵守休/班标记） */
+export type WorkScope = 'work' | 'life';
+/** dropped = 「不做了」，与「做完了」分开计数 */
+export type WorkItemStatus = 'open' | 'done' | 'dropped';
+
+/**
+ * 工作台事项：待办与跟进同表（跟进 = 带对象的待办），排期、顺延、挪动同一套。
+ * date 缺省 = 待处理（还没排日子）。过去没做完的不改 date，由派生层显示到今天。
+ */
+export interface WorkItem {
+  id: string;
+  kind: 'todo' | 'followup';
+  title: string;
+  note?: string;
+  urgency: Urgency;
+  scope: WorkScope;
+  date?: string; // 排期日 YYYY-MM-DD；缺省 = 待处理
+  dueDate?: string; // 截止日
+  person?: string; // 跟进对象（kind=followup 必有）
+  mode?: 'inform' | 'dispatch'; // 待告知 / 待下发
+  goalId?: string; // 仅标签与筛选，不计入甘特进度
+  status: WorkItemStatus;
+  doneAt?: string; // ISO，status 变 done/dropped 的时刻
+  deferCount?: number; // 被往后挪的次数（拖延信号），缺省 0 ⇒ 老数据零迁移
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string;
+}
+
+/** 例行规则。weekday / daysOfWeek 一律 0=周日…6=周六（与 Recurrence 同口径） */
+export type RoutineRule =
+  | { type: 'daily' }
+  | { type: 'workday' }
+  | { type: 'weekly'; daysOfWeek: number[] }
+  | { type: 'monthlyDay'; monthDay: number } // 1–31；-1 = 月末；超出当月天数落在月末
+  | { type: 'monthlyNth'; nth: number; weekday: number }; // 第 nth 个周 X；nth=-1 = 最后一个
+
+/** 例行事项（日常/周常/月常），按规则铺到周历上；每次完成记一条 RoutineLog */
+export interface Routine {
+  id: string;
+  title: string;
+  note?: string;
+  scope: WorkScope;
+  rule: RoutineRule;
+  time?: string; // HH:mm，只用于排序与提醒
+  startDate: string; // 规则从哪天起生效
+  endDate?: string;
+  paused?: boolean;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string;
+}
+
+/**
+ * 例行的一次发生的处理结果。id = `${routineId}:${date}`（确定性 id ⇒ 两台设备同时勾选不会出两条）。
+ * date 永远是规则算出的原日期；moved = 这一次改到 movedTo 那天（规则不变），在新日期完成时 doneAt 记在本条。
+ */
+export interface RoutineLog {
+  id: string;
+  routineId: string;
+  date: string;
+  status: 'done' | 'skipped' | 'moved';
+  movedTo?: string;
+  doneAt?: string; // ISO
+  doneOn?: string; // YYYY-MM-DD，实际在哪天做的（补做 = 晚于 date）
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string;
+}
+
+/** 休/班标记（调休、节假日）：只影响工作台「工作日」判定，不改甘特图 weekdays 规则口径 */
+export interface DayMark {
+  id: string; // = date
+  date: string;
+  type: 'off' | 'work';
+  note?: string;
+  updatedAt: string;
+  deletedAt?: string;
+}
+
 /** 免打卡区间：出差/生病/长假，期间不判缺卡、不断 streak */
 export interface ExemptionPeriod {
   id: string;

@@ -18,6 +18,13 @@ const api = {
   peekPip: (on: boolean): Promise<void> => ipcRenderer.invoke('pip:peek', on),
   focusMain: (): Promise<void> => ipcRenderer.invoke('win:focus-main'),
   notify: (body: string): Promise<boolean> => ipcRenderer.invoke('notify', body),
+  /** 本机自动备份：写入（返回文件名）/ 列出 / 读回 / 打开目录。文件在 userData/backups */
+  backupWrite: (json: string, kind: 'daily' | 'pre'): Promise<string> =>
+    ipcRenderer.invoke('backup:write', json, kind),
+  backupList: (): Promise<{ name: string; kind: 'daily' | 'pre'; at: string; size: number }[]> =>
+    ipcRenderer.invoke('backup:list'),
+  backupRead: (name: string): Promise<string> => ipcRenderer.invoke('backup:read', name),
+  backupOpenDir: (): Promise<string> => ipcRenderer.invoke('backup:open-dir'),
   /** OS 睡眠/锁屏唤醒。返回取消订阅函数。 */
   onPowerResume: (cb: () => void): (() => void) => {
     const handler = (): void => cb();

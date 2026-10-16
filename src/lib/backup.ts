@@ -128,6 +128,75 @@ const focusSessionSchema = z.object({
   deletedAt: z.string().optional(),
 });
 
+// ── 工作台（DESK_SPEC §七）──
+const workItemSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(['todo', 'followup']),
+  title: z.string(),
+  note: z.string().optional(),
+  urgency: z.enum(['urgent', 'soon', 'normal']),
+  scope: z.enum(['work', 'life']),
+  date: dateStr.optional(),
+  dueDate: dateStr.optional(),
+  person: z.string().optional(),
+  mode: z.enum(['inform', 'dispatch']).optional(),
+  goalId: z.string().optional(),
+  status: z.enum(['open', 'done', 'dropped']),
+  doneAt: z.string().optional(),
+  deferCount: z.number().int().min(0).optional(),
+  order: z.number(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().optional(),
+});
+
+const weekday = z.number().int().min(0).max(6);
+const routineRuleSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('daily') }),
+  z.object({ type: z.literal('workday') }),
+  z.object({ type: z.literal('weekly'), daysOfWeek: z.array(weekday).min(1) }),
+  z.object({ type: z.literal('monthlyDay'), monthDay: z.number().int().min(-1).max(31).refine((n) => n !== 0) }),
+  z.object({ type: z.literal('monthlyNth'), nth: z.number().int().min(-1).max(5).refine((n) => n !== 0), weekday }),
+]);
+
+const routineSchema = z.object({
+  id: z.string().min(1),
+  title: z.string(),
+  note: z.string().optional(),
+  scope: z.enum(['work', 'life']),
+  rule: routineRuleSchema,
+  time: z.string().regex(/^\d{2}:\d{2}$/, '时间须为 HH:mm').optional(),
+  startDate: dateStr,
+  endDate: dateStr.optional(),
+  paused: z.boolean().optional(),
+  order: z.number(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().optional(),
+});
+
+const routineLogSchema = z.object({
+  id: z.string().min(1),
+  routineId: z.string().min(1),
+  date: dateStr,
+  status: z.enum(['done', 'skipped', 'moved']),
+  movedTo: dateStr.optional(),
+  doneAt: z.string().optional(),
+  doneOn: dateStr.optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().optional(),
+});
+
+const dayMarkSchema = z.object({
+  id: z.string().min(1),
+  date: dateStr,
+  type: z.enum(['off', 'work']),
+  note: z.string().optional(),
+  updatedAt: z.string(),
+  deletedAt: z.string().optional(),
+});
+
 const ganttViewSchema = z.object({
   zoom: z.enum(['year', 'quarter', 'month', 'week']),
   scrollDate: dateStr.or(z.literal('')), // 空 = 从未记录（首次进甘特页滚到今日线）
@@ -192,6 +261,11 @@ const backupSchema = z.object({
     // 番茄钟新增：老备份没有这个键，缺省补空数组（否则老备份导入直接校验失败）
     focusSessions: z.array(focusSessionSchema).default([]),
     screenTimeDays: z.array(screenTimeDaySchema).default([]),
+    // 工作台新增：老备份缺省补空数组
+    workItems: z.array(workItemSchema).default([]),
+    routines: z.array(routineSchema).default([]),
+    routineLogs: z.array(routineLogSchema).default([]),
+    dayMarks: z.array(dayMarkSchema).default([]),
   }),
   settings: settingsSchema.optional(),
 });

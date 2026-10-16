@@ -1,14 +1,18 @@
 import type { AppSettings } from '../types/domain';
 import {
   checkInRepo,
+  dayMarkRepo,
   exemptionRepo,
   focusRepo,
   goalRepo,
   milestoneRepo,
   reviewRepo,
+  routineLogRepo,
+  routineRepo,
   screenTimeRepo,
   settingsRepo,
   taskRepo,
+  workItemRepo,
 } from '../db/repos';
 import type { BaseRepo } from '../db/repos/baseRepo';
 import type { Change, TableName } from './types';
@@ -24,6 +28,10 @@ export const repoByTable: Record<TableName, BaseRepo<SyncableEntity>> = {
   reviews: reviewRepo as BaseRepo<SyncableEntity>,
   focusSessions: focusRepo as BaseRepo<SyncableEntity>,
   screenTimeDays: screenTimeRepo as BaseRepo<SyncableEntity>,
+  workItems: workItemRepo as BaseRepo<SyncableEntity>,
+  routines: routineRepo as BaseRepo<SyncableEntity>,
+  routineLogs: routineLogRepo as BaseRepo<SyncableEntity>,
+  dayMarks: dayMarkRepo as BaseRepo<SyncableEntity>,
 };
 
 const PERSIST_DEBOUNCE_MS = 500; // SPEC：所有变更自动保存（防抖 500ms）

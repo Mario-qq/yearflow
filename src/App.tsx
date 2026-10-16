@@ -8,6 +8,7 @@ import { Toasts } from './components/Toasts';
 import { Celebration } from './components/Celebration';
 import { SyncIndicator } from './components/SyncIndicator';
 import { initSync } from './db/sync/syncApi';
+import { initAutoBackup } from './lib/autoBackup';
 import { initPomodoro } from './pomodoro/kernel';
 import { initDesktopPip } from './pomodoro/pip';
 import { PomodoroWidget } from './pomodoro/PomodoroWidget';
@@ -105,6 +106,11 @@ export default function App() {
   // 云同步引擎：hydrate 完成后启动（幂等；未配置 Supabase 时内部直接返回）
   useEffect(() => {
     if (hydrated) void initSync();
+  }, [hydrated]);
+
+  // 本机自动备份（只在桌面版生效）：hydrate 之后才有数据可备份
+  useEffect(() => {
+    if (hydrated) initAutoBackup();
   }, [hydrated]);
 
   // 番茄钟计时内核：恢复判定与结算必须在 hydrate 之后（否则结算会进了库却不在内存）。

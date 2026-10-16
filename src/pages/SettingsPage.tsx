@@ -4,14 +4,17 @@ import { db } from '../db/schema';
 import { flushNow } from '../store/persist';
 import { ExemptionManager } from '../checkin/ExemptionManager';
 import { SyncSection } from '../components/SyncSection';
+import { BackupSection } from '../components/BackupSection';
+import { replaceAllWithBackup } from '../lib/autoBackup';
+import { isDesktop } from '../lib/desktop';
 import { PomodoroSettings } from '../pomodoro/PomodoroSettings';
 import { buildBackupJSON, parseBackupJSON } from '../lib/backup';
 import { buildSeedBundle } from '../seed/seedData';
 import { todayStr } from '../lib/date';
-import { TABLE_NAMES, type TableName } from '../store/types';
+import { emptyBundle, TABLE_NAMES, type TableName } from '../store/types';
 import type { AppSettings, SyncableEntity } from '../types/domain';
 
-/** ⚠️ Record<string,string> 无编译护栏：加表时漏加这里不报错，界面会渲染出 undefined */
+/** Record<TableName, string>：加表时漏写这里 tsc 会报错 */
 const TABLE_LABEL: Record<TableName, string> = {
   goals: '目标',
   tasks: '任务',
@@ -21,6 +24,10 @@ const TABLE_LABEL: Record<TableName, string> = {
   reviews: '月度复盘',
   focusSessions: '专注会话',
   screenTimeDays: '屏幕时间',
+  workItems: '工作台事项',
+  routines: '例行事项',
+  routineLogs: '例行记录',
+  dayMarks: '休/班标记',
 };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -52,7 +59,7 @@ const buttonStyle: React.CSSProperties = {
 
 export default function SettingsPage() {
   const store = useStore();
-  const { settings, updateSettings, replaceAllData, exportBundle } = store;
+  const { settings, updateSettings, exportBundle } = store;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
 
@@ -88,30 +95,28 @@ export default function SettingsPage() {
 
   const say = (text: string, error = false) => setMessage({ text, error });
 
+  /** 整库替换统一走 replaceAllWithBackup：桌面版先自动备份，备份写不进去就不替换 */
+  const replaceAll = async (bundle: Parameters<typeof replaceAllWithBackup>[0], ok: string) => {
+    try {
+      await replaceAllWithBackup(bundle);
+      say(ok);
+      return true;
+    } catch (e) {
+      say(`操作已取消：${e instanceof Error ? e.message : '自动备份失败'}`, true);
+      return false;
+    }
+  };
+  const backupHint = isDesktop() ? '（操作前会自动备份，可在「备份与回滚」里恢复）' : '建议先导出 JSON 备份。';
+
   const loadSeed = async () => {
-    if (totalCount > 0 && !confirm('当前已有数据，载入示例将清空并替换全部数据。继续？')) return;
-    await replaceAllData(buildSeedBundle(todayStr()));
-    say('已载入 2026 年示例数据');
+    if (totalCount > 0 && !confirm(`当前已有数据，载入示例将清空并替换全部数据${backupHint}继续？`)) return;
+    await replaceAll(buildSeedBundle(todayStr()), '已载入 2026 年示例数据');
   };
 
   const clearAll = async () => {
-    if (
-      !confirm(
-        '将删除全部目标、任务、打卡记录、专注会话与复盘，且无法撤销。建议先导出 JSON 备份。确定清空？',
-      )
-    )
+    if (!confirm(`将删除全部目标、任务、打卡、专注、复盘与工作台数据，并同步到所有设备。${backupHint}确定清空？`))
       return;
-    await replaceAllData({
-      goals: [],
-      tasks: [],
-      milestones: [],
-      checkIns: [],
-      exemptions: [],
-      reviews: [],
-      focusSessions: [],
-      screenTimeDays: [],
-    });
-    say('已清空全部数据');
+    await replaceAll(emptyBundle(), '已清空全部数据');
   };
 
   const exportJSON = () => {
@@ -130,11 +135,10 @@ export default function SettingsPage() {
     try {
       const parsed = parseBackupJSON(await file.text());
       const n = parsed.data.goals.length;
-      if (!confirm(`将清空当前数据，恢复为该备份（${parsed.exportedAt.slice(0, 10)} 导出，${n} 个目标）。继续？`))
+      if (!confirm(`将清空当前数据，恢复为该备份（${parsed.exportedAt.slice(0, 10)} 导出，${n} 个目标）${backupHint}继续？`))
         return;
-      await replaceAllData(parsed.data);
+      if (!(await replaceAll(parsed.data, '导入成功，数据已恢复'))) return;
       if (parsed.settings) updateSettings(parsed.settings);
-      say('导入成功，数据已恢复');
     } catch (e) {
       say(e instanceof Error ? e.message : '导入失败', true);
     }
@@ -235,6 +239,12 @@ export default function SettingsPage() {
           </p>
         )}
       </Section>
+
+      {isDesktop() && (
+        <Section title="备份与回滚">
+          <BackupSection labels={TABLE_LABEL} refreshKey={dataVersion} />
+        </Section>
+      )}
 
       <Section title="免打卡区间">
         <ExemptionManager />

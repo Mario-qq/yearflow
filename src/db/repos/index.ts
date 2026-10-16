@@ -3,13 +3,17 @@ import { BaseRepo } from './baseRepo';
 import type {
   AppSettings,
   CheckIn,
+  DayMark,
   ExemptionPeriod,
   FocusSession,
   Goal,
   Milestone,
   MonthlyReview,
+  Routine,
+  RoutineLog,
   ScreenTimeDay,
   Task,
+  WorkItem,
 } from '../../types/domain';
 import { DEFAULT_SETTINGS } from '../../store/defaults';
 
@@ -51,6 +55,10 @@ export const exemptionRepo = new BaseRepo<ExemptionPeriod>(db.exemptions);
 export const reviewRepo = new BaseRepo<MonthlyReview>(db.reviews);
 export const focusRepo = new BaseRepo<FocusSession>(db.focusSessions);
 export const screenTimeRepo = new BaseRepo<ScreenTimeDay>(db.screenTimeDays);
+export const workItemRepo = new BaseRepo<WorkItem>(db.workItems);
+export const routineRepo = new BaseRepo<Routine>(db.routines);
+export const routineLogRepo = new BaseRepo<RoutineLog>(db.routineLogs);
+export const dayMarkRepo = new BaseRepo<DayMark>(db.dayMarks);
 export const settingsRepo = new SettingsRepo();
 
 /** 清空全库（JSON 导入重建 / 清空示例数据） */
@@ -64,5 +72,9 @@ export async function clearAllData(): Promise<void> {
     db.reviews.clear(),
     db.focusSessions.clear(),
     db.screenTimeDays.clear(),
+    db.workItems.clear(),
+    db.routines.clear(),
+    db.routineLogs.clear(),
+    db.dayMarks.clear(),
   ]);
 }
