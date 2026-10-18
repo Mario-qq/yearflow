@@ -17,6 +17,9 @@ import {
   skipOccurrence,
 } from '../store/deskActions';
 import { useStore } from '../store/useStore';
+import { removeCheckIn, setCheckIn } from '../store/actions';
+import { startPomodoro } from '../pomodoro/api';
+import { useLocate } from '../annual/useLocate';
 import { md, toastMove, toastUndo, weekdayCn } from './format';
 import { parseKey, parseKeys } from './keys';
 import { openMoverFor, selectedItemIds, undoneKeysOf } from './commands';
@@ -56,6 +59,9 @@ export function DeskMenus({ today, dayOf }: { today: string; dayOf: (d: string) 
   const workItems = useStore((s) => s.workItems);
   const routines = useStore((s) => s.routines);
   const marks = useStore((s) => s.dayMarks);
+  const goals = useStore((s) => s.goals);
+  const tasks = useStore((s) => s.tasks);
+  const { locateTask } = useLocate();
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
@@ -87,6 +93,54 @@ export function DeskMenus({ today, dayOf }: { today: string; dayOf: (d: string) 
         <span>{key}</span>
       </button>
     ));
+  }
+
+  if (menu.kind === 'plan') {
+    const { goalId, taskId, status, recordId } = menu;
+    const taskName = tasks[taskId]?.name ?? '';
+    const mark = (s: 'done' | 'partial' | 'skipped', text: string) => {
+      setCheckIn({ goalId, taskId, date: today, status: s });
+      close();
+      toastUndo(`${taskName}：${text}`);
+    };
+    const tick = (s: typeof status) => (status === s ? <span>✓</span> : null);
+    content = (
+      <>
+        <div className="lbl">
+          年度计划 · {goals[goalId]?.name ?? ''} · {taskName}
+        </div>
+        <button type="button" onClick={() => mark('done', '完成')}>
+          完成{tick('done')}
+        </button>
+        <button type="button" onClick={() => mark('partial', '做了一点')}>
+          做了一点{tick('partial')}
+        </button>
+        <button type="button" onClick={() => mark('skipped', '今天跳过')}>
+          今天跳过{tick('skipped')}
+        </button>
+        {recordId && (
+          <button
+            type="button"
+            onClick={() => {
+              removeCheckIn(recordId);
+              close();
+              toastUndo(`${taskName}：已撤销打卡`);
+            }}
+          >
+            撤销打卡
+          </button>
+        )}
+        <hr />
+        {status !== 'done' && status !== 'skipped' && (
+          <button type="button" onClick={() => (startPomodoro({ goalId, taskId }), close())}>
+            开始专注<span>结束自动打卡</span>
+          </button>
+        )}
+        <button type="button" onClick={() => (close(), locateTask(taskId, Number(today.slice(0, 4))))}>
+          在甘特图中打开
+        </button>
+      </>
+    );
   }
 
   if (menu.kind === 'day') {

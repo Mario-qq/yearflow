@@ -10,7 +10,9 @@ export type DeskView = 'week' | 'month';
 export type DeskMenu =
   | { kind: 'day'; date: string; x: number; y: number }
   | { kind: 'row'; key: string; day?: string; x: number; y: number }
-  | { kind: 'urgency'; x: number; y: number };
+  | { kind: 'urgency'; x: number; y: number }
+  /** 今天「年度计划」的一行（甘特图任务）：status/recordId = 打开菜单那一刻的打卡状态 */
+  | { kind: 'plan'; goalId: string; taskId: string; status?: 'done' | 'partial' | 'skipped'; recordId?: string; x: number; y: number };
 
 /** 编辑卡：事项 / 例行（id = null 表示新建例行）；left/top = 锚点（打开它的那一行或按钮） */
 export type DeskEditor =
@@ -48,12 +50,23 @@ interface DeskUi {
   studyPick: number;
   /** 学习设置浮层（锚在哪儿） */
   studySetup: { left: number; top: number } | null;
+  /** 今天「年度计划」分区收起（记在本机 localStorage） */
+  planFolded: boolean;
 
   setView: (v: DeskView) => void;
+  togglePlanFold: () => void;
   set: (patch: Partial<Omit<DeskUi, 'set' | 'setView'>>) => void;
 }
 
 const VIEW_KEY = 'yearflow:desk:view';
+const PLAN_FOLD_KEY = 'yearflow:desk:planFolded';
+function readPlanFolded(): boolean {
+  try {
+    return localStorage.getItem(PLAN_FOLD_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 function readView(): DeskView {
   try {
     return localStorage.getItem(VIEW_KEY) === 'month' ? 'month' : 'week';
@@ -80,6 +93,16 @@ export const useDeskUi = create<DeskUi>()((set) => ({
   editing: null,
   studyPick: 0,
   studySetup: null,
+  planFolded: readPlanFolded(),
+  togglePlanFold: () =>
+    set((s) => {
+      try {
+        localStorage.setItem(PLAN_FOLD_KEY, s.planFolded ? '0' : '1');
+      } catch {
+        // 记不住只影响下次打开
+      }
+      return { planFolded: !s.planFolded };
+    }),
   setView: (view) => {
     try {
       localStorage.setItem(VIEW_KEY, view);

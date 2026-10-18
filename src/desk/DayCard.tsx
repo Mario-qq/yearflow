@@ -13,14 +13,35 @@ import { ItemRow, RoutineRow } from './Rows';
 import type { DayData } from './useDeskData';
 import { useDeskUi } from './uiStore';
 
-function Sec({ title, n, children }: { title: string; n: string | number; children: React.ReactNode }) {
+/** 分区标题；给了 onToggle 就可折叠（标题整行可点，▾/▸ 示意） */
+function Sec({
+  title,
+  n,
+  children,
+  folded,
+  onToggle,
+}: {
+  title: string;
+  n: string | number;
+  children: React.ReactNode;
+  folded?: boolean;
+  onToggle?: () => void;
+}) {
   return (
     <>
-      <div className="dk-sec">
-        {title}
-        <span className="n tnum">{n}</span>
-      </div>
-      {children}
+      {onToggle ? (
+        <button type="button" className="dk-sec fold" aria-expanded={!folded} onClick={onToggle} title={folded ? '展开' : '收起'}>
+          {title}
+          <span className="n tnum">{n}</span>
+          <span className="caret">{folded ? '▸' : '▾'}</span>
+        </button>
+      ) : (
+        <div className="dk-sec">
+          {title}
+          <span className="n tnum">{n}</span>
+        </div>
+      )}
+      {!folded && children}
     </>
   );
 }
@@ -37,6 +58,8 @@ export function DayCard({ data, today, plan, study }: { data: DayData; today: st
   const { date, day, occ, count } = data;
   const mark = useStore((s) => s.dayMarks[date]);
   const folded = !useDeskUi((s) => s.openFolds.has(date));
+  const planFolded = useDeskUi((s) => s.planFolded);
+  const togglePlanFold = useDeskUi((s) => s.togglePlanFold);
   const past = date < today;
   const isToday = date === today;
   const weekend = isWeekendDate(date);
@@ -82,7 +105,12 @@ export function DayCard({ data, today, plan, study }: { data: DayData; today: st
       <>
         {isToday && study && <StudyCard v={study} today={today} />}
         {isToday && plan && plan.length > 0 && (
-          <Sec title="年度计划" n={`${plan.filter((p) => p.status === 'done' || p.status === 'skipped').length}/${plan.length}`}>
+          <Sec
+            title="年度计划"
+            n={`${plan.filter((p) => p.status === 'done' || p.status === 'skipped').length}/${plan.length}`}
+            folded={planFolded}
+            onToggle={togglePlanFold}
+          >
             <PlanRows rows={plan} today={today} />
           </Sec>
         )}
