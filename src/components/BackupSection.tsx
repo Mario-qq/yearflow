@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { listBackups, openBackupDir, readBackup, rollbackTo } from '../lib/autoBackup';
 import { diffBundles, type TableDiff } from '../lib/backupDiff';
-import type { BackupEntry } from '../lib/desktop';
+import { desktop, type BackupEntry, type BackupMirror } from '../lib/desktop';
 import { useStore } from '../store/useStore';
 import type { TableName } from '../store/types';
 
@@ -23,6 +23,57 @@ const KIND_LABEL = { daily: '每日', pre: '操作前' } as const;
 function fmtAt(at: string): string {
   // at = 本地时间 YYYY-MM-DDTHH:mm:ss（取自文件名）
   return `${Number(at.slice(5, 7))}月${Number(at.slice(8, 10))}日 ${at.slice(11, 16)}`;
+}
+
+function fmtIso(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/**
+ * 每日备份另存一份（异地兜底）：本机备份和 IndexedDB 都在 C 盘 userData 里，重装系统会一起丢。
+ * 目录由主进程持有、存本机 shell-prefs.json（换电脑不该带过去）。另存失败不影响本机备份，只在这里标红。
+ */
+function MirrorRow({ refreshKey }: { refreshKey: string }) {
+  const [m, setM] = useState<BackupMirror | null>(null);
+  useEffect(() => {
+    void desktop()?.backupMirror().then(setM);
+  }, [refreshKey]);
+  const api = desktop();
+  if (!api || !m) return null;
+  const note: React.CSSProperties = { fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' };
+  return (
+    <div className="flex flex-col gap-1.5" style={{ padding: '8px 10px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
+      <div className="flex items-center gap-2" style={{ fontSize: 'var(--font-13)' }}>
+        <span style={{ color: 'var(--text-secondary)' }}>另存一份到</span>
+        <span className="flex-1 truncate" title={m.dir ?? undefined} style={{ color: m.dir ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
+          {m.dir ?? '未设置'}
+        </span>
+        {m.dir && (
+          <button type="button" style={btn} onClick={() => void api.backupMirrorOpen()}>
+            打开
+          </button>
+        )}
+        <button type="button" style={btn} onClick={() => void api.backupMirrorChoose().then(setM)}>
+          {m.dir ? '更换' : '选择文件夹'}
+        </button>
+        {m.dir && (
+          <button type="button" style={btn} onClick={() => void api.backupMirrorClear().then(setM)}>
+            不再另存
+          </button>
+        )}
+      </div>
+      {m.error ? (
+        <span style={{ fontSize: 'var(--font-12)', color: 'var(--danger)' }}>另存失败：{m.error}</span>
+      ) : m.dir ? (
+        <span className="tnum" style={note}>
+          {m.at ? `上次另存 ${fmtIso(m.at)}` : '还没另存过'}。每天的备份会同时复制过去（同样留 30 份）；本机备份丢了时，用上面「导入 JSON 备份」选那边的文件即可恢复。
+        </span>
+      ) : (
+        <span style={note}>本机备份和数据都在 C 盘，重装系统或换电脑会一起丢。建议选另一块盘或网盘同步目录，每天的备份会复制一份过去。</span>
+      )}
+    </div>
+  );
 }
 
 /** refreshKey 变了就重新列一遍（载入示例/清空/导入会新增一份「操作前」备份） */
@@ -81,6 +132,7 @@ export function BackupSection({ labels, refreshKey }: { labels: Record<TableName
           打开备份文件夹
         </button>
       </div>
+      <MirrorRow refreshKey={`${refreshKey}:${list[0]?.name ?? ''}`} />
       {list.length === 0 ? (
         <p style={{ fontSize: 'var(--font-12)', color: 'var(--text-tertiary)' }}>还没有备份。</p>
       ) : (

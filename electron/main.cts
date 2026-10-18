@@ -27,6 +27,7 @@ import {
   Tray,
   nativeImage,
   shell,
+  dialog,
   type Rectangle,
 } from 'electron';
 import fs from 'node:fs';
@@ -85,8 +86,19 @@ interface ShellPrefs {
   closeToTray: boolean;
   /** 第一次收进托盘时弹过一次说明 */
   trayHintShown: boolean;
+  /** 每日备份另存一份的目录（null = 不另存）。见下「本机自动备份」 */
+  backupMirrorDir: string | null;
+  /** 上次另存成功的时间（ISO）/ 上次另存失败的原因（成功后清空） */
+  backupMirrorAt: string | null;
+  backupMirrorError: string | null;
 }
-const SHELL_PREFS_DEFAULT: ShellPrefs = { closeToTray: true, trayHintShown: false };
+const SHELL_PREFS_DEFAULT: ShellPrefs = {
+  closeToTray: true,
+  trayHintShown: false,
+  backupMirrorDir: null,
+  backupMirrorAt: null,
+  backupMirrorError: null,
+};
 let shellPrefs: ShellPrefs = { ...SHELL_PREFS_DEFAULT };
 let tray: Tray | null = null;
 /** 托盘「退出」/ 系统关机：放行 close，不再收进托盘 */
@@ -792,8 +804,86 @@ ipcMain.handle('backup:write', (_e, json: string, kind: BackupKind) => {
   fs.writeFileSync(tmp, json, 'utf8');
   fs.renameSync(tmp, path.join(dir, name));
   pruneBackups(kind);
+  if (kind === 'daily') mirrorCopy(name);
   return name;
 });
+
+// ——— 另存一份（异地兜底）———
+//
+// userData 在 C 盘、和 IndexedDB 挨着：重装系统 / 删用户目录 / 换电脑时备份和数据一起没。
+// 所以每日备份可以再复制一份到负责人自选的目录（D 盘、网盘同步目录、U 盘……），那边同样留 30 份。
+// 只复制 daily：pre 是「刚才那次操作的退路」，留在本机即可。
+// 另存失败（目录被拔掉 / 无权限）不影响本机备份本身，只把原因记下来给设置页显示。
+// 清理只动符合备份文件名的 daily 文件，目录里负责人自己的其它文件一概不碰。
+
+function mirrorView(): { dir: string | null; at: string | null; error: string | null } {
+  return { dir: shellPrefs.backupMirrorDir, at: shellPrefs.backupMirrorAt, error: shellPrefs.backupMirrorError };
+}
+
+function mirrorCopy(name: string): void {
+  const dir = shellPrefs.backupMirrorDir;
+  if (!dir) return;
+  try {
+    if (!fs.existsSync(dir)) throw new Error('目录不存在（盘被拔掉或改了名？）');
+    const tmp = path.join(dir, `${name}.tmp`);
+    fs.copyFileSync(path.join(backupDir(), name), tmp);
+    fs.renameSync(tmp, path.join(dir, name));
+    const mine = fs
+      .readdirSync(dir)
+      .filter((f) => BACKUP_NAME.exec(f)?.[3] === 'daily')
+      .sort()
+      .reverse();
+    for (const f of mine.slice(BACKUP_KEEP.daily)) {
+      try {
+        fs.unlinkSync(path.join(dir, f));
+      } catch {
+        // 删不掉就留到下次
+      }
+    }
+    writeShellPrefs({ backupMirrorAt: new Date().toISOString(), backupMirrorError: null });
+  } catch (e) {
+    writeShellPrefs({ backupMirrorError: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/** 本机最新的一份 daily（选好目录后立刻另存它，不用等明天） */
+function latestDaily(): string | null {
+  return (
+    fs
+      .readdirSync(backupDir())
+      .filter((f) => BACKUP_NAME.exec(f)?.[3] === 'daily')
+      .sort()
+      .pop() ?? null
+  );
+}
+
+ipcMain.handle('backup:mirror', () => mirrorView());
+
+ipcMain.handle('backup:mirror-choose', async () => {
+  const opts: Electron.OpenDialogOptions = {
+    title: '选择另存备份的文件夹',
+    properties: ['openDirectory', 'createDirectory'],
+    defaultPath: shellPrefs.backupMirrorDir ?? app.getPath('documents'),
+  };
+  const r = mainWindow ? await dialog.showOpenDialog(mainWindow, opts) : await dialog.showOpenDialog(opts);
+  const dir = r.filePaths[0];
+  if (r.canceled || !dir) return mirrorView();
+  if (path.resolve(dir).toLowerCase() === path.resolve(backupDir()).toLowerCase()) {
+    writeShellPrefs({ backupMirrorError: '不能选本机备份文件夹本身，请选另一个位置（最好是另一块盘或网盘目录）' });
+    return mirrorView();
+  }
+  writeShellPrefs({ backupMirrorDir: dir, backupMirrorAt: null, backupMirrorError: null });
+  const last = latestDaily();
+  if (last) mirrorCopy(last);
+  return mirrorView();
+});
+
+ipcMain.handle('backup:mirror-clear', () => {
+  writeShellPrefs({ backupMirrorDir: null, backupMirrorAt: null, backupMirrorError: null });
+  return mirrorView();
+});
+
+ipcMain.handle('backup:mirror-open', () => (shellPrefs.backupMirrorDir ? shell.openPath(shellPrefs.backupMirrorDir) : ''));
 
 ipcMain.handle('backup:list', () => {
   const dir = backupDir();

@@ -30,6 +30,13 @@ export interface BackupEntry {
   size: number;
 }
 
+/** 每日备份另存一份的位置（主进程持有，存本机 shell-prefs.json）。at = 上次另存成功的 ISO 时间 */
+export interface BackupMirror {
+  dir: string | null;
+  at: string | null;
+  error: string | null;
+}
+
 /** 托盘常驻偏好（主进程持有）。canAutoStart = false：开发模式或非 Windows，开机自启不可用 */
 export interface ShellPrefsView {
   closeToTray: boolean;
@@ -62,6 +69,11 @@ export interface DesktopApi {
   backupList(): Promise<BackupEntry[]>;
   backupRead(name: string): Promise<string>;
   backupOpenDir(): Promise<string>;
+  backupMirror(): Promise<BackupMirror>;
+  /** 弹系统选目录对话框；选好后立刻把最新一份每日备份另存过去 */
+  backupMirrorChoose(): Promise<BackupMirror>;
+  backupMirrorClear(): Promise<BackupMirror>;
+  backupMirrorOpen(): Promise<string>;
   onPowerResume(cb: () => void): () => void;
   onPipState(cb: (open: boolean) => void): () => void;
   onPipMode(cb: (info: PipModeInfo) => void): () => void;

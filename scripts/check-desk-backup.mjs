@@ -7,13 +7,14 @@
  * ⚠️ 跑在独立 userData 里（--user-data-dir），绝不碰真实 profile 与真实备份目录。
  */
 import { _electron as electron } from 'playwright';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const OUT = 'screenshots/desk';
 const PROFILE = join(tmpdir(), 'yearflow-desk-backup-profile');
 const BACKUPS = join(PROFILE, 'backups');
+const MIRROR = join(tmpdir(), 'yearflow-desk-backup-mirror');
 const fails = [];
 const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
@@ -31,6 +32,7 @@ async function until(fn, ms = 15000) {
 const files = (kind) => (existsSync(BACKUPS) ? readdirSync(BACKUPS).filter((f) => f.endsWith(`-${kind}.json`)) : []);
 
 rmSync(PROFILE, { recursive: true, force: true });
+rmSync(MIRROR, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
 
 const env = { ...process.env };
@@ -77,6 +79,37 @@ for (let i = 0; i < 12; i++) await page.evaluate(`${api}.backupWrite('{}', 'pre'
 check('操作前备份只留 10 份', files('pre').length === 10, String(files('pre').length));
 const traversal = await page.evaluate(`${api}.backupRead('../pip-window.json').then(() => 'read', (e) => String(e))`);
 check('读备份拒绝目录穿越', traversal.includes('非法备份文件名'), traversal);
+
+// 5. 另存一份到自选目录（异地兜底）。系统选目录对话框在主进程里换成桩
+const sec = page.locator('section:has(h2:text("备份与回滚"))');
+check('未设置时提示另存的理由', (await sec.innerText()).includes('重装系统'));
+const stubDialog = (dir) => app.evaluate(({ dialog }, d) => {
+  dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [d] });
+}, dir);
+mkdirSync(MIRROR, { recursive: true });
+writeFileSync(join(MIRROR, 'my-notes.txt'), '负责人自己的文件');
+await stubDialog(MIRROR);
+await page.getByRole('button', { name: '选择文件夹' }).click();
+const mirrored = () => readdirSync(MIRROR).filter((f) => f.endsWith('-daily.json'));
+check('选好目录立刻另存最新一份每日备份', !!(await until(() => mirrored().length === 1)), readdirSync(MIRROR).join(', '));
+check('设置页显示另存目录与时间', !!(await until(async () => (await sec.innerText()).includes('上次另存'))));
+await page.screenshot({ path: `${OUT}/backup-mirror.png` });
+for (let i = 0; i < 35; i++) writeFileSync(join(MIRROR, `yearflow-202001${String(i % 28 + 1).padStart(2, '0')}-0000${String(i).padStart(2, '0')}000-daily.json`), '{}');
+await page.evaluate(`${api}.backupWrite('{}', 'daily')`);
+check('另存目录同样只留 30 份每日备份', mirrored().length === 30, String(mirrored().length));
+check('另存目录里别的文件不碰', existsSync(join(MIRROR, 'my-notes.txt')));
+check('另存的是最新那份', mirrored().sort().pop() === files('daily').sort().pop());
+check('另存目录存进本机偏好', JSON.parse(readFileSync(join(PROFILE, 'shell-prefs.json'), 'utf8')).backupMirrorDir === MIRROR);
+rmSync(MIRROR, { recursive: true, force: true });
+const nDaily = files('daily').length;
+await page.evaluate(`${api}.backupWrite('{}', 'daily')`);
+const m = await page.evaluate(`${api}.backupMirror()`);
+check('目录没了：本机备份照写，另存记下失败原因', files('daily').length >= nDaily && !!m.error, m.error);
+await stubDialog(BACKUPS);
+await page.getByRole('button', { name: '更换' }).click();
+check('不许选本机备份目录本身', !!(await until(async () => (await sec.innerText()).includes('不能选本机备份文件夹'))));
+await page.getByRole('button', { name: '不再另存' }).click();
+check('不再另存后回到未设置', !!(await until(async () => (await sec.innerText()).includes('未设置'))));
 
 check('无页面错误', errors.length === 0, errors.join(' | '));
 await app.close();

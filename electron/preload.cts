@@ -56,6 +56,14 @@ const api = {
     ipcRenderer.invoke('backup:list'),
   backupRead: (name: string): Promise<string> => ipcRenderer.invoke('backup:read', name),
   backupOpenDir: (): Promise<string> => ipcRenderer.invoke('backup:open-dir'),
+  /** 每日备份另存一份：查看 / 选目录（系统对话框）/ 不再另存 / 打开那个目录 */
+  backupMirror: (): Promise<{ dir: string | null; at: string | null; error: string | null }> =>
+    ipcRenderer.invoke('backup:mirror'),
+  backupMirrorChoose: (): Promise<{ dir: string | null; at: string | null; error: string | null }> =>
+    ipcRenderer.invoke('backup:mirror-choose'),
+  backupMirrorClear: (): Promise<{ dir: string | null; at: string | null; error: string | null }> =>
+    ipcRenderer.invoke('backup:mirror-clear'),
+  backupMirrorOpen: (): Promise<string> => ipcRenderer.invoke('backup:mirror-open'),
   /** OS 睡眠/锁屏唤醒。返回取消订阅函数。 */
   onPowerResume: (cb: () => void): (() => void) => {
     const handler = (): void => cb();
