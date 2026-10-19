@@ -35,7 +35,7 @@ export default function DeskPage() {
   const rootRef = useRef<HTMLDivElement>(null);
   const { today, items, dayOf } = useDeskData();
   const dueRows = usePlanRows(today);
-  // 负责人可以选哪些年度计划在工作台显示（本机设置）；头部的「还有几项没打卡」也只数显示的
+  // 负责人可以选哪些年度计划在工作台显示（本机设置）
   const { visible: allPlan, hidden: planHidden } = usePlanVisibility(dueRows);
   const study = useStudy(today);
   // 学习卡正在推荐/计时的那个任务不在「年度计划」里重复出现（学过之后它回到年度计划，显示已打卡）
@@ -106,7 +106,7 @@ export default function DeskPage() {
         if (!hadOverlay && ui.sel.size && !t.closest('.dk-row, button, input, .dk-drawer')) ui.set({ sel: new Set() });
       }}
     >
-      <DeskHero today={today} items={items} dayOf={dayOf} plan={allPlan} study={study} />
+      <DeskHero today={today} items={items} dayOf={dayOf} study={study} />
 
       <div className="dk-bar">
         <button type="button" className="dk-arrow" title="上一段（←）" aria-label="上一段" onClick={() => step(-1)}>

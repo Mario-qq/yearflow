@@ -1,15 +1,14 @@
 /**
- * 头部（一行到底、不折行）：左边日历小牌 + 星期/周次 + 今日脉搏（一排小药丸说清今天的局面，@人可点开人物卡）；
+ * 头部（一行到底、不折行）：左边日历小牌 + 星期/周次 + 今日脉搏（收尾/要事/@人，只留要人动手的；「紧急处理完」「年度计划还剩」负责人判没用已删）；
  * 右边学习卡 + 一张安静的统计卡（同高并排）：本周完成环 + 每天完成数小柱、学习周目标点阵、最近两个里程碑倒计时（甘特联动，保留紧迫感）。
  */
 import { useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { diffDays, toDay } from '../lib/date';
-import { addDays, effectiveUrgency, followupsByPerson, shutdownDue, weekMonday } from '../lib/derive/desk';
+import { addDays, followupsByPerson, shutdownDue, weekMonday } from '../lib/derive/desk';
 import { goalColor } from '../lib/colors';
 import { personColor } from './constants';
 import { weekdayCn } from './format';
-import type { PlanRowData } from './usePlanRows';
 import { useNowHm, type DayData } from './useDeskData';
 import { useDeskUi } from './uiStore';
 import type { WorkItem } from '../types/domain';
@@ -19,7 +18,7 @@ import { StudyCard, StudyDots } from './StudyCard';
 const RING_R = 15;
 const RING_C = 2 * Math.PI * RING_R;
 
-export function DeskHero({ today, items, dayOf, plan, study }: { today: string; items: WorkItem[]; dayOf: (d: string) => DayData; plan: PlanRowData[]; study: StudyView }) {
+export function DeskHero({ today, items, dayOf, study }: { today: string; items: WorkItem[]; dayOf: (d: string) => DayData; study: StudyView }) {
   const milestones = useStore((s) => s.milestones);
   const goals = useStore((s) => s.goals);
   const marks = useStore((s) => s.dayMarks);
@@ -28,9 +27,7 @@ export function DeskHero({ today, items, dayOf, plan, study }: { today: string; 
   const nowHm = useNowHm();
 
   const t = dayOf(today);
-  const urgent = [...t.day.rolled, ...t.day.open].filter((i) => effectiveUrgency(i, today) === 'urgent').length;
   const top = useMemo(() => followupsByPerson(items, today)[0], [items, today]);
-  const planLeft = plan.filter((p) => !p.status).length;
   const focus = t.focus;
   const focusLeft = focus.filter((i) => i.status === 'open').length;
   const openLeft = t.day.rolled.length + t.day.open.length;
@@ -99,16 +96,6 @@ export function DeskHero({ today, items, dayOf, plan, study }: { today: string; 
                 )}
               </span>
             )}
-            <span>
-              <i style={{ '--c': urgent ? 'var(--danger)' : 'var(--success)' } as React.CSSProperties} />
-              {urgent ? (
-                <>
-                  还剩 <b className="tnum">{urgent}</b> 件紧急
-                </>
-              ) : (
-                '紧急的都处理完了'
-              )}
-            </span>
             {top && (
               <span>
                 <i style={{ '--c': personColor(top.person) } as React.CSSProperties} />
@@ -122,18 +109,6 @@ export function DeskHero({ today, items, dayOf, plan, study }: { today: string; 
                   {top.person}
                 </button>
                 那有 {top.items.length} 件要说
-              </span>
-            )}
-            {plan.length > 0 && (
-              <span>
-                <i style={{ '--c': planLeft ? 'var(--accent)' : 'var(--success)' } as React.CSSProperties} />
-                {planLeft ? (
-                  <>
-                    年度计划还有 <b className="tnum">{planLeft}</b> 项没打卡
-                  </>
-                ) : (
-                  '年度计划今天都打卡了'
-                )}
               </span>
             )}
           </div>
