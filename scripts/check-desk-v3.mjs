@@ -141,12 +141,16 @@ for (const theme of ['dark', 'light']) {
     s.updateSettings({ desk: { ...s.settings.desk, studyGoalIds: [g.id], anchor: { text: '午饭后', time: '12:30' } } });
   });
   await page.waitForTimeout(200);
-  const study = page.locator('.dk-day.today .dk-study');
+  const study = page.locator('.dk-h-study .dk-study');
   if ((await study.count()) > 0) {
+    // v4：学习卡挪进头部，和统计卡同高；按钮行不许折出第三行
     const h = await study.evaluate((e) => e.getBoundingClientRect().height);
-    check('学习卡精简：高度 ≤ 64px（原约 128px）', h <= 64, String(Math.round(h)));
-    await page.screenshot({ path: `${OUT}/v3-study-dark.png`, clip: await page.locator('.dk-day.today').boundingBox() });
-  } else check('学习卡出现（示例目标今天要打卡）', (await page.locator('.dk-day.today .dk-st-line').count()) > 0, '今天没排 → 一行');
+    const sh = (await page.locator('.dk-stats').boundingBox()).height;
+    const whyH = await page.locator('.dk-st-why').evaluate((e) => e.getBoundingClientRect().height);
+    check('学习卡在头部：和统计卡同高、说明行不折行', Math.abs(h - sh) < 1 && whyH <= 22, `${Math.round(h)} / ${Math.round(sh)} / why ${Math.round(whyH)}`);
+    check('卡片无左色条（学习卡 / 生活区）', [await study.evaluate((e) => getComputedStyle(e).boxShadow), await page.locator('.dk-day.today .dk-zone.life').evaluate((e) => getComputedStyle(e).boxShadow)].every((b) => !/inset/.test(b)));
+    await page.screenshot({ path: `${OUT}/v3-study-dark.png`, clip: await page.locator('.dk-hero').boundingBox() });
+  } else check('学习卡出现（示例目标今天要打卡）', (await page.locator('.dk-h-study .dk-st-line').count()) > 0, '今天没排 → 一行');
 
   // 鼠标点「新建」能打开（原 bug：点了没反应）
   await page.locator('.dk-fab').click();

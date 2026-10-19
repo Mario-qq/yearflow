@@ -89,8 +89,10 @@ for (const theme of ['dark', 'light']) {
     await seed(page, theme);
     await page.goto(`${BASE}/desk`);
     await page.waitForSelector('.dk-day.today');
-    // v3 起：要事区（有就）在最上，学习卡紧随其后
-    check(`${theme} ${w}：学习卡在今天第一块（要事之后）`, (await page.locator('.dk-day.today .dk-db > :not(.dk-focus)').first().getAttribute('class'))?.includes('dk-study'));
+    // v4 起：学习卡在头部，统计卡左边，且和统计卡同高
+    check(`${theme} ${w}：学习卡在头部（不在日卡里）`, (await page.locator('.dk-h-study .dk-study').count()) === 1 && (await page.locator('.dk-day .dk-study').count()) === 0);
+    const [sb, tb] = await Promise.all([page.locator('.dk-h-study > *').boundingBox(), page.locator('.dk-stats').boundingBox()]);
+    check(`${theme} ${w}：学习卡在统计卡左边、同高`, sb.x + sb.width <= tb.x && Math.abs(sb.height - tb.height) < 1, `${Math.round(sb.height)} vs ${Math.round(tb.height)}`);
     check(`${theme} ${w}：头部有学习点阵`, (await page.locator('.dk-stat .dk-dots').count()) === 1);
     const overflow = await page.evaluate(() => Math.max(document.documentElement.scrollWidth - innerWidth, ...[...document.querySelectorAll('.dk-board, .dk-st-acts, .dk-st-top')].map((e) => e.scrollWidth - e.clientWidth)));
     check(`${theme} ${w}：无横向溢出（含学习卡按钮行）`, overflow <= 0, String(overflow));
@@ -113,7 +115,7 @@ const today = await todayOf(page);
 const what1 = await page.locator('.dk-st-what').innerText();
 const planTexts = await page.locator('.dk-day.today .dk-row.plan').allInnerTexts();
 check('推荐的学习任务不在年度计划里重复出现', !planTexts.some((t) => t.includes(what1.split(' · ')[1])), what1);
-check('今日脉搏说还没学', (await page.locator('.dk-h-say').innerText()).includes('还没学'));
+check('头部学习卡显示要学的（脉搏里不再重复）', (await page.locator('.dk-h-study .dk-st-what').count()) === 1 && !(await page.locator('.dk-h-say').innerText()).includes('还没学'));
 await page.locator('.dk-study button', { hasText: '换一个' }).click();
 const what2 = await page.locator('.dk-st-what').innerText();
 check('换一个 → 换成别的学习任务', what2 !== what1, `${what1} → ${what2}`);
@@ -133,7 +135,7 @@ await page.locator('.dk-study.running .dk-btn', { hasText: '结束并打卡' }).
 await page.waitForSelector('.dk-st-line.done');
 const ci = await checkInsOn(page, today);
 check('结束并打卡 = 学习任务打卡完成', ci.some((c) => STUDY.includes(c.goalId) && c.status === 'done'), JSON.stringify(ci));
-check('今日脉搏改成学过了', (await page.locator('.dk-h-say').innerText()).includes('今天学过了'));
+check('头部学习卡改成学过了', (await page.locator('.dk-h-study').innerText()).includes('今天学过了'));
 await page.screenshot({ path: `${OUT}/study-done-dark.png` });
 await page.keyboard.press('Control+z');
 await page.waitForSelector('.dk-study:not(.running)');
@@ -171,8 +173,9 @@ const auto = (await checkInsOn(page, today)).find((c) => c.taskId === pick.taskI
 check('学习专注跑到点自动打卡（不够 30 分钟 ⇒ 做了一点）', auto?.status === 'partial', JSON.stringify(auto));
 await page.waitForTimeout(300);
 check('自动打卡后学习卡收成「学过了」', (await page.locator('.dk-st-line.done').count()) === 1);
-const lineH = (await page.locator('.dk-st-line.done').boundingBox()).height;
-check('「学过了」这一行不折行（一行高）', lineH <= 34, String(lineH));
+// 在头部这一行撑满卡高；看的是里面的字不折行
+const lineH = (await page.locator('.dk-st-line.done .dk-st-txt').boundingBox()).height;
+check('「学过了」这一行不折行（一行高）', lineH <= 22, String(lineH));
 // 关掉自动进入的休息
 await page.evaluate(() => window.__pomodoro.forceSettle());
 
@@ -271,7 +274,7 @@ await ctx.close();
   await seed(p, 'light', { study: false });
   await p.goto(`${BASE}/desk`);
   await p.waitForSelector('.dk-day.today');
-  check('没设学习目标：今天卡顶一行引导', (await p.locator('.dk-st-line.setup').count()) === 1);
+  check('没设学习目标：头部一行引导', (await p.locator('.dk-st-line.setup').count()) === 1);
   await c.close();
 }
 

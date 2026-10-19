@@ -8,10 +8,9 @@ import { DayCard } from './DayCard';
 import { isWeekendDate } from './format';
 import type { PlanRowData } from './usePlanRows';
 import type { DayData } from './useDeskData';
-import type { StudyView } from './study';
 import { useDeskUi } from './uiStore';
 
-export function WeekBoard({ monday, today, dayOf, plan, planHidden, study }: { monday: string; today: string; dayOf: (d: string) => DayData; plan: PlanRowData[]; planHidden: number; study: StudyView }) {
+export function WeekBoard({ monday, today, dayOf, plan, planHidden }: { monday: string; today: string; dayOf: (d: string) => DayData; plan: PlanRowData[]; planHidden: number }) {
   const hideWeekend = useDeskUi((s) => s.hideWeekend);
   const days = Array.from({ length: 7 }, (_, n) => dayOf(addDays(monday, n)));
   const rail = (d: DayData) => hideWeekend && isWeekendDate(d.date) && d.date !== today;
@@ -32,7 +31,6 @@ export function WeekBoard({ monday, today, dayOf, plan, planHidden, study }: { m
           rail={rail(d)}
           plan={d.date === today ? plan : undefined}
           planHidden={d.date === today ? planHidden : undefined}
-          study={d.date === today ? study : undefined}
         />
       ))}
     </div>

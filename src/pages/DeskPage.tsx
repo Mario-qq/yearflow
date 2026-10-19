@@ -158,7 +158,7 @@ export default function DeskPage() {
 
       <div className="dk-stage">
         {view === 'week' ? (
-          <WeekBoard monday={monday} today={today} dayOf={dayOf} plan={plan} planHidden={planHidden} study={study} />
+          <WeekBoard monday={monday} today={today} dayOf={dayOf} plan={plan} planHidden={planHidden} />
         ) : (
           <MonthView anchor={anchor} today={today} dayOf={dayOf} />
         )}

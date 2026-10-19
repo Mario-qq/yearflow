@@ -82,37 +82,114 @@
   background: var(--bg-panel);
 }
 
-/* ── 头部：今天的局面 + 本周进行到哪 ── */
+/* ── 头部：日历小牌 + 今天的局面 ｜ 学习卡 ｜ 本周进行到哪 ── */
 .dk-hero {
   display: flex;
-  align-items: flex-end;
-  gap: 24px;
+  flex-wrap: wrap; /* 窄窗：学习卡 + 统计卡整体折到下一行 */
+  align-items: center;
+  gap: 12px 20px;
   padding: 18px var(--dk-pad) 14px;
   flex-shrink: 0;
 }
-.dk-h-day {
-  font-size: var(--font-12);
-  color: var(--text-tertiary);
+.dk-h-main {
+  flex: 1 1 440px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+/* 日历小牌：上一条强调色写月份，下面大号日期 */
+.dk-h-cal {
+  width: 54px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+}
+.dk-h-cal .m {
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-size: var(--font-11);
+  font-weight: 600;
+  line-height: 18px;
   letter-spacing: 0.04em;
 }
-.dk-h-date {
+.dk-h-cal .d {
   font-size: var(--font-24);
   font-weight: 650;
+  line-height: 36px;
+  letter-spacing: -0.02em;
+}
+.dk-h-txt {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dk-h-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  white-space: nowrap;
+}
+.dk-h-title .wd {
+  font-size: var(--font-20);
+  font-weight: 650;
   letter-spacing: -0.01em;
-  line-height: 1.15;
+  line-height: 1.2;
+}
+.dk-h-title .wk {
+  font-size: var(--font-12);
+  color: var(--text-tertiary);
+}
+.dk-h-prog {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: 4px;
+  font-size: var(--font-12);
+  color: var(--text-secondary);
+}
+.dk-h-prog .bar {
+  width: 64px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-subtle);
+  overflow: hidden;
+}
+.dk-h-prog .bar i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
 }
 .dk-h-say {
-  margin-top: 6px;
-  font-size: var(--font-13);
+  font-size: var(--font-12);
   color: var(--text-secondary);
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 14px;
+  gap: 6px;
 }
 .dk-h-say > span {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px 0 9px;
+  border-radius: 12px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+.dk-h-say > span.sd {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .dk-h-say i {
   width: 6px;
@@ -135,8 +212,51 @@
   border-color: var(--accent);
 }
 
+.dk-h-side {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+}
+/* 学习卡在头部：和统计卡同一张卡片样式、同高 */
+.dk-h-study {
+  width: clamp(320px, 30vw, 440px);
+  min-width: 0;
+  flex-shrink: 1;
+  display: flex;
+}
+.dk-h-study:empty {
+  display: none;
+}
+.dk-hero .dk-h-study > * {
+  flex: 1;
+  margin: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--dk-card-radius);
+  box-shadow: var(--shadow-sm);
+}
+.dk-h-study > .dk-study {
+  padding: 9px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.dk-h-study > .dk-st-line {
+  width: auto;
+  padding: 0 14px;
+  background: var(--bg-panel);
+}
+.dk-h-study > .dk-st-line:hover {
+  background: color-mix(in srgb, var(--row-hover) 60%, var(--bg-panel));
+}
+.dk-h-study > .dk-st-line.setup {
+  border-style: dashed;
+  border-color: var(--border-default);
+  box-shadow: none;
+  background: transparent;
+}
 .dk-stats {
-  margin-left: auto;
   display: flex;
   align-items: stretch;
   background: var(--bg-panel);
@@ -531,9 +651,9 @@
   text-decoration: line-through;
   text-decoration-color: var(--text-disabled);
 }
-/* 生活：不在日卡分区里时（月历、待处理、人物卡），行左一道生活色 */
+/* 生活：不在日卡分区里时（月历、待处理、人物卡），行底一层生活淡色（不要左色条）*/
 .dk-row.life {
-  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--life) 70%, transparent);
+  background: var(--life-soft);
 }
 .dk-row.imp .dk-t {
   font-weight: 600;
@@ -719,14 +839,13 @@
   color: var(--text-primary);
 }
 
-/* ── 学习卡（DESK_SPEC §五）：精简成两行，左边一道目标色 ── */
+/* ── 学习卡（DESK_SPEC §五）：精简成两行，底色带一点目标色（不要左色条）── */
 .dk-study {
   margin: 2px 2px 6px;
   padding: 7px 8px 6px 10px;
   border-radius: var(--radius-md);
   position: relative;
   background: color-mix(in srgb, var(--c) 7%, var(--bg-panel));
-  box-shadow: inset 3px 0 0 var(--c);
 }
 .dk-st-row {
   display: flex;
@@ -1729,7 +1848,7 @@
   text-overflow: ellipsis;
 }
 
-/* ── 工作 / 生活两区：生活 = 左色条 + 极淡底，不写字（负责人：非文字区分）── */
+/* ── 工作 / 生活两区：生活 = 极淡底，不写字（负责人：非文字区分；左色条不好看，去掉）── */
 .dk-zone {
   display: flex;
   flex-direction: column;
@@ -1742,7 +1861,6 @@
   margin-top: 6px;
   padding: 2px 0;
   background: var(--life-soft);
-  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--life) 70%, transparent);
 }
 .dk-zone.empty {
   display: none;
@@ -1764,9 +1882,7 @@
 }
 .dk-zone.life.drop {
   background: color-mix(in srgb, var(--life) 14%, transparent);
-  box-shadow:
-    inset 0 0 0 1px var(--life),
-    inset 2px 0 0 var(--life);
+  box-shadow: inset 0 0 0 1px var(--life);
 }
 
 /* ── 要事（每天最多 3 件）── */

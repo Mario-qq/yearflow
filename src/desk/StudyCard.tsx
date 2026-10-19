@@ -1,6 +1,6 @@
 /**
- * 学习卡（DESK_SPEC §五 六层防忘）：今天这张日卡的第一块。
- * 没学 = 两行小卡（▶ 学什么 + 周点阵；锚点时间 · 为什么是它 + 短版 / 换一个 / 已学过 / ⚙），左边一道目标色；
+ * 学习卡（DESK_SPEC §五 六层防忘）：放在头部，统计卡左边（周历/月历都看得到）。
+ * 没学 = 两行小卡（▶ 学什么 + 周点阵；锚点时间 · 为什么是它 + 短版 / 换一个 / 已学过 / ⚙），底色淡淡带一点目标色；
  * 正在学 = 倒计时（经 1s 单例 ticker 直写 DOM，零 React 重渲）+ 结束并打卡 / 暂停 / 放弃；
  * 学过了 = 收成一行；今天没排学习 = 一行安静的「想学也可以」。
  */
@@ -46,7 +46,7 @@ function Countdown() {
   return <div ref={ref} className="dk-st-timer tnum" />;
 }
 
-export function StudyCard({ v, today }: { v: StudyView; today: string }) {
+export function StudyCard({ v, today, dots = true }: { v: StudyView; today: string; dots?: boolean }) {
   const goals = useStore((s) => s.goals);
   const tasks = useStore((s) => s.tasks);
 
@@ -74,7 +74,7 @@ export function StudyCard({ v, today }: { v: StudyView; today: string }) {
             {g?.name}
             {t ? ` · ${t.name}` : ''}
           </div>
-          <StudyDots v={v} />
+          {dots && <StudyDots v={v} />}
         </div>
         <div className="dk-st-acts">
           <button type="button" className="dk-btn primary" onClick={() => finishStudy(r, today)}>
@@ -106,7 +106,7 @@ export function StudyCard({ v, today }: { v: StudyView; today: string }) {
             ▶ 再学一段
           </button>
         )}
-        <StudyDots v={v} />
+        {dots && <StudyDots v={v} />}
       </div>
     );
   }
@@ -125,7 +125,7 @@ export function StudyCard({ v, today }: { v: StudyView; today: string }) {
         <button type="button" className="dk-play show" onClick={() => startStudy(today)} title={`${g?.name} · ${p.taskName}`}>
           ▶ 想学就学 {v.prefs.studyMinutes} 分钟
         </button>
-        <StudyDots v={v} />
+        {dots && <StudyDots v={v} />}
       </div>
     );
   }
@@ -152,7 +152,7 @@ export function StudyCard({ v, today }: { v: StudyView; today: string }) {
         <div className="dk-st-what" title={`${g?.name} · ${p.taskName}`}>
           {g?.name} · {p.taskName}
         </div>
-        <StudyDots v={v} />
+        {dots && <StudyDots v={v} />}
       </div>
       <div className="dk-st-why">
         <span className="dk-st-reason">

@@ -1,6 +1,6 @@
 /**
  * 一天一张卡：卡头 = 大号日期 + 星期 + 完成数 + 2px 进度线；卡身自上而下：
- * 要事（Ivy Lee，最多 3 件）→ 学习（今天）→ 工作区 → 生活区（淡色底 + 左色条，不写字）→ 年度计划（今天，可收起、可筛选）。
+ * 要事（Ivy Lee，最多 3 件）→ 工作区 → 生活区（淡色底，不写字）→ 年度计划（今天，可收起、可筛选）。学习卡在头部。
  * 做完的就留在原区里打勾显示（一眼看到这周做了什么），不再折叠；只有「不做了」收在卡底。
  * 工作/生活两区都是拖放目标：拖进另一区 = 顺带改范围（拖动中空区也会露出来）。
  */
@@ -10,8 +10,6 @@ import { useStore } from '../store/useStore';
 import { MAX_FOCUS } from '../lib/derive/desk';
 import { isWeekendDate, weekdayCn } from './format';
 import { PlanRows } from './PlanSection';
-import { StudyCard } from './StudyCard';
-import type { StudyView } from './study';
 import type { PlanRowData } from './usePlanRows';
 import { ItemRow, RoutineRow } from './Rows';
 import type { DayData } from './useDeskData';
@@ -85,7 +83,7 @@ function Rail({ data, today }: { data: DayData; today: string }) {
   );
 }
 
-export function DayCard({ data, today, plan, planHidden, study, rail }: { data: DayData; today: string; plan?: PlanRowData[]; planHidden?: number; study?: StudyView; rail?: boolean }) {
+export function DayCard({ data, today, plan, planHidden, rail }: { data: DayData; today: string; plan?: PlanRowData[]; planHidden?: number; rail?: boolean }) {
   const { date, day, occ, count, focus } = data;
   const mark = useStore((s) => s.dayMarks[date]);
   const droppedOpen = useDeskUi((s) => s.openFolds.has(date));
@@ -105,7 +103,7 @@ export function DayCard({ data, today, plan, planHidden, study, rail }: { data: 
   const missed = past ? occ.filter((o) => o.status === 'open' && (o.routine.rule.type === 'weekly' || o.routine.rule.type.startsWith('monthly'))) : [];
   const focusDone = focus.filter((i) => i.status === 'done').length;
   const canPickFocus = isToday && focus.length < MAX_FOCUS && day.rolled.length + day.open.length > focus.filter((i) => i.status === 'open').length;
-  const empty = focus.length === 0 && work.n === 0 && life.n === 0 && day.dropped.length === 0 && openN === 0 && missed.length === 0 && !(isToday && (plan?.length || study?.pick));
+  const empty = focus.length === 0 && work.n === 0 && life.n === 0 && day.dropped.length === 0 && openN === 0 && missed.length === 0 && !(isToday && plan?.length);
 
   return (
     <div className={['dk-day', weekend ? 'weekend' : '', past ? 'past' : '', isToday ? 'today' : ''].join(' ')} data-day={date}>
@@ -180,7 +178,6 @@ export function DayCard({ data, today, plan, planHidden, study, rail }: { data: 
             ))}
           </div>
         )}
-        {isToday && study && <StudyCard v={study} today={today} />}
         <Zone scope="work" z={work} date={date} today={today} />
         <Zone scope="life" z={life} date={date} today={today} />
         {openN > 0 && <div className="dk-note">↻ {openN} 件没做完，挂到了今天</div>}
