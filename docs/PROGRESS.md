@@ -1047,3 +1047,18 @@ Document PiP 与主页面**同一个 JS realm**，所以旧实现是 `createPort
 - 纯函数 `withFocus`（deskPlan.ts，和 `withScope` 同一套合并方式）+ 单测；`moveKeys` 多一个 focus 参数；拖动仍是零 React 重绘。
 
 **验收**：`tsc -b` + `oxlint` 干净；vitest **330 全绿**（新增：挪动 + 设要事合成一条、上限、已是要事不重复占位、拖出移出、例行不管）。`check-desk-v3.mjs` 新增 9 项全过（高亮 + 提示、设上、拖回移出、周五空要事区拖动中露出、挪到周五并设要事、不拖时藏起、Ctrl+Z 一步撤回、满 3 件不设上并提示、撤回）；回归 `check-desk-hero` / `capture-desk-study` / `check-desk-plan` / `capture-desk` 全过；`electron:build` 后 `check-desk-v3-desktop` 全过。截图 `v3-drag-focus-dark.png` 过目。
+
+## 2026-10-19 头部精简 + 日常习惯 + 人际模块
+
+负责人三条：① 头部「紧急的都处理完了」「年度计划还有 N 项」两个药丸没用 ⇒ 删掉（已推送 `8cf4769`）。② 日常习惯（冲牙、不吃热食）要在工作台看到、有提醒、不一定当待办。③ 单独一个人际模块，增强沟通 / 准备惊喜这些「感性」能力。②③ 先出方案，负责人确认：习惯放今天列顶部胶囊 + 桌面版到点通知 + 鸿蒙卡片；人际 v1 做档案 + 联系节奏、一句话记互动、重要日子倒推计划，农历要支持。
+
+- **日常习惯**（规格 DESK_SPEC §十二）：今天那列最上面一排胶囊；要做的点一下打勾、要忍住的破了才点；「别连着断两天」琥珀 / 红；右键补记昨天 / 编辑 / 暂停 / 删除；抽屉「习惯」页；桌面版到点通知。
+- **人际**（规格新文档 `docs/PEOPLE_SPEC.md`）：/people 页 + 工作台头部「快到的日子 / 该联系」药丸 + 人物卡档案摘要与「记一笔」+ 重要日子提前 14 天自动倒推 3 件准备待办（按爱的语言 / 点子池写备注）。
+- **农历**：先试了 Intl 中国历法，单测抓到它 2027、2030 春节各差一天 ⇒ 改查表法（solarlunar 的 1900–2100 表），装 lunar-javascript 当开发依赖逐日对照，又抓到原表 1933、2097 两年有误并改正，现在 1901–2099 全部日期一致。
+- **顺带修的 bug**：① 编辑卡首帧 `visibility:hidden` 时 autoFocus 落空 ⇒「新例行」「编辑事项」打开后直接打字没反应（事项/例行/习惯编辑卡统一在定位后再给焦点）。② `hydrate()` 在 StrictMode 下跑两次，第二次用还没落盘的旧数据盖掉内存 ⇒ 改成只载入一次。③ people.css 与 desk.css 注入顺序不固定导致人际页两栏叠成上下 ⇒ 覆盖规则一律加一级特异性，自查脚本先进工作台再点进人际页复现这个顺序。
+
+**数据**：新表 `habits` / `habit_logs` / `people` / `interactions`（Dexie v5；同步、备份 zod、设置页计数都已登记）。**云端需先执行 `supabase/migrations/0006_habits_people.sql`**，没执行时只有这四张表不同步、状态点报「云端缺少表」，其余照常。
+
+**验收**：`tsc -b` + `oxlint` 干净；vitest **362 全绿**（新增：习惯 13、农历 8〔含 1901–2099 逐日对照〕、人际 11）。`check-habits.mjs`（深浅 × 1440/1920 + 交互 + 模拟桌面桥到点通知）、`check-people.mjs`（头部药丸、倒推 6 件且只生成一次、删掉不再生成、人物卡记一笔、/people 深浅 × 1440/1280 两栏并排无溢出、农历日子、改名带跟进 + 一步撤销、@人 一键建档）全过；回归 `check-desk-v3`（顺序断言随习惯条更新）、`check-desk-hero` 全过。`electron:build` 后 `desktop-smoke`（新增人际懒加载分包 / 刷新回退 / 两栏 / 习惯条）全过。截图 `docs/screenshots/desk/habits-*.png`、`docs/screenshots/people/*.png` 逐张过目。
+
+**负责人要做的**：Supabase SQL Editor 整段执行 `0006_habits_people.sql`；右键托盘「退出」后重开桌面版。

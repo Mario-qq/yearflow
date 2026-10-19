@@ -1,5 +1,6 @@
 /**
- * 头部（一行到底、不折行）：左边日历小牌 + 星期/周次 + 今日脉搏（收尾/要事/@人，只留要人动手的；「紧急处理完」「年度计划还剩」负责人判没用已删）；
+ * 头部（一行到底、不折行）：左边日历小牌 + 星期/周次 + 今日脉搏（收尾/要事/@人/人际：快到的日子、该联系的人；只留要人动手的，
+ * 「紧急处理完」「年度计划还剩」负责人判没用已删）；
  * 右边学习卡 + 一张安静的统计卡（同高并排）：本周完成环 + 每天完成数小柱、学习周目标点阵、最近两个里程碑倒计时（甘特联动，保留紧迫感）。
  */
 import { useMemo } from 'react';
@@ -7,6 +8,7 @@ import { useStore } from '../store/useStore';
 import { diffDays, toDay } from '../lib/date';
 import { addDays, followupsByPerson, shutdownDue, weekMonday } from '../lib/derive/desk';
 import { goalColor } from '../lib/colors';
+import { contactStates, dateTitle, DATE_SOON_DAYS, upcomingDates } from '../lib/derive/people';
 import { personColor } from './constants';
 import { weekdayCn } from './format';
 import { useNowHm, type DayData } from './useDeskData';
@@ -25,9 +27,21 @@ export function DeskHero({ today, items, dayOf, study }: { today: string; items:
   const shutdownAt = useStore((s) => s.settings.desk.shutdownAt);
   const doneOn = useDeskUi((s) => s.shutdownDoneOn);
   const nowHm = useNowHm();
+  const people = useStore((s) => s.people);
+  const interactions = useStore((s) => s.interactions);
 
   const t = dayOf(today);
   const top = useMemo(() => followupsByPerson(items, today)[0], [items, today]);
+  // 人际：最近的重要日子（14 天内）+ 超了节奏最多的那个人；各一颗药丸
+  const soonDate = useMemo(() => upcomingDates(Object.values(people), today, DATE_SOON_DAYS)[0], [people, today]);
+  const callDue = useMemo(
+    () => contactStates(Object.values(people), Object.values(interactions), items, today).find((c) => c.over >= 0),
+    [people, interactions, items, today],
+  );
+  const openPerson = (e: React.MouseEvent<HTMLButtonElement>, name: string) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    useDeskUi.getState().set({ person: { name, left: r.left, top: r.bottom }, personLit: name });
+  };
   const focus = t.focus;
   const focusLeft = focus.filter((i) => i.status === 'open').length;
   const openLeft = t.day.rolled.length + t.day.open.length;
@@ -96,15 +110,32 @@ export function DeskHero({ today, items, dayOf, study }: { today: string; items:
                 )}
               </span>
             )}
+            {soonDate && (
+              <span className={soonDate.days <= 1 ? 'sd' : undefined}>
+                <i style={{ '--c': 'var(--warning)' } as React.CSSProperties} />
+                {soonDate.days === 0 ? '今天是' : ''}
+                <button type="button" onClick={(e) => openPerson(e, soonDate.person.name)}>
+                  {dateTitle(soonDate)}
+                </button>
+                {soonDate.days === 0 ? '' : soonDate.days === 1 ? '就在明天' : <>还有 <b className="tnum">{soonDate.days}</b> 天</>}
+              </span>
+            )}
+            {callDue && (
+              <span>
+                <i style={{ '--c': personColor(callDue.person.name) } as React.CSSProperties} />
+                该联系
+                <button type="button" onClick={(e) => openPerson(e, callDue.person.name)}>
+                  {callDue.person.name}
+                </button>
+                了{callDue.last ? <> · <b className="tnum">{callDue.days}</b> 天没联系</> : ''}
+              </span>
+            )}
             {top && (
               <span>
                 <i style={{ '--c': personColor(top.person) } as React.CSSProperties} />
                 <button
                   type="button"
-                  onClick={(e) => {
-                    const r = e.currentTarget.getBoundingClientRect();
-                    useDeskUi.getState().set({ person: { name: top.person, left: r.left, top: r.bottom }, personLit: top.person });
-                  }}
+                  onClick={(e) => openPerson(e, top.person)}
                 >
                   {top.person}
                 </button>

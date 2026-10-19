@@ -45,6 +45,7 @@
     "cross-env": "^10.1.0",
     "electron": "^43.4.1",
     "electron-builder": "^26.15.3",
+    "lunar-javascript": "^1.7.7",
     "oxlint": "^1.71.0",
     "playwright": "^1.61.1",
     "tailwindcss": "^4.3.2",

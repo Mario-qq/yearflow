@@ -22,6 +22,9 @@ export type RemoteOps = Partial<
 
 const HISTORY_LIMIT = 100; // SPEC 要求 ≥50 步
 
+/** 进行中 / 已完成的那次全量载入（hydrate 只做一次） */
+let hydrating: Promise<void> | null = null;
+
 function emptyMaps(): EntityMaps {
   return Object.fromEntries(TABLE_NAMES.map((t) => [t, {}])) as unknown as EntityMaps;
 }
@@ -74,15 +77,20 @@ export const useStore = create<StoreState>()((set, get) => ({
   undoStack: [],
   redoStack: [],
 
-  hydrate: async () => {
-    // 由 TABLE_NAMES + repoByTable 驱动（两者都编译期穷举），加表不必再改这里。
-    // 以前是手写的 Promise.all + set() 键，set() 缺键不报错（Partial 语义）⇒「表存在但内存永远为空」。
-    const [lists, settings] = await Promise.all([
-      Promise.all(TABLE_NAMES.map((t) => repoByTable[t].getAllActive())),
-      settingsRepo.get(),
-    ]);
-    const maps = Object.fromEntries(TABLE_NAMES.map((t, i) => [t, toMap(lists[i])])) as unknown as EntityMaps;
-    set({ ...maps, settings, hydrated: true });
+  hydrate: () => {
+    // 只载入一次：开发模式 StrictMode 会把 App 的 effect 跑两遍，第二遍晚到的全量载入会用 Dexie 里
+    // 还没落盘（500ms 防抖）的旧数据盖掉内存 —— 启动头几百毫秒里的写入（如自动生成的准备待办）就此丢失。
+    hydrating ??= (async () => {
+      // 由 TABLE_NAMES + repoByTable 驱动（两者都编译期穷举），加表不必再改这里。
+      // 以前是手写的 Promise.all + set() 键，set() 缺键不报错（Partial 语义）⇒「表存在但内存永远为空」。
+      const [lists, settings] = await Promise.all([
+        Promise.all(TABLE_NAMES.map((t) => repoByTable[t].getAllActive())),
+        settingsRepo.get(),
+      ]);
+      const maps = Object.fromEntries(TABLE_NAMES.map((t, i) => [t, toMap(lists[i])])) as unknown as EntityMaps;
+      set({ ...maps, settings, hydrated: true });
+    })();
+    return hydrating;
   },
 
   execute: (label, changes) => {

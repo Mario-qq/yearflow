@@ -90,6 +90,23 @@ await main.waitForLoadState('domcontentloaded');
 const afterReload = await until(() => main.evaluate(() => document.body.innerText.length > 20));
 check('在 /settings 上刷新仍能加载（协议 index.html 回退）', !!afterReload, await main.evaluate(() => location.pathname));
 
+// 人际页是 lazy 分包：经 app:// 协议拉懒加载 chunk + 在 /people 上刷新
+await main.getByRole('link', { name: /人际/ }).click();
+const people = await until(() => main.evaluate(() => Boolean(document.querySelector('.pp-side'))));
+check('人际页（懒加载分包）在 app:// 下能打开', !!people, await main.evaluate(() => location.pathname));
+const sideBy = await main.evaluate(() => {
+  const a = document.querySelector('.pp-side')?.getBoundingClientRect();
+  const b = document.querySelector('.pp-main')?.getBoundingClientRect();
+  return Boolean(a && b && Math.abs(a.top - b.top) < 1 && b.left >= a.right - 1);
+});
+check('人际页左右两栏并排', sideBy);
+await main.reload();
+await main.waitForLoadState('domcontentloaded');
+check('在 /people 上刷新仍能加载', !!(await until(() => main.evaluate(() => Boolean(document.querySelector('.pp-side'))))));
+// 工作台今天卡顶上的日常习惯条（空库也有「＋ 日常习惯」）
+await main.getByRole('link', { name: /工作台/ }).click();
+check('工作台今天卡顶上有习惯条', !!(await until(() => main.evaluate(() => Boolean(document.querySelector('.dk-day.today .dk-habits'))))));
+
 // 四档缩放 × 深浅主题（CLAUDE.md 质量门槛）
 await main.getByRole('link', { name: /甘特图/ }).click();
 await until(() => main.evaluate(() => document.querySelectorAll('svg rect').length > 0));

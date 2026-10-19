@@ -27,10 +27,13 @@ import SettingsPage from './pages/SettingsPage';
 const ReviewPage = lazy(() => import('./pages/ReviewPage'));
 // 年报是低频叙事长页，同样走 lazy ⇒ 主包 gzip 增量目标 0（ANNUAL_SPEC §五 / §六）
 const YearReportPage = lazy(() => import('./pages/YearReportPage'));
+// 人际页低频、电脑上用：lazy，不进主包
+const PeoplePage = lazy(() => import('./pages/PeoplePage'));
 
 const NAV = [
   // 工作台只在电脑宽度出现（负责人：手机端不显示），见 MobileTabBar 的过滤
   { to: '/desk', label: '工作台', icon: '🗂', desktopOnly: true },
+  { to: '/people', label: '人际', icon: '🤝', desktopOnly: true },
   { to: '/gantt', label: '甘特图', icon: '📊' },
   { to: '/checkin', label: '打卡', icon: '✓' },
   { to: '/review', label: '复盘', icon: '📈' },
@@ -267,6 +270,14 @@ export default function App() {
               element={
                 <Suspense fallback={<div className="p-6 text-tertiary">载入中…</div>}>
                   <YearReportPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/people"
+              element={
+                <Suspense fallback={<div className="p-6 text-tertiary">载入中…</div>}>
+                  <PeoplePage />
                 </Suspense>
               }
             />

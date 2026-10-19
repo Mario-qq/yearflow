@@ -28,6 +28,7 @@ import { WeekBoard } from '../desk/WeekBoard';
 import { useStudy } from '../desk/study';
 import { StudySetupPop } from '../desk/StudySetup';
 import { DeskEditorPop } from '../desk/Editors';
+import { usePrepGeneration } from '../people/usePreps';
 import '../desk/desk.css';
 
 export default function DeskPage() {
@@ -38,6 +39,8 @@ export default function DeskPage() {
   // 负责人可以选哪些年度计划在工作台显示（本机设置）
   const { visible: allPlan, hidden: planHidden } = usePlanVisibility(dueRows);
   const study = useStudy(today);
+  // 重要日子进了 14 天窗口 ⇒ 倒推生成准备待办（人际 · PEOPLE_SPEC）
+  usePrepGeneration(today);
   // 学习卡正在推荐/计时的那个任务不在「年度计划」里重复出现（学过之后它回到年度计划，显示已打卡）
   const hideTask = study.running?.taskId ?? (study.studied || !study.dueToday ? undefined : study.pick?.taskId);
   const plan = useMemo(() => (hideTask ? allPlan.filter((p) => p.taskId !== hideTask) : allPlan), [allPlan, hideTask]);

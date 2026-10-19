@@ -117,7 +117,8 @@ for (const theme of ['dark', 'light']) {
     check(`${tag}：今天的生活区有底色`, lifeBg !== 'rgba(0, 0, 0, 0)', lifeBg);
     const order = await page.$eval('.dk-day.today .dk-db', (db) => [...db.children].map((c) => c.className.split(' ')[0]));
     const iw = order.indexOf('dk-zone');
-    check(`${tag}：今天卡自上而下 要事 → 工作 → 生活 → 年度计划`, order[0] === 'dk-focus' && iw > 0 && order.lastIndexOf('dk-plan') === order.length - 1, order.join(' > '));
+    // 10-19 起今天卡最上面多了日常习惯条（DESK_SPEC §十二），其下顺序不变
+    check(`${tag}：今天卡自上而下 习惯 → 要事 → 工作 → 生活 → 年度计划`, order[0] === 'dk-habits' && order[1] === 'dk-focus' && iw > 1 && order.lastIndexOf('dk-plan') === order.length - 1, order.join(' > '));
     const mon = page.locator('.dk-board > .dk-day').first();
     check(`${tag}：过去的日子做完的全显示（周一 5 件 + 例行）`, (await mon.locator('.dk-row.done').count()) === 6);
     const deco = await page.$eval('.dk-board > .dk-day .dk-row.done .dk-t', (e) => getComputedStyle(e).textDecorationLine);
