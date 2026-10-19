@@ -82,29 +82,30 @@
   background: var(--bg-panel);
 }
 
-/* ── 头部：日历小牌 + 今天的局面 ｜ 学习卡 ｜ 本周进行到哪 ── */
+/* ── 头部：一行到底、不折行 —— 日历小牌 + 今天的局面 ｜ 学习卡 ｜ 本周 · 学习 · 里程碑 ──
+   负责人 10-19：头部尽量精简、别折到第二行。空间不够时先省略脉搏药丸和长名字，再收窄学习卡。 */
 .dk-hero {
   display: flex;
-  flex-wrap: wrap; /* 窄窗：学习卡 + 统计卡整体折到下一行 */
   align-items: center;
-  gap: 12px 20px;
-  padding: 18px var(--dk-pad) 14px;
+  gap: 16px;
+  padding: 14px var(--dk-pad) 12px;
   flex-shrink: 0;
+  min-width: 0;
 }
 .dk-h-main {
-  flex: 1 1 440px;
+  flex: 1 1 0;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 /* 日历小牌：上一条强调色写月份，下面大号日期 */
 .dk-h-cal {
-  width: 54px;
+  width: 44px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--bg-panel);
   border: 1px solid var(--border-subtle);
@@ -114,82 +115,62 @@
 .dk-h-cal .m {
   background: var(--accent);
   color: var(--text-on-accent);
-  font-size: var(--font-11);
+  font-size: 10px;
   font-weight: 600;
-  line-height: 18px;
+  line-height: 15px;
   letter-spacing: 0.04em;
 }
 .dk-h-cal .d {
-  font-size: var(--font-24);
+  font-size: var(--font-20);
   font-weight: 650;
-  line-height: 36px;
+  line-height: 30px;
   letter-spacing: -0.02em;
 }
 .dk-h-txt {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
 }
 .dk-h-title {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 8px;
   white-space: nowrap;
 }
 .dk-h-title .wd {
-  font-size: var(--font-20);
+  font-size: var(--font-16);
   font-weight: 650;
-  letter-spacing: -0.01em;
   line-height: 1.2;
 }
 .dk-h-title .wk {
   font-size: var(--font-12);
   color: var(--text-tertiary);
 }
-.dk-h-prog {
-  align-self: center;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  margin-left: 4px;
-  font-size: var(--font-12);
-  color: var(--text-secondary);
-}
-.dk-h-prog .bar {
-  width: 64px;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--border-subtle);
-  overflow: hidden;
-}
-.dk-h-prog .bar i {
-  display: block;
-  height: 100%;
-  border-radius: 2px;
-  background: var(--accent);
-}
+/* 脉搏：一行小药丸，放不下的从右边淡出，不折行 */
 .dk-h-say {
   font-size: var(--font-12);
   color: var(--text-secondary);
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
 }
 .dk-h-say > span {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 24px;
-  padding: 0 10px 0 9px;
-  border-radius: 12px;
+  flex-shrink: 0;
+  height: 22px;
+  padding: 0 9px 0 8px;
+  border-radius: 11px;
   background: var(--bg-subtle);
-  border: 1px solid var(--border-subtle);
   white-space: nowrap;
 }
 .dk-h-say > span.sd {
   background: var(--accent-soft);
-  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .dk-h-say i {
   width: 6px;
@@ -213,17 +194,16 @@
 }
 
 .dk-h-side {
+  flex: 0 1 auto;
   display: flex;
   align-items: stretch;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
-  max-width: 100%;
 }
-/* 学习卡在头部：和统计卡同一张卡片样式、同高 */
+/* 学习卡在头部：和统计卡同一张卡片样式、同高；先于统计卡收窄 */
 .dk-h-study {
-  width: clamp(320px, 30vw, 440px);
-  min-width: 0;
-  flex-shrink: 1;
+  flex: 0 1 340px;
+  min-width: 220px;
   display: flex;
 }
 .dk-h-study:empty {
@@ -231,20 +211,59 @@
 }
 .dk-hero .dk-h-study > * {
   flex: 1;
+  min-width: 0;
   margin: 0;
   border: 1px solid var(--border-subtle);
   border-radius: var(--dk-card-radius);
   box-shadow: var(--shadow-sm);
 }
 .dk-h-study > .dk-study {
-  padding: 9px 12px 8px;
+  padding: 7px 10px 6px;
   display: flex;
   flex-direction: column;
   justify-content: center;
 }
+.dk-h-study .dk-st-what {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dk-h-study .dk-st-why {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+.dk-h-study .dk-st-reason {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dk-h-study .dk-st-why > .dk-grow {
+  display: none;
+}
+/* 次要操作平时淡、悬停才亮，头部保持安静 */
+.dk-h-study .dk-st-a,
+.dk-h-study .dk-st-gear {
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: opacity 0.12s var(--ease);
+}
+.dk-h-study > .dk-study:hover .dk-st-a,
+.dk-h-study > .dk-study:hover .dk-st-gear,
+.dk-h-study .dk-st-a:focus-visible,
+.dk-h-study .dk-st-gear:focus-visible {
+  opacity: 1;
+}
+.dk-h-study .dk-st-acts {
+  margin-top: 4px;
+  flex-wrap: nowrap;
+}
+.dk-h-study .dk-study .dk-btn {
+  height: 22px;
+  padding: 0 8px;
+}
 .dk-h-study > .dk-st-line {
   width: auto;
-  padding: 0 14px;
+  padding: 0 12px;
   background: var(--bg-panel);
 }
 .dk-h-study > .dk-st-line:hover {
@@ -257,6 +276,7 @@
   background: transparent;
 }
 .dk-stats {
+  flex-shrink: 0;
   display: flex;
   align-items: stretch;
   background: var(--bg-panel);
@@ -265,11 +285,11 @@
   box-shadow: var(--shadow-sm);
 }
 .dk-stat {
-  padding: 9px 16px;
+  padding: 7px 14px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
 }
 .dk-stat + .dk-stat {
@@ -281,7 +301,7 @@
   white-space: nowrap;
 }
 .dk-stat .v {
-  font-size: var(--font-16);
+  font-size: var(--font-15);
   font-weight: 650;
   white-space: nowrap;
 }
@@ -294,16 +314,16 @@
 .dk-stat.week {
   flex-direction: row;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 .dk-spark {
   display: flex;
   align-items: flex-end;
   gap: 3px;
-  height: 22px;
+  height: 20px;
 }
 .dk-spark span {
-  width: 5px;
+  width: 4px;
   border-radius: 2px;
   background: var(--border-default);
 }
@@ -316,7 +336,7 @@
 .dk-ms {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   font-size: var(--font-12);
   color: var(--text-secondary);
   white-space: nowrap;
@@ -324,12 +344,19 @@
 .dk-ms i {
   font-style: normal;
   color: var(--c);
-  font-size: 10px;
+  font-size: 9px;
+}
+.dk-ms span {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .dk-ms em {
   font-style: normal;
   font-weight: 650;
   color: var(--text-primary);
+  margin-left: auto;
+  padding-left: 6px;
 }
 
 /* ── 工具条 ── */

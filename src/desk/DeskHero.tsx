@@ -1,5 +1,5 @@
 /**
- * 头部：左边日历小牌 + 星期/周次/今天进度 + 今日脉搏（一排小药丸说清今天的局面，@人可点开人物卡）；
+ * 头部（一行到底、不折行）：左边日历小牌 + 星期/周次 + 今日脉搏（一排小药丸说清今天的局面，@人可点开人物卡）；
  * 右边学习卡 + 一张安静的统计卡（同高并排）：本周完成环 + 每天完成数小柱、学习周目标点阵、最近两个里程碑倒计时（甘特联动，保留紧迫感）。
  */
 import { useMemo } from 'react';
@@ -53,7 +53,6 @@ export function DeskHero({ today, items, dayOf, plan, study }: { today: string; 
   );
 
   const d = toDay(today);
-  const tPct = t.count.total ? Math.round((t.count.done / t.count.total) * 100) : 0;
   return (
     <section className="dk-hero">
       <div className="dk-h-main">
@@ -65,14 +64,6 @@ export function DeskHero({ today, items, dayOf, plan, study }: { today: string; 
           <div className="dk-h-title">
             <span className="wd">{weekdayCn(today)}</span>
             <span className="wk tnum">第 {d.isoWeek()} 周</span>
-            {t.count.total > 0 && (
-              <span className="dk-h-prog tnum" title={`今天完成 ${t.count.done} / ${t.count.total}`}>
-                <span className="bar">
-                  <i style={{ width: `${tPct}%` }} />
-                </span>
-                今天 {t.count.done}/{t.count.total}
-              </span>
-            )}
           </div>
           <div className="dk-h-say">
             {sdDue && (
@@ -203,7 +194,8 @@ export function DeskHero({ today, items, dayOf, plan, study }: { today: string; 
               {nextMs.map((m) => (
                 <div key={m.id} className="dk-ms" style={{ '--c': goalColor(goals[m.goalId].color) } as React.CSSProperties} title={`${goals[m.goalId].name} · ${m.date}`}>
                   <i>◆</i>
-                  {m.name} <em className="tnum">{diffDays(m.date, today)}</em> 天
+                  <span>{m.name}</span>
+                  <em className="tnum">{diffDays(m.date, today)} 天</em>
                 </div>
               ))}
             </div>
