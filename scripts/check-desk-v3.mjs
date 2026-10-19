@@ -229,6 +229,43 @@ for (const theme of ['dark', 'light']) {
   await page.locator('.dk-menu button', { hasText: '移出要事' }).click();
   check('右键「移出要事」', !(await item(page, '下周六晚停机窗口')).focusOn);
 
+  // 拖动设要事（v3.3）：拖进要事区 = 设为那天要事；拖出到工作区 = 移出；拖进别天的（空）要事区 = 挪过去并设要事，一步撤销
+  const dragTo = async (rowSel, title, targetSel, during) => {
+    const r = await page.locator(rowSel, { hasText: title }).first().boundingBox();
+    await page.mouse.move(r.x + 40, r.y + r.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(r.x + 50, r.y + 20, { steps: 3 });
+    const t = await page.locator(targetSel).boundingBox(); // 起拖后空落点才露出来，这时再量
+    await page.mouse.move(t.x + 60, t.y + Math.min(14, t.height / 2), { steps: 8 });
+    if (during) await during();
+    await page.mouse.up();
+    await page.waitForTimeout(150);
+  };
+  await dragTo('.dk-day.today .dk-zone.work .dk-row', '下周六晚停机窗口', '.dk-day.today .dk-focus', async () => {
+    check('拖到要事区：区高亮、提示带「要事」', (await page.locator('.dk-day.today .dk-focus.drop').count()) === 1 && (await page.locator('[data-mv-tip]').innerText()).includes('要事'));
+    await page.screenshot({ path: `${OUT}/v3-drag-focus-dark.png` });
+  });
+  check('松手 ⇒ 设为今天要事', (await item(page, '下周六晚停机窗口')).focusOn === THU);
+  await dragTo('.dk-day.today .dk-focus .dk-row', '下周六晚停机窗口', '.dk-day.today .dk-zone.work');
+  check('从要事区拖回工作区 ⇒ 移出要事', !(await item(page, '下周六晚停机窗口')).focusOn);
+  await dragTo('.dk-day.today .dk-zone.work .dk-row', 'cmrp810 索引脚本', '.dk-day[data-day="2026-10-23"] .dk-focus', async () => {
+    check('拖动中周五的空要事区露出来', await page.locator('.dk-day[data-day="2026-10-23"] .dk-focus.empty').isVisible());
+  });
+  const fri = await item(page, 'cmrp810 索引脚本');
+  check('拖进周五要事区 ⇒ 挪到周五并设为周五要事', fri.date === '2026-10-23' && fri.focusOn === '2026-10-23', JSON.stringify({ d: fri.date, f: fri.focusOn }));
+  check('不拖时空要事区藏起来', !(await page.locator('.dk-day[data-day="2026-10-24"] .dk-focus').isVisible()));
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(100);
+  const back = await item(page, 'cmrp810 索引脚本');
+  check('Ctrl+Z 一步撤回（日子与要事一起回去）', back.date === THU && !back.focusOn);
+  // 今天已有 2 件要事 + 再拖 1 件 = 3 件；第 4 件拖进去提示满了、不设上
+  await dragTo('.dk-day.today .dk-zone.work .dk-row', '下周六晚停机窗口', '.dk-day.today .dk-focus');
+  await dragTo('.dk-day.today .dk-zone.work .dk-row', 'cmrp810 索引脚本', '.dk-day.today .dk-focus');
+  check('要事满 3 件再拖 ⇒ 不设上', !(await item(page, 'cmrp810 索引脚本')).focusOn && (await page.locator('body').innerText()).includes('最多 3 件要事'));
+  await page.keyboard.press('Control+z'); // 撤回第 3 件，后面的浮层测试从 2 件开始
+  await page.waitForTimeout(100);
+  check('撤回后今天回到 2 件要事', !(await item(page, '下周六晚停机窗口')).focusOn);
+
   // 挑要事浮层
   await page.locator('.dk-day.today .dk-focus-pick').click();
   check('「再挑」打开挑要事浮层', await page.locator('.dk-fp').isVisible());

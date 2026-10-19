@@ -1038,3 +1038,12 @@ Document PiP 与主页面**同一个 JS realm**，所以旧实现是 `createPort
 - 新增 `scripts/check-desk-hero.mjs`：1280 / 1440 / 1536 / 1920 × 深浅，断言一行、≤100px、无横向溢出、学习卡与统计卡同高、统计卡三块都在；截图 `docs/screenshots/desk/hero-*.png`。
 
 **验收**：`tsc -b` + `oxlint` 干净；`check-desk-hero` / `check-desk-v3` / `capture-desk-study` 全过；`electron:build` 已重建。
+
+## 2026-10-19 工作台 v3.3：拖动设要事
+
+负责人：要事能不能拖动设置。
+
+- 拖进某天的「要事」区 = 设为那天要事（别的日子顺带挪过去，挪动 + 设要事是**一步撤销**）；把要事拖回工作/生活区 = 移出要事。守每天 3 件上限，满了提示、不设上。今天及以后每天都有要事区，空的平时藏着，拖动中露出来（写「拖到这里设为要事」）。拖动提示带「· 要事」，落点高亮。
+- 纯函数 `withFocus`（deskPlan.ts，和 `withScope` 同一套合并方式）+ 单测；`moveKeys` 多一个 focus 参数；拖动仍是零 React 重绘。
+
+**验收**：`tsc -b` + `oxlint` 干净；vitest **330 全绿**（新增：挪动 + 设要事合成一条、上限、已是要事不重复占位、拖出移出、例行不管）。`check-desk-v3.mjs` 新增 9 项全过（高亮 + 提示、设上、拖回移出、周五空要事区拖动中露出、挪到周五并设要事、不拖时藏起、Ctrl+Z 一步撤回、满 3 件不设上并提示、撤回）；回归 `check-desk-hero` / `capture-desk-study` / `check-desk-plan` / `capture-desk` 全过；`electron:build` 后 `check-desk-v3-desktop` 全过。截图 `v3-drag-focus-dark.png` 过目。

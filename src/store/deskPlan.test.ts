@@ -11,6 +11,7 @@ import {
   planToggleItem,
   planToggleOccurrence,
   planSetFocus,
+  withFocus,
   withScope,
 } from './deskPlan';
 import { invertChange, type Change } from './types';
@@ -212,5 +213,22 @@ describe('v3：要事上限、拖进另一区改范围', () => {
     expect(out).toHaveLength(2);
     expect(after(out[0])).toMatchObject({ id: 'a', date: '2026-10-19', scope: 'life' });
     expect(after(out[1])).toMatchObject({ id: 'c', date: D, scope: 'life' });
+  });
+
+  it('拖进要事区：挪动 + 设要事合成一条；守每天上限；拖出 = 移出要事；例行不管', () => {
+    const N = '2026-10-19';
+    const s = state({ items: [wi('a', { date: D }), wi('b', { date: N }), wi('f1', { date: N, focusOn: N }), wi('f2', { date: N, focusOn: N }), wi('x', { date: D })] });
+    const keys = [{ type: 'item' as const, id: 'a' }, { type: 'item' as const, id: 'b' }, { type: 'routine' as const, routineId: 'r', origDate: D }];
+    const moved = planMove(s, [keys[0]], () => N, NOW).changes;
+    const r = withFocus(s, keys, moved, N, NOW);
+    expect(r.over).toBe(1); // 那天已有 2 件，只剩 1 个位子
+    expect(r.changes).toHaveLength(1);
+    expect(after(r.changes[0])).toMatchObject({ id: 'a', date: N, focusOn: N });
+    // 已是那天要事的在那天要事区里拖动：不占第二个位子、没有变更
+    expect(withFocus(s, [{ type: 'item', id: 'f1' }], [], N, NOW)).toEqual({ changes: [], over: 0 });
+    // 拖出要事区：移出；本来就不是要事的不动
+    const out = withFocus(s, [{ type: 'item', id: 'f1' }, { type: 'item', id: 'x' }], [], null, NOW);
+    expect(out.changes).toHaveLength(1);
+    expect(after(out.changes[0])).toMatchObject({ id: 'f1', focusOn: undefined });
   });
 });

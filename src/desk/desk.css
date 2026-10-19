@@ -1944,6 +1944,29 @@
   color: var(--accent);
   background: var(--accent-soft);
 }
+.dk-focus.empty {
+  display: none;
+}
+.dk-focus-hint {
+  display: none;
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+/* 拖动中：空的要事区也露出来当落点；有位子的要事区底下留一条落点空隙 */
+.dk.dragging .dk-day:not(.past) .dk-focus.empty {
+  display: block;
+  padding-bottom: 6px;
+}
+.dk.dragging .dk-focus-pick {
+  display: none;
+}
+.dk.dragging .dk-focus-hint {
+  display: inline;
+}
+.dk-focus.drop {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
 .dk-focus .dk-row .dk-t {
   font-size: var(--font-14);
   font-weight: 550;

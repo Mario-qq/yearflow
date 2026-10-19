@@ -149,8 +149,9 @@ export function DayCard({ data, today, plan, planHidden, rail }: { data: DayData
         </div>
       </div>
       <div className="dk-db">
-        {(focus.length > 0 || canPickFocus) && (
-          <div className="dk-focus" data-zone-focus={date}>
+        {/* 今天及以后每天都有要事区（空的平时藏着，拖动中露出来当落点：拖进来 = 设为那天要事） */}
+        {(focus.length > 0 || canPickFocus || !past) && (
+          <div className={`dk-focus${focus.length > 0 || canPickFocus ? '' : ' empty'}`} data-zone-focus={date} data-day={past ? undefined : date}>
             <div className="dk-focus-h">
               <span>要事</span>
               {focus.length > 0 && (
@@ -172,6 +173,7 @@ export function DayCard({ data, today, plan, planHidden, rail }: { data: DayData
                   {focus.length ? '再挑' : `挑今天最要紧的 ${MAX_FOCUS} 件`}
                 </button>
               )}
+              {focus.length === 0 && <span className="dk-focus-hint">拖到这里设为要事</span>}
             </div>
             {focus.map((i) => (
               <ItemRow key={i.id} item={i} today={today} rolled={i.date !== date} inFocus compact={past} />

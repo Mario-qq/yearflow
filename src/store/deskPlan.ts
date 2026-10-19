@@ -130,6 +130,38 @@ export function withScope(s: DeskState, keys: DeskKey[], changes: Change[], scop
   return out;
 }
 
+/**
+ * 在挪动（及改范围）的基础上顺带设 / 移出要事：拖进某天的要事区 = 挪到那天 + 设为那天的要事；
+ * 把要事拖到工作/生活区 = 移出要事。只认事项（例行不能当要事）；设上时守每天 MAX_FOCUS 的上限，
+ * 被拖的这几件原本就是那天要事的不重复占位。返回合并后的变更与没设上的件数。
+ */
+export function withFocus(s: DeskState, keys: DeskKey[], changes: Change[], date: string | null, stamp: string): { changes: Change[]; over: number } {
+  const out = [...changes];
+  const ids = keys.flatMap((k) => (k.type === 'item' && s.workItems[k.id] ? [k.id] : []));
+  const dragged = new Set(ids);
+  let room = date ? MAX_FOCUS - Object.values(s.workItems).filter((i) => !dragged.has(i.id) && isFocusOn(i, date)).length : 0;
+  let over = 0;
+  for (const id of ids) {
+    const at = out.findIndex((c) => c.table === 'workItems' && c.type === 'put' && c.after.id === id);
+    const c = out[at];
+    const cur = c && c.table === 'workItems' && c.type === 'put' ? c.after : s.workItems[id];
+    let focusOn: string | undefined;
+    if (date) {
+      if (room <= 0) {
+        over++;
+        continue;
+      }
+      room--;
+      if (cur.focusOn === date) continue;
+      focusOn = date;
+    } else if (!cur.focusOn) continue;
+    const next: WorkItem = { ...cur, focusOn, updatedAt: stamp };
+    if (c && c.table === 'workItems' && c.type === 'put') out[at] = { ...c, after: next };
+    else out.push({ table: 'workItems', type: 'put', before: s.workItems[id], after: next });
+  }
+  return { changes: out, over };
+}
+
 /** 某人的未完成跟进全部标为已说（人物卡「全部标为已说」） */
 export function planMarkPersonSaid(s: DeskState, person: string, stamp: string): Change[] {
   const ids = Object.values(s.workItems)

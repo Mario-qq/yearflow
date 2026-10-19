@@ -19,6 +19,7 @@ import {
   planSkipOccurrence,
   planToggleItem,
   planToggleOccurrence,
+  withFocus,
   withScope,
   type DeskKey,
 } from './deskPlan';
@@ -194,7 +195,13 @@ export function markPersonSaid(person: string): void {
  * 一次挪动 = 一条撤销记录。返回 pastDue（挪到截止日之后的件数，UI 提示用）与实际挪动数。
  * scope = 拖到了某天的工作/生活区：顺带改范围（同一天换区 = 只改范围，moved 也算上）。
  */
-export function moveKeys(keys: DeskKey[], to: MoveHow | string | null, scope?: WorkScope): { moved: number; pastDue: number } {
+export function moveKeys(
+  keys: DeskKey[],
+  to: MoveHow | string | null,
+  scope?: WorkScope,
+  /** 拖进某天的要事区 = true（设为那天要事）；拖到工作/生活区 = false（移出要事）；其他落点不传 */
+  focus?: boolean,
+): { moved: number; pastDue: number; over: number; label?: string } {
   const s = useStore.getState();
   const today = todayStr();
   const isHow = to === 'tomorrow' || to === 'nextMonday' || to === 'sameDayNextWeek';
@@ -206,15 +213,28 @@ export function moveKeys(keys: DeskKey[], to: MoveHow | string | null, scope?: W
   const stamp = nowIso();
   const planned = planMove(s, keys, target, stamp);
   const { pastDue } = planned;
-  const changes = scope ? withScope(s, keys, planned.changes, scope, stamp) : planned.changes;
+  let changes = scope ? withScope(s, keys, planned.changes, scope, stamp) : planned.changes;
+  let over = 0;
+  if (focus !== undefined && to !== null && !isHow) {
+    const r = withFocus(s, keys, changes, focus ? to : null, stamp);
+    changes = r.changes;
+    over = r.over;
+    const newly = changes.filter((c) => c.table === 'workItems' && c.type === 'put' && c.after.focusOn === to && c.before?.focusOn !== to).length;
+    if (focus && newly) {
+      const label = planned.moved ? `挪到 ${to.slice(5).replace('-', '/')} 并设为要事：${newly} 件` : `设为要事：${newly} 件`;
+      s.execute(label, changes);
+      return { moved: changes.length, pastDue, over, label };
+    }
+  }
   const moved = changes.length;
-  if (scope && planned.moved === 0 && changes.length > 0) {
-    s.execute(`改为${scope === 'life' ? '生活' : '工作'}：${changes.length} 件`, changes);
-    return { moved: changes.length, pastDue: 0 };
+  if (planned.moved === 0 && changes.length > 0 && (scope || focus === false)) {
+    const label = scope && changes.some((c) => c.type === 'put' && c.table === 'workItems' && c.before?.scope !== c.after.scope) ? `改为${scope === 'life' ? '生活' : '工作'}：${changes.length} 件` : `移出要事：${changes.length} 件`;
+    s.execute(label, changes);
+    return { moved: changes.length, pastDue: 0, over, label };
   }
   const label = to === null ? `放进待处理：${moved} 件` : isHow ? `${{ tomorrow: '挪到明天', nextMonday: '挪到下周一', sameDayNextWeek: '挪到下周同一天' }[to]}：${moved} 件` : `挪到 ${to.slice(5).replace('-', '/')}：${moved} 件`;
   if (changes.length) s.execute(label, changes);
-  return { moved, pastDue };
+  return { moved, pastDue, over };
 }
 
 // ── 例行 ─────────────────────────────────────────────────────────────────
