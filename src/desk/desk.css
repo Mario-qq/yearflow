@@ -2395,3 +2395,134 @@
     transition: none !important;
   }
 }
+
+/* ── 日常习惯（DESK_SPEC §十二）：今天那列最上面一排小胶囊，不算待办 ── */
+.dk-habits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 6px;
+}
+.dk-hb {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 24px;
+  padding: 0 8px 0 6px;
+  border-radius: 12px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-panel);
+  font-size: var(--font-12);
+  color: var(--text-primary);
+  white-space: nowrap;
+  transition: background-color 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+.dk-hb:hover {
+  border-color: var(--border-strong);
+}
+.dk-hb .ic {
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+  font-size: var(--font-12);
+  color: var(--text-tertiary);
+}
+.dk-hb .t {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dk-hb .h {
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 做了：绿底打勾，退一档 */
+.dk-hb.done {
+  background: var(--success-soft);
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+.dk-hb.done .ic {
+  color: var(--success);
+  font-weight: 700;
+}
+/* 要忍住、今天还守着：安静的底，不抢眼 */
+.dk-hb.avoid.kept {
+  background: var(--bg-subtle);
+  border-color: transparent;
+}
+/* 断了一天：琥珀（今天接上）；连断两天 / 今天破了：红 */
+.dk-hb.b1 {
+  background: var(--warning-soft);
+  border-color: transparent;
+}
+.dk-hb.b1 .h {
+  color: var(--warning);
+}
+.dk-hb.b2,
+.dk-hb.slip {
+  background: var(--danger-soft);
+  border-color: transparent;
+}
+.dk-hb.b2 .h,
+.dk-hb.slip .h {
+  color: var(--danger);
+}
+.dk-hb.off {
+  opacity: 0.5;
+}
+.dk-hb-add {
+  height: 24px;
+  min-width: 24px;
+  padding: 0 6px;
+  border-radius: 12px;
+  font-size: var(--font-12);
+  color: var(--text-tertiary);
+}
+.dk-hb-add:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.dk-hb-add.empty {
+  border: 1px dashed var(--border-default);
+  padding: 0 9px;
+}
+/* 编辑卡：图标 + 名字一行、常用图标一排 */
+.dk-hb-name {
+  display: flex;
+  gap: 6px;
+}
+.dk-hb-name .dk-ed-title {
+  flex: 1;
+}
+.dk-hb-icon {
+  width: 40px;
+  height: 32px;
+  text-align: center;
+  font-size: var(--font-16);
+}
+.dk-hb-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.dk-hb-icons button {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-14);
+}
+.dk-hb-icons button:hover {
+  background: var(--row-hover);
+}
+.dk-hb-icons button.on {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dk-hb {
+    transition: none;
+  }
+}

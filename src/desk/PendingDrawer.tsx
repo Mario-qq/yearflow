@@ -2,6 +2,7 @@
  * 右侧抽屉，平时收起（工具条上一个带件数的按钮），I 或点按钮滑出。两页：
  * - 待处理：还没排日子的事，拖到某天即排期；
  * - 例行：全部例行（含暂停的），在这里新建、编辑、暂停 / 恢复、删除 —— 暂停的例行周历上不出现，只能在这里找回。
+ * - 习惯：同上，管理日常习惯（暂停的不在今天顶上出现）。
  */
 import { useMemo } from 'react';
 import { pendingItems, ruleLabel } from '../lib/derive/desk';
@@ -10,6 +11,7 @@ import { useStore } from '../store/useStore';
 import { toastUndo } from './format';
 import { ItemRow } from './Rows';
 import { useDeskUi } from './uiStore';
+import { HabitList } from './Habits';
 import type { Routine, WorkItem } from '../types/domain';
 
 function openRoutineEditor(e: React.MouseEvent, id: string | null) {
@@ -80,6 +82,7 @@ export function PendingDrawer({ items, today }: { items: WorkItem[]; today: stri
   const open = useDeskUi((s) => s.drawer);
   const tab = useDeskUi((s) => s.drawerTab);
   const routineN = useStore((s) => Object.values(s.routines).filter((r) => !r.deletedAt && !r.paused).length);
+  const habitN = useStore((s) => Object.values(s.habits).filter((h) => !h.deletedAt && !h.paused).length);
   if (!open) return null;
   const list = pendingItems(items, today);
   return (
@@ -92,6 +95,9 @@ export function PendingDrawer({ items, today }: { items: WorkItem[]; today: stri
           <button type="button" role="tab" aria-selected={tab === 'routines'} className={tab === 'routines' ? 'on' : ''} onClick={() => useDeskUi.getState().set({ drawerTab: 'routines' })}>
             例行 <span className="tnum">{routineN}</span>
           </button>
+          <button type="button" role="tab" aria-selected={tab === 'habits'} className={tab === 'habits' ? 'on' : ''} onClick={() => useDeskUi.getState().set({ drawerTab: 'habits' })}>
+            习惯 <span className="tnum">{habitN}</span>
+          </button>
         </div>
         <span className="dk-grow" />
         <button type="button" className="dk-btn ghost" title="收起（I / Esc）" onClick={() => useDeskUi.getState().set({ drawer: false })}>
@@ -103,8 +109,10 @@ export function PendingDrawer({ items, today }: { items: WorkItem[]; today: stri
           <div className="dk-dr-tip">还没排日子的事。拖到某一天就排上了；拖动时会浮出小月历。</div>
           <div className="dk-dr-b">{list.length ? list.map((i) => <ItemRow key={i.id} item={i} today={today} />) : <div className="dk-empty">没有待处理的事</div>}</div>
         </>
-      ) : (
+      ) : tab === 'routines' ? (
         <RoutineList />
+      ) : (
+        <HabitList />
       )}
     </aside>
   );

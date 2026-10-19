@@ -31,6 +31,10 @@ const TABLE_LABEL: Record<TableName, string> = {
   routines: '例行事项',
   routineLogs: '例行记录',
   dayMarks: '休/班标记',
+  habits: '日常习惯',
+  habitLogs: '习惯记录',
+  people: '人物档案',
+  interactions: '互动记录',
 };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

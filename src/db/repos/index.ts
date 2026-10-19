@@ -7,8 +7,12 @@ import type {
   ExemptionPeriod,
   FocusSession,
   Goal,
+  Habit,
+  HabitLog,
+  Interaction,
   Milestone,
   MonthlyReview,
+  Person,
   Routine,
   RoutineLog,
   ScreenTimeDay,
@@ -60,6 +64,10 @@ export const workItemRepo = new BaseRepo<WorkItem>(db.workItems);
 export const routineRepo = new BaseRepo<Routine>(db.routines);
 export const routineLogRepo = new BaseRepo<RoutineLog>(db.routineLogs);
 export const dayMarkRepo = new BaseRepo<DayMark>(db.dayMarks);
+export const habitRepo = new BaseRepo<Habit>(db.habits);
+export const habitLogRepo = new BaseRepo<HabitLog>(db.habitLogs);
+export const personRepo = new BaseRepo<Person>(db.people);
+export const interactionRepo = new BaseRepo<Interaction>(db.interactions);
 export const settingsRepo = new SettingsRepo();
 
 /** 清空全库（JSON 导入重建 / 清空示例数据） */
@@ -77,5 +85,9 @@ export async function clearAllData(): Promise<void> {
     db.routines.clear(),
     db.routineLogs.clear(),
     db.dayMarks.clear(),
+    db.habits.clear(),
+    db.habitLogs.clear(),
+    db.people.clear(),
+    db.interactions.clear(),
   ]);
 }

@@ -1,6 +1,6 @@
 /**
  * 一天一张卡：卡头 = 大号日期 + 星期 + 完成数 + 2px 进度线；卡身自上而下：
- * 要事（Ivy Lee，最多 3 件）→ 工作区 → 生活区（淡色底，不写字）→ 年度计划（今天，可收起、可筛选）。学习卡在头部。
+ * 今天：日常习惯胶囊（不算待办）→ 要事（Ivy Lee，最多 3 件）→ 工作区 → 生活区（淡色底，不写字）→ 年度计划（今天，可收起、可筛选）。学习卡在头部。
  * 做完的就留在原区里打勾显示（一眼看到这周做了什么），不再折叠；只有「不做了」收在卡底。
  * 工作/生活两区都是拖放目标：拖进另一区 = 顺带改范围（拖动中空区也会露出来）。
  */
@@ -12,6 +12,7 @@ import { isWeekendDate, weekdayCn } from './format';
 import { PlanRows } from './PlanSection';
 import type { PlanRowData } from './usePlanRows';
 import { ItemRow, RoutineRow } from './Rows';
+import { HabitStrip } from './Habits';
 import type { DayData } from './useDeskData';
 import { useDeskUi } from './uiStore';
 
@@ -149,6 +150,7 @@ export function DayCard({ data, today, plan, planHidden, rail }: { data: DayData
         </div>
       </div>
       <div className="dk-db">
+        {isToday && <HabitStrip today={today} />}
         {/* 今天及以后每天都有要事区（空的平时藏着，拖动中露出来当落点：拖进来 = 设为那天要事） */}
         {(focus.length > 0 || canPickFocus || !past) && (
           <div className={`dk-focus${focus.length > 0 || canPickFocus ? '' : ' empty'}`} data-zone-focus={date} data-day={past ? undefined : date}>

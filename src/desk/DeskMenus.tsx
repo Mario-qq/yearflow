@@ -1,5 +1,5 @@
 /**
- * 工作台的三种菜单：日卡「⋯」（这天没做完的批量挪 / 全选 / 休班标记）、行右键（事项或例行的一次）、紧急度。
+ * 工作台的菜单：日卡「⋯」（这天没做完的批量挪 / 全选 / 休班标记）、行右键（事项或例行的一次）、紧急度、年度计划行、习惯胶囊。
  * 菜单定位在屏内夹紧；点外面、Esc 关闭（由 DeskPage 统一处理）。
  */
 import { useLayoutEffect, useRef, useState } from 'react';
@@ -28,6 +28,10 @@ import { showToast } from '../lib/toast';
 import { selectOnly } from './selection';
 import type { DayData } from './useDeskData';
 import { useDeskUi } from './uiStore';
+import { openHabitEditor, tapHabit } from './habitCommands';
+import { deleteHabit, setHabitPaused, toggleHabitLog } from '../store/habitActions';
+import { habitLogId } from '../lib/derive/habits';
+import { addDays } from '../lib/derive/desk';
 
 const URGENCY: { u: Urgency; label: string; key: string }[] = [
   { u: 'urgent', label: '紧急', key: '1' },
@@ -60,6 +64,8 @@ export function DeskMenus({ today, dayOf }: { today: string; dayOf: (d: string) 
   const menu = useDeskUi((s) => s.menu);
   const workItems = useStore((s) => s.workItems);
   const routines = useStore((s) => s.routines);
+  const habits = useStore((s) => s.habits);
+  const habitLogs = useStore((s) => s.habitLogs);
   const marks = useStore((s) => s.dayMarks);
   const goals = useStore((s) => s.goals);
   const tasks = useStore((s) => s.tasks);
@@ -377,6 +383,96 @@ export function DeskMenus({ today, dayOf }: { today: string; dayOf: (d: string) 
           </>
         );
       }
+    }
+  }
+
+  if (menu.kind === 'habit') {
+    const h = habits[menu.id];
+    if (h) {
+      const yesterday = addDays(today, -1);
+      const logT = habitLogs[habitLogId(h.id, today)];
+      const logY = habitLogs[habitLogId(h.id, yesterday)];
+      const anchor = (): [number, number] => [menu.x, menu.y];
+      content = (
+        <>
+          <div className="lbl">
+            {h.icon ? `${h.icon} ` : ''}
+            {h.title}
+          </div>
+          {h.kind === 'do' ? (
+            <>
+              <button type="button" onClick={() => (close(), tapHabit(h, today))}>
+                {logT ? '撤销今天' : '今天做了'}
+              </button>
+              {yesterday >= h.startDate && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    close();
+                    const on = toggleHabitLog(h.id, yesterday, 'done');
+                    toastUndo(on ? `补记：昨天「${h.title}」做了` : `已撤销昨天的「${h.title}」`);
+                  }}
+                >
+                  {logY ? '撤销昨天的记录' : '昨天其实做了（补记）'}
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <button type="button" onClick={() => (close(), tapHabit(h, today))}>
+                {logT ? '撤销：今天没破' : '今天破了一次'}
+              </button>
+              {yesterday >= h.startDate && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    close();
+                    const on = toggleHabitLog(h.id, yesterday, 'slip');
+                    toastUndo(on ? `补记：昨天「${h.title}」破了` : `已撤销昨天的破戒`);
+                  }}
+                >
+                  {logY ? '撤销昨天的破戒' : '昨天破了（补记）'}
+                </button>
+              )}
+            </>
+          )}
+          <hr />
+          <button
+            type="button"
+            onClick={() => {
+              const [x, y] = anchor();
+              openHabitEditor(h.id, x, y);
+            }}
+          >
+            编辑…
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              close();
+              setHabitPaused(h.id, true);
+              toastUndo(`已暂停「${h.title}」，在「待处理 → 习惯」里恢复`);
+            }}
+          >
+            暂停<span>不删记录</span>
+          </button>
+          <button
+            type="button"
+            className="danger"
+            onClick={() => {
+              close();
+              deleteHabit(h.id);
+              toastUndo(`删除习惯「${h.title}」`);
+            }}
+          >
+            删除这个习惯
+          </button>
+          <hr />
+          <button type="button" onClick={() => useDeskUi.getState().set({ menu: null, drawer: true, drawerTab: 'habits' })}>
+            管理全部习惯…
+          </button>
+        </>
+      );
     }
   }
 

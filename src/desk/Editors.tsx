@@ -3,13 +3,14 @@
  * 行右键「编辑…」、选中一件按 Enter、例行列表点一行打开；新建例行也用它。
  * 草稿在卡内，「保存」一次落库 = 一条撤销记录；Esc / 点外面 = 放弃。
  */
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Routine, RoutineRule, Urgency, WorkItem, WorkScope } from '../types/domain';
 import { useStore } from '../store/useStore';
 import { createRoutine, editItem, patchRoutine } from '../store/deskActions';
 import { ruleLabel } from '../lib/derive/desk';
 import { relDay, md, toastUndo } from './format';
 import { useDeskUi } from './uiStore';
+import { HabitEditor } from './Habits';
 
 const close = () => useDeskUi.getState().set({ editor: null });
 
@@ -353,6 +354,7 @@ export function DeskEditorPop({ today }: { today: string }) {
   const ed = useDeskUi((s) => s.editor);
   const item = useStore((s) => (ed?.kind === 'item' ? s.workItems[ed.id] : undefined));
   const routine = useStore((s) => (ed?.kind === 'routine' && ed.id ? s.routines[ed.id] : undefined));
+  const habit = useStore((s) => (ed?.kind === 'habit' && ed.id ? s.habits[ed.id] : undefined));
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
@@ -365,22 +367,35 @@ export function DeskEditorPop({ today }: { today: string }) {
     });
   }, [ed]);
 
+  // 首帧是 visibility:hidden（先量尺寸再定位），autoFocus 落在隐藏元素上会失败 ⇒ 定好位再把焦点给标题框
+  useEffect(() => {
+    const el = ref.current;
+    if (pos && el && !el.contains(document.activeElement)) (el.querySelector<HTMLElement>('.dk-ed-title') ?? el.querySelector<HTMLElement>('input, textarea'))?.focus();
+  }, [pos]);
+
   if (!ed) return null;
   if (ed.kind === 'item' && !item) return null;
+  const title = ed.kind === 'item' ? '编辑事项' : ed.kind === 'habit' ? (habit ? '编辑习惯' : '新建日常习惯') : routine ? '编辑例行' : '新建例行';
   return (
     <div
       ref={ref}
       className="dk-pop dk-ed"
       role="dialog"
-      aria-label={ed.kind === 'item' ? '编辑事项' : routine ? '编辑例行' : '新建例行'}
+      aria-label={title}
       style={pos ? { left: pos.left, top: pos.top } : { visibility: 'hidden', left: 0, top: 0 }}
       onClick={(e) => e.stopPropagation()}
     >
       <div className="dk-pop-h">
-        <b>{ed.kind === 'item' ? '编辑事项' : routine ? '编辑例行' : '新建例行'}</b>
+        <b>{title}</b>
         {ed.kind === 'routine' && routine && <small>做过的记录都保留</small>}
       </div>
-      {ed.kind === 'item' && item ? <ItemEditor key={item.id} item={item} today={today} /> : <RoutineEditor key={ed.id ?? 'new'} routine={routine} today={today} />}
+      {ed.kind === 'item' && item ? (
+        <ItemEditor key={item.id} item={item} today={today} />
+      ) : ed.kind === 'habit' ? (
+        <HabitEditor key={ed.id ?? 'new'} habit={habit} today={today} />
+      ) : (
+        <RoutineEditor key={ed.id ?? 'new'} routine={routine} today={today} />
+      )}
     </div>
   );
 }

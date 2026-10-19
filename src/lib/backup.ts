@@ -190,6 +190,77 @@ const routineLogSchema = z.object({
   deletedAt: z.string().optional(),
 });
 
+// ── 日常习惯 / 人际（DESK_SPEC §十二 / PEOPLE_SPEC）──
+const hmStr = z.string().regex(/^\d{2}:\d{2}$/, '时间须为 HH:mm');
+const habitSchema = z.object({
+  id: z.string().min(1),
+  title: z.string(),
+  icon: z.string().optional(),
+  kind: z.enum(['do', 'avoid']),
+  cue: z.string().optional(),
+  time: hmStr.optional(),
+  why: z.string().optional(),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
+  startDate: dateStr,
+  paused: z.boolean().optional(),
+  order: z.number(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().optional(),
+});
+
+const habitLogSchema = z.object({
+  id: z.string().min(1),
+  habitId: z.string().min(1),
+  date: dateStr,
+  status: z.enum(['done', 'slip']),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().optional(),
+});
+
+const personSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  relation: z.enum(['partner', 'family', 'friend', 'colleague', 'boss', 'other']),
+  cadenceDays: z.number().int().min(1).optional(),
+  dates: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        label: z.string(),
+        month: z.number().int().min(1).max(12),
+        day: z.number().int().min(1).max(31),
+        lunar: z.boolean().optional(),
+        year: z.number().int().optional(),
+        noPrep: z.boolean().optional(),
+      }),
+    )
+    .optional(),
+  loveLanguages: z.array(z.enum(['words', 'time', 'gifts', 'service', 'touch'])).optional(),
+  likes: z.string().optional(),
+  dislikes: z.string().optional(),
+  notes: z.string().optional(),
+  ideas: z.array(z.object({ id: z.string().min(1), text: z.string(), at: dateStr, used: dateStr.optional() })).optional(),
+  prepared: z.array(z.string()).optional(),
+  order: z.number(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().optional(),
+});
+
+const interactionSchema = z.object({
+  id: z.string().min(1),
+  personId: z.string().min(1),
+  date: dateStr,
+  kind: z.enum(['chat', 'call', 'meet', 'message', 'gift', 'help']),
+  note: z.string().optional(),
+  learned: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().optional(),
+});
+
 const dayMarkSchema = z.object({
   id: z.string().min(1),
   date: dateStr,
@@ -289,6 +360,11 @@ const backupSchema = z.object({
     routines: z.array(routineSchema).default([]),
     routineLogs: z.array(routineLogSchema).default([]),
     dayMarks: z.array(dayMarkSchema).default([]),
+    // 习惯 / 人际新增：老备份缺省补空数组
+    habits: z.array(habitSchema).default([]),
+    habitLogs: z.array(habitLogSchema).default([]),
+    people: z.array(personSchema).default([]),
+    interactions: z.array(interactionSchema).default([]),
   }),
   settings: settingsSchema.optional(),
 });

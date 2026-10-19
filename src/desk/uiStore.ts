@@ -13,12 +13,15 @@ export type DeskMenu =
   | { kind: 'row'; key: string; day?: string; x: number; y: number }
   | { kind: 'urgency'; x: number; y: number }
   /** 今天「年度计划」的一行（甘特图任务）：status/recordId = 打开菜单那一刻的打卡状态 */
-  | { kind: 'plan'; goalId: string; taskId: string; status?: 'done' | 'partial' | 'skipped'; recordId?: string; x: number; y: number };
+  | { kind: 'plan'; goalId: string; taskId: string; status?: 'done' | 'partial' | 'skipped'; recordId?: string; x: number; y: number }
+  /** 今天顶上的一个习惯胶囊 */
+  | { kind: 'habit'; id: string; x: number; y: number };
 
-/** 编辑卡：事项 / 例行（id = null 表示新建例行）；left/top = 锚点（打开它的那一行或按钮） */
+/** 编辑卡：事项 / 例行 / 习惯（id = null 表示新建）；left/top = 锚点（打开它的那一行或按钮） */
 export type DeskEditor =
   | { kind: 'item'; id: string; left: number; top: number }
-  | { kind: 'routine'; id: string | null; left: number; top: number };
+  | { kind: 'routine'; id: string | null; left: number; top: number }
+  | { kind: 'habit'; id: string | null; left: number; top: number };
 
 export interface MoverState {
   mode: 'drag' | 'click';
@@ -38,8 +41,8 @@ interface DeskUi {
   personLit: string | null;
   person: { name: string; left: number; top: number } | null;
   drawer: boolean;
-  /** 抽屉里看哪一页：待处理 / 例行（管理全部例行，含暂停的） */
-  drawerTab: 'pending' | 'routines';
+  /** 抽屉里看哪一页：待处理 / 例行 / 习惯（管理全部，含暂停的） */
+  drawerTab: 'pending' | 'routines' | 'habits';
   editor: DeskEditor | null;
   quickAdd: boolean;
   /** 从日卡「＋」打开新建时预填的日子与范围（一句话里写了的优先） */

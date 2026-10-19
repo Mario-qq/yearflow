@@ -2,12 +2,13 @@
  * 学习到点提醒（DESK_SPEC §五 第 2 层）：只在桌面版主窗口跑（收进托盘时渲染进程照常跑）。
  * 每 30 秒判一次 lib/derive/study.studyNudgeDue：到锚点时间还没开始 → 第一次提醒；到最晚时间还没学 →
  * 第二次「15 分钟也算」。每天每种最多一次，记在 localStorage（按日期分键，只留最近几天）。
- * 顺带把「今天学没学」写到托盘悬停提示里；下班收尾提醒（DESK 收尾面板）也在这个轮询里。
+ * 顺带把「今天学没学」写到托盘悬停提示里；下班收尾提醒（DESK 收尾面板）、日常习惯到点提醒也在这个轮询里。
  */
 import { todayStr } from '../lib/date';
 import { desktop } from '../lib/desktop';
 import { studyNudgeDue, type StudyNudge } from '../lib/derive/study';
 import { shutdownDue } from '../lib/derive/desk';
+import { habitNudgesDue, habitViews } from '../lib/derive/habits';
 import { useDeskUi } from './uiStore';
 import { useStore } from '../store/useStore';
 import { nowHm, studyNow, type StudyView } from './study';
@@ -15,7 +16,8 @@ import { nowHm, studyNow, type StudyView } from './study';
 const POLL_MS = 30_000;
 const KEY_PREFIX = 'yearflow:desk:nudge:';
 
-type Sent = { anchor?: boolean; lastCall?: boolean; shutdown?: boolean };
+/** habits = 今天已提醒过的习惯 id */
+type Sent = { anchor?: boolean; lastCall?: boolean; shutdown?: boolean; habits?: string[] };
 
 function readSent(date: string): Sent {
   try {
@@ -117,6 +119,28 @@ export function tickShutdownNudge(now = new Date()): boolean {
   return true;
 }
 
+/** 日常习惯到点提醒：每个习惯每天最多一次；同一轮到点的几个合成一条通知。返回这次提醒的习惯 id */
+export function tickHabitNudge(now = new Date()): string[] {
+  const d = desktop();
+  const st = useStore.getState();
+  if (!d || !st.hydrated) return [];
+  const today = todayStr();
+  const sent = readSent(today);
+  const due = habitNudgesDue(habitViews(Object.values(st.habits), st.habitLogs, today), nowHm(now), sent.habits ?? []);
+  if (!due.length) return [];
+  const ids = due.map((v) => v.habit.id);
+  writeSent(today, { ...sent, habits: [...(sent.habits ?? []), ...ids] });
+  const line = (v: (typeof due)[number]) => {
+    const h = v.habit;
+    const what = `${h.icon ? h.icon + ' ' : ''}${h.title}`;
+    if (h.kind === 'avoid') return `${what}：${h.cue ? h.cue + '，' : ''}忍住${v.streak ? `（已守住 ${v.streak} 天）` : ''}`;
+    return `${what}${h.cue ? `：${h.cue}` : ''}${v.broke ? '。昨天断了，今天接上' : ''}`;
+  };
+  const title = due.length === 1 ? (due[0].habit.kind === 'avoid' ? '提醒自己' : '该做了') : '日常习惯';
+  void d.notify(due.map(line).join('\n'), { title, route: '/desk', sound: false });
+  return ids;
+}
+
 export function initStudyNudges(): void {
   const d = desktop();
   if (!d || started) return;
@@ -125,6 +149,7 @@ export function initStudyNudges(): void {
   const tick = () => {
     tickStudyNudge();
     tickShutdownNudge();
+    tickHabitNudge();
   };
   setTimeout(tick, 5_000);
   setInterval(tick, POLL_MS);

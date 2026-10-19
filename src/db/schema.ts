@@ -6,8 +6,12 @@ import type {
   ExemptionPeriod,
   FocusSession,
   Goal,
+  Habit,
+  HabitLog,
+  Interaction,
   Milestone,
   MonthlyReview,
+  Person,
   Routine,
   RoutineLog,
   ScreenTimeDay,
@@ -34,6 +38,10 @@ export class YearFlowDB extends Dexie {
   routines!: Table<Routine, string>;
   routineLogs!: Table<RoutineLog, string>;
   dayMarks!: Table<DayMark, string>;
+  habits!: Table<Habit, string>;
+  habitLogs!: Table<HabitLog, string>;
+  people!: Table<Person, string>;
+  interactions!: Table<Interaction, string>;
   settings!: Table<SettingsRow, string>;
 
   constructor(name = 'yearflow') {
@@ -71,6 +79,13 @@ export class YearFlowDB extends Dexie {
       routines: 'id, updatedAt',
       routineLogs: 'id, routineId, date, updatedAt',
       dayMarks: 'id, date, updatedAt',
+    });
+    /** v5：日常习惯两张 + 人际两张（DESK_SPEC §十二 / PEOPLE_SPEC）。同上，只声明新表 */
+    this.version(5).stores({
+      habits: 'id, updatedAt',
+      habitLogs: 'id, habitId, date, updatedAt',
+      people: 'id, updatedAt',
+      interactions: 'id, personId, date, updatedAt',
     });
   }
 }

@@ -43,6 +43,10 @@ const REMOTE_TABLE: Record<TableName, string> = {
   routines: 'routines',
   routineLogs: 'routine_logs',
   dayMarks: 'day_marks',
+  habits: 'habits', // 以下四张需先执行 0006_habits_people.sql
+  habitLogs: 'habit_logs',
+  people: 'people',
+  interactions: 'interactions',
 };
 
 /** 同步引擎直接读写 Dexie 原始表（属数据层；不得经 repo，repo 会重盖 updatedAt） */

@@ -282,6 +282,110 @@ export interface DayMark {
   deletedAt?: string;
 }
 
+// ── 日常习惯（DESK_SPEC §十二）───────────────────────────────────────────
+
+/**
+ * 日常习惯：不是待办（不进完成数、不顺延），只在工作台今天那列顶上排成一排小胶囊。
+ * do = 要做的（冲牙）：做了点一下；avoid = 要忍住的（不吃热食）：默认算守住，只在破了时记一笔。
+ * 方法：Atomic Habits 的「挂在已有动作后面」（cue）+「别连着断两天」；Tiny Habits 的做完马上打勾。
+ */
+export interface Habit {
+  id: string;
+  title: string;
+  icon?: string; // emoji
+  kind: 'do' | 'avoid';
+  /** 锚点：do =「刷完牙后」；avoid = 容易破的场景「吃饭时」 */
+  cue?: string;
+  /** HH:mm：桌面版到点还没打（do）/ 到点提醒自己（avoid）发一次通知；缺省 = 不提醒 */
+  time?: string;
+  why?: string;
+  /** 哪几天要做：0=周日…6=周六；缺省 = 每天 */
+  daysOfWeek?: number[];
+  startDate: string; // 从哪天起算（之前不判断、不算连续）
+  paused?: boolean;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string;
+}
+
+/** 习惯的一天。id = `${habitId}:${date}`（确定性 id ⇒ 两台设备同时打卡不会出两条）。done = 做了；slip = 破了一次 */
+export interface HabitLog {
+  id: string;
+  habitId: string;
+  date: string;
+  status: 'done' | 'slip';
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string;
+}
+
+// ── 人际（docs/PEOPLE_SPEC.md）────────────────────────────────────────────
+
+export type Relation = 'partner' | 'family' | 'friend' | 'colleague' | 'boss' | 'other';
+/** 五种爱的语言（Chapman）：肯定的言辞 / 精心的时刻 / 接受礼物 / 服务的行动 / 身体的接触 */
+export type LoveLanguage = 'words' | 'time' | 'gifts' | 'service' | 'touch';
+
+/** 重要日子（生日 / 纪念日…）。lunar = 按农历过（month/day 是农历月日，闰月按平月过） */
+export interface PersonDate {
+  id: string;
+  label: string; // 「生日」「结婚纪念日」
+  month: number; // 1–12
+  day: number; // 1–31（农历 1–30；那年没有三十就按廿九）
+  lunar?: boolean;
+  year?: number; // 起始年（算第几年 / 几岁），可选
+  /** 提前准备：倒推 14/7/1 天生成工作台待办；缺省 = 要 */
+  noPrep?: boolean;
+}
+
+/** 送礼点子池：TA 随口提过的想要的东西 / 想去的地方，随手记 */
+export interface GiftIdea {
+  id: string;
+  text: string;
+  at: string; // YYYY-MM-DD 记下的那天
+  used?: string; // YYYY-MM-DD 用掉的那天
+}
+
+/**
+ * 人物档案（Gottman「爱的地图」+ Personal CRM 联系节奏）。
+ * name 与 WorkItem.person 同口径（@人 跟进按名字挂到这份档案上），改名时一并改未完成跟进。
+ */
+export interface Person {
+  id: string;
+  name: string;
+  relation: Relation;
+  /** 联系节奏：超过这么多天没联系就提醒；缺省 = 不提醒 */
+  cadenceDays?: number;
+  dates?: PersonDate[];
+  loveLanguages?: LoveLanguage[];
+  likes?: string;
+  dislikes?: string;
+  /** 背景：家里情况、工作、在意的事（长期不变的）。近况走 Interaction.learned */
+  notes?: string;
+  ideas?: GiftIdea[];
+  /** 已生成过准备待办的那几次：`${dateId}@${那次的公历日期}` ⇒ 删掉生成的待办也不会再生成 */
+  prepared?: string[];
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string;
+}
+
+export type InteractionKind = 'chat' | 'call' | 'meet' | 'message' | 'gift' | 'help';
+
+/** 一次互动：聊完 10 秒记一笔。learned = 新知道的事（进 TA 的近况） */
+export interface Interaction {
+  id: string;
+  personId: string;
+  date: string;
+  kind: InteractionKind;
+  note?: string;
+  learned?: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string;
+}
+
 /** 免打卡区间：出差/生病/长假，期间不判缺卡、不断 streak */
 export interface ExemptionPeriod {
   id: string;

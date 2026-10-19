@@ -5,7 +5,11 @@ import {
   exemptionRepo,
   focusRepo,
   goalRepo,
+  habitLogRepo,
+  habitRepo,
+  interactionRepo,
   milestoneRepo,
+  personRepo,
   reviewRepo,
   routineLogRepo,
   routineRepo,
@@ -32,6 +36,10 @@ export const repoByTable: Record<TableName, BaseRepo<SyncableEntity>> = {
   routines: routineRepo as BaseRepo<SyncableEntity>,
   routineLogs: routineLogRepo as BaseRepo<SyncableEntity>,
   dayMarks: dayMarkRepo as BaseRepo<SyncableEntity>,
+  habits: habitRepo as BaseRepo<SyncableEntity>,
+  habitLogs: habitLogRepo as BaseRepo<SyncableEntity>,
+  people: personRepo as BaseRepo<SyncableEntity>,
+  interactions: interactionRepo as BaseRepo<SyncableEntity>,
 };
 
 const PERSIST_DEBOUNCE_MS = 500; // SPEC：所有变更自动保存（防抖 500ms）

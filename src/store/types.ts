@@ -4,8 +4,12 @@ import type {
   ExemptionPeriod,
   FocusSession,
   Goal,
+  Habit,
+  HabitLog,
+  Interaction,
   Milestone,
   MonthlyReview,
+  Person,
   Routine,
   RoutineLog,
   ScreenTimeDay,
@@ -13,7 +17,7 @@ import type {
   WorkItem,
 } from '../types/domain';
 
-/** 十二张实体表（settings 单独处理，不进 undo 栈） */
+/** 十六张实体表（settings 单独处理，不进 undo 栈） */
 export interface EntityOf {
   goals: Goal;
   tasks: Task;
@@ -27,6 +31,10 @@ export interface EntityOf {
   routines: Routine;
   routineLogs: RoutineLog;
   dayMarks: DayMark;
+  habits: Habit;
+  habitLogs: HabitLog;
+  people: Person;
+  interactions: Interaction;
 }
 
 export type TableName = keyof EntityOf;
@@ -48,6 +56,10 @@ const TABLE_SET: Record<TableName, true> = {
   routines: true,
   routineLogs: true,
   dayMarks: true,
+  habits: true,
+  habitLogs: true,
+  people: true,
+  interactions: true,
 };
 
 /** 驱动同步推拉与墓碑、replaceAllData、exportBundle、applyRemote、hydrate、设置页计数 */
