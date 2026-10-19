@@ -68,6 +68,8 @@
   --danger-soft: color-mix(in srgb, var(--danger) 15%, transparent);
   --warning-soft: color-mix(in srgb, var(--warning) 15%, transparent); /* 工作台：补班标记、拖延提示底 */
   --success-soft: color-mix(in srgb, var(--success) 13%, transparent); /* 工作台：休息日标记、「今天清空了」底 */
+  --life: var(--goal-7); /* 工作台「生活」区色（青）：左色条 + 极淡底，不写字；深色主题跟随 --goal-7 */
+  --life-soft: color-mix(in srgb, var(--life) 7%, transparent);
   --info: #3a8fd4;
   --text-on-accent: #ffffff;  /* accent/danger 实底上的文字（今天圆底、「今」标签） */
 

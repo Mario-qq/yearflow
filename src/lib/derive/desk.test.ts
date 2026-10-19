@@ -18,6 +18,10 @@ import {
   routineOccurrencesOn,
   ruleHits,
   ruleLabel,
+  compareItems,
+  isFocusOn,
+  nextWorkday,
+  shutdownDue,
 } from './desk';
 
 /* 2026-10 日历参考：10-01 周四；10-12 周一 … 10-16 周五（今天）10-17 周六 10-18 周日；10-30 周五 10-31 周六 */
@@ -292,5 +296,36 @@ describe('不做了', () => {
     expect(d.done.map((i) => i.id)).toEqual(['b']);
     expect(d.open.map((i) => i.id)).toEqual(['c']);
     expect(dayCount(TODAY, TODAY, d, [])).toEqual({ done: 1, total: 2 });
+  });
+});
+
+describe('v3：重要 / 要事 / 下个工作日 / 收尾', () => {
+  it('同紧急度里重要的在前；紧急度仍优先于重要', () => {
+    const list = [item('a', { order: 1 }), item('b', { order: 2, important: true }), item('c', { order: 3, urgency: 'urgent' })];
+    expect(list.sort((x, y) => compareItems(x, y, TODAY)).map((i) => i.id)).toEqual(['c', 'b', 'a']);
+  });
+  it('要事只认 focusOn 那天，「不做了」和删掉的不算', () => {
+    expect(isFocusOn(item('a', { focusOn: TODAY }), TODAY)).toBe(true);
+    expect(isFocusOn(item('a', { focusOn: TODAY }), '2026-10-17')).toBe(false);
+    expect(isFocusOn(item('a', { focusOn: TODAY, status: 'dropped' }), TODAY)).toBe(false);
+    expect(isFocusOn(item('a', { focusOn: TODAY, deletedAt: T0 }), TODAY)).toBe(false);
+    expect(isFocusOn(item('a', { focusOn: TODAY, status: 'done' }), TODAY)).toBe(true);
+  });
+  it('下个工作日：周五 ⇒ 下周一；周六标了补班 ⇒ 周六；周一标了休 ⇒ 周二', () => {
+    expect(nextWorkday(TODAY, {})).toBe('2026-10-19');
+    const work: DayMark = { id: '2026-10-17', date: '2026-10-17', type: 'work', updatedAt: T0 };
+    expect(nextWorkday(TODAY, { '2026-10-17': work })).toBe('2026-10-17');
+    const off: DayMark = { id: '2026-10-19', date: '2026-10-19', type: 'off', updatedAt: T0 };
+    expect(nextWorkday(TODAY, { '2026-10-19': off })).toBe('2026-10-20');
+  });
+  it('收尾提醒：设了时间、到点、工作日、今天没收工', () => {
+    const base = { nowHm: '17:30', at: '17:30', today: TODAY, doneOn: null, marks: {} };
+    expect(shutdownDue(base)).toBe(true);
+    expect(shutdownDue({ ...base, nowHm: '17:29' })).toBe(false);
+    expect(shutdownDue({ ...base, at: '' })).toBe(false);
+    expect(shutdownDue({ ...base, at: undefined })).toBe(false);
+    expect(shutdownDue({ ...base, doneOn: TODAY })).toBe(false);
+    expect(shutdownDue({ ...base, doneOn: '2026-10-15' })).toBe(true);
+    expect(shutdownDue({ ...base, today: '2026-10-17' })).toBe(false); // 周六
   });
 });

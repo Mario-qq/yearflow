@@ -39,6 +39,7 @@ export function PlanRows({ rows, today }: { rows: PlanRowData[]; today: string }
                 else setCheckIn({ goalId: p.goalId, taskId: p.taskId, date: today, status: 'done' });
               }}
             />
+            <span className="dk-rb">
             <span className="dk-t">
               {p.goalName} · {p.taskName}
             </span>
@@ -62,6 +63,7 @@ export function PlanRows({ rows, today }: { rows: PlanRowData[]; today: string }
               >
                 ⋯
               </button>
+            </span>
             </span>
           </div>
         );

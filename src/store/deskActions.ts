@@ -15,9 +15,11 @@ import {
   planPatchItems,
   planPatchRoutine,
   planSetDayMark,
+  planSetFocus,
   planSkipOccurrence,
   planToggleItem,
   planToggleOccurrence,
+  withScope,
   type DeskKey,
 } from './deskPlan';
 import { useStore } from './useStore';
@@ -41,6 +43,9 @@ export interface NewItemInput {
   mode?: WorkItem['mode'];
   goalId?: string;
   note?: string;
+  important?: boolean;
+  /** 新建即设为这天的要事（不检查上限，调用方先判断） */
+  focusOn?: string;
 }
 
 export function createItem(input: NewItemInput): string {
@@ -60,6 +65,8 @@ export function createItem(input: NewItemInput): string {
     ...(input.kind === 'followup' && input.person ? { person: input.person, mode: input.mode ?? 'inform' } : {}),
     ...(input.goalId ? { goalId: input.goalId } : {}),
     ...(input.note ? { note: input.note } : {}),
+    ...(input.important ? { important: true } : {}),
+    ...(input.focusOn ? { focusOn: input.focusOn } : {}),
   };
   useStore.getState().execute(`新建「${item.title}」`, [{ table: 'workItems', type: 'put', after: item }]);
   return item.id;
@@ -92,8 +99,8 @@ export function createRoutine(input: NewRoutineInput): string {
   return r.id;
 }
 
-/** 一句话新建的落地：例行建 Routine，其余建 WorkItem。返回新 id */
-export function createFromQuickAdd(r: QuickAddResult): string {
+/** 一句话新建的落地：例行建 Routine，其余建 WorkItem。返回新 id。focus = 同时设为那天的要事 */
+export function createFromQuickAdd(r: QuickAddResult, focus = false): string {
   if (r.kind === 'routine' && r.rule) return createRoutine({ title: r.title, rule: r.rule, scope: r.scope, time: r.time });
   return createItem({
     kind: r.kind === 'followup' ? 'followup' : 'todo',
@@ -105,6 +112,8 @@ export function createFromQuickAdd(r: QuickAddResult): string {
     person: r.person,
     mode: r.mode,
     goalId: r.goalId,
+    important: r.important,
+    focusOn: focus && r.date ? r.date : undefined,
   });
 }
 
@@ -134,6 +143,20 @@ export function editItem(id: string, patch: Partial<WorkItem>): boolean {
 export function setUrgency(ids: string[], urgency: Urgency): void {
   const s = useStore.getState();
   s.execute(`紧急度改为${URGENCY_LABEL[urgency]}：${ids.length} 件`, planPatchItems(s, ids, { urgency }, nowIso()));
+}
+
+/** 标为重要 / 取消重要 */
+export function setImportant(ids: string[], important: boolean): void {
+  const s = useStore.getState();
+  s.execute(`${important ? '标为重要' : '取消重要'}：${ids.length} 件`, planPatchItems(s, ids, { important: important || undefined }, nowIso()));
+}
+
+/** 设为 date 那天的要事（null = 移出要事）。返回超出上限没设上的件数 */
+export function setFocus(ids: string[], date: string | null): number {
+  const s = useStore.getState();
+  const { changes, over } = planSetFocus(s, ids, date, nowIso());
+  if (changes.length) s.execute(date ? `设为要事：${changes.length} 件` : `移出要事：${changes.length} 件`, changes);
+  return over;
 }
 
 export function completeItems(ids: string[]): void {
@@ -167,8 +190,11 @@ export function markPersonSaid(person: string): void {
 
 // ── 挪动 ─────────────────────────────────────────────────────────────────
 
-/** 一次挪动 = 一条撤销记录。返回 pastDue（挪到截止日之后的件数，UI 提示用）与实际挪动数 */
-export function moveKeys(keys: DeskKey[], to: MoveHow | string | null): { moved: number; pastDue: number } {
+/**
+ * 一次挪动 = 一条撤销记录。返回 pastDue（挪到截止日之后的件数，UI 提示用）与实际挪动数。
+ * scope = 拖到了某天的工作/生活区：顺带改范围（同一天换区 = 只改范围，moved 也算上）。
+ */
+export function moveKeys(keys: DeskKey[], to: MoveHow | string | null, scope?: WorkScope): { moved: number; pastDue: number } {
   const s = useStore.getState();
   const today = todayStr();
   const isHow = to === 'tomorrow' || to === 'nextMonday' || to === 'sameDayNextWeek';
@@ -177,9 +203,17 @@ export function moveKeys(keys: DeskKey[], to: MoveHow | string | null): { moved:
     const from = k.type === 'item' ? s.workItems[k.id]?.date : (s.routineLogs[`${k.routineId}:${k.origDate}`]?.movedTo ?? k.origDate);
     return moveTarget(to, from, today);
   };
-  const { changes, pastDue, moved } = planMove(s, keys, target, nowIso());
+  const stamp = nowIso();
+  const planned = planMove(s, keys, target, stamp);
+  const { pastDue } = planned;
+  const changes = scope ? withScope(s, keys, planned.changes, scope, stamp) : planned.changes;
+  const moved = changes.length;
+  if (scope && planned.moved === 0 && changes.length > 0) {
+    s.execute(`改为${scope === 'life' ? '生活' : '工作'}：${changes.length} 件`, changes);
+    return { moved: changes.length, pastDue: 0 };
+  }
   const label = to === null ? `放进待处理：${moved} 件` : isHow ? `${{ tomorrow: '挪到明天', nextMonday: '挪到下周一', sameDayNextWeek: '挪到下周同一天' }[to]}：${moved} 件` : `挪到 ${to.slice(5).replace('-', '/')}：${moved} 件`;
-  s.execute(label, changes);
+  if (changes.length) s.execute(label, changes);
   return { moved, pastDue };
 }
 

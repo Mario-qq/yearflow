@@ -89,14 +89,14 @@ for (const theme of ['light', 'dark']) {
   check(`[${theme}] Ctrl+Z 恢复刚撤销的打卡`, (await statusOf(taskName)) === 'skipped');
 
   // 6. 折叠
-  const sec = today.locator('button.dk-sec', { hasText: '年度计划' });
+  const sec = today.locator('.dk-sec-t', { hasText: '年度计划' });
   await sec.click();
   check(`[${theme}] 点标题收起，行隐藏`, (await rows.count()) === 0 && (await sec.innerText()).includes('▸'));
   await page.screenshot({ path: `${OUT}/plan-folded-${theme}.png` });
   await page.reload();
-  await today.locator('button.dk-sec', { hasText: '年度计划' }).waitFor();
+  await today.locator('.dk-sec-t', { hasText: '年度计划' }).waitFor();
   check(`[${theme}] 收起状态刷新后还在`, (await rows.count()) === 0);
-  await today.locator('button.dk-sec', { hasText: '年度计划' }).click();
+  await today.locator('.dk-sec-t', { hasText: '年度计划' }).click();
   check(`[${theme}] 再点展开`, (await rows.count()) === n);
 
   // 7. 在甘特图中打开

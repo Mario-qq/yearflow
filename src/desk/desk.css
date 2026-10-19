@@ -12,6 +12,7 @@
   --dk-shadow-md: 0 4px 14px rgba(16, 16, 24, 0.08), 0 1px 3px rgba(16, 16, 24, 0.06);
   --dk-mover-w: 300px; /* 「挪到…」小月历宽（constants.MOVER_W） */
   --dk-drawer-w: 320px; /* 待处理抽屉宽 */
+  --dk-rail-w: 40px; /* 收起的周末窄条（constants.RAIL_W） */
 
   position: relative;
   height: 100%;
@@ -362,7 +363,8 @@
   color: var(--text-tertiary);
   white-space: nowrap;
 }
-.dk-dh-menu {
+.dk-dh-menu,
+.dk-dh-add {
   width: 22px;
   height: 22px;
   border-radius: var(--radius-sm);
@@ -371,9 +373,12 @@
   margin-right: -4px;
 }
 .dk-day:hover .dk-dh-menu,
+.dk-day:hover .dk-dh-add,
+.dk-dh-add:focus-visible,
 .dk-dh-menu:focus-visible {
   opacity: 1;
 }
+.dk-dh-add:hover,
 .dk-dh-menu:hover {
   background: var(--row-hover);
   color: var(--text-primary);
@@ -404,7 +409,7 @@
   flex-direction: column;
 }
 .dk-day.past .dk-db {
-  opacity: 0.62;
+  opacity: 0.85;
   transition: opacity 0.12s var(--ease);
 }
 .dk-day.past:hover .dk-db {
@@ -423,23 +428,44 @@
 .dk-sec .n {
   color: var(--text-disabled);
 }
-.dk-sec.fold {
-  width: 100%;
-  text-align: left;
-  border-radius: var(--radius-md);
-  cursor: pointer;
+.dk-sec-t {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: inherit;
+  color: inherit;
+  padding: 0;
 }
-.dk-sec.fold:hover {
+.dk-sec-t:hover {
   color: var(--text-secondary);
+}
+.dk-sec-act {
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  opacity: 0;
+}
+.dk-plan:hover .dk-sec-act,
+.dk-sec-act:focus-visible {
+  opacity: 1;
+}
+.dk-sec-act:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+/* 年度计划在卡底：与上面的事项隔一道细线 */
+.dk-plan {
+  margin-top: 8px;
+  padding-top: 2px;
+  border-top: 1px solid var(--border-subtle);
 }
 .dk-sec .caret {
   font-size: var(--font-13);
   line-height: 1;
   color: var(--text-tertiary);
 }
-.dk-sec.fold:hover .caret {
-  color: var(--text-tertiary);
-}
+
 .dk-fold {
   font-size: var(--font-12);
   color: var(--text-tertiary);
@@ -464,11 +490,11 @@
 
 /* ── 行 ── */
 .dk-row {
-  height: var(--dk-row-h);
+  min-height: var(--dk-row-h);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
-  padding: 0 8px;
+  padding: 7px 8px 6px;
   border-radius: var(--radius-md);
   font-size: var(--font-13);
   user-select: none;
@@ -493,15 +519,41 @@
 .dk-row.lit {
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
-.dk-row.done .dk-t,
+/* 做完的不划线（一眼读得出这周做了什么），只淡一档；「不做了」/跳过才划线 */
+.dk-row.done .dk-t {
+  color: var(--text-tertiary);
+}
+.dk-day.past .dk-row.done .dk-t {
+  color: var(--text-secondary);
+}
 .dk-row.skipped .dk-t {
   color: var(--text-tertiary);
   text-decoration: line-through;
   text-decoration-color: var(--text-disabled);
 }
+/* 生活：不在日卡分区里时（月历、待处理、人物卡），行左一道生活色 */
+.dk-row.life {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--life) 70%, transparent);
+}
+.dk-row.imp .dk-t {
+  font-weight: 600;
+}
+.dk-imp {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin: 0 5px 1px 0;
+  vertical-align: middle;
+  background: var(--accent);
+  clip-path: polygon(50% 0, 63% 35%, 100% 38%, 71% 61%, 80% 100%, 50% 78%, 20% 100%, 29% 61%, 0 38%, 37% 35%);
+}
+.dk-row.done .dk-imp {
+  background: var(--text-disabled);
+}
 .dk-chk {
   width: 15px;
   height: 15px;
+  margin-top: 1px;
   border-radius: 50%;
   flex-shrink: 0;
   border: 1.5px solid var(--border-strong);
@@ -548,12 +600,21 @@
   background: var(--c);
   border-color: var(--c);
 }
-.dk-t {
+/* 标题 + 行尾标签：标题默认换行（负责人：写长一点不该被藏起来），放不下时标签掉到下一行靠右 */
+.dk-rb {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 8px;
+  row-gap: 2px;
+}
+.dk-t {
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 18px;
+  overflow-wrap: anywhere;
 }
 .dk-t input {
   width: 100%;
@@ -570,6 +631,8 @@
   gap: 6px;
   align-items: center;
   flex-shrink: 0;
+  margin-left: auto;
+  line-height: 18px;
   font-size: var(--font-11);
   color: var(--text-tertiary);
 }
@@ -582,6 +645,10 @@
 }
 .dk-m .age {
   color: var(--warning);
+}
+.dk-m .fo {
+  color: var(--accent);
+  font-size: var(--font-12);
 }
 .dk-m .gd {
   width: 6px;
@@ -652,52 +719,86 @@
   color: var(--text-primary);
 }
 
-/* ── 学习卡（DESK_SPEC §五）── */
+/* ── 学习卡（DESK_SPEC §五）：精简成两行，左边一道目标色 ── */
 .dk-study {
   margin: 2px 2px 6px;
-  padding: 12px;
-  border-radius: var(--radius-lg);
+  padding: 7px 8px 6px 10px;
+  border-radius: var(--radius-md);
   position: relative;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--c) 12%, var(--bg-panel)), var(--bg-panel) 70%);
-  border: 1px solid color-mix(in srgb, var(--c) 35%, transparent);
+  background: color-mix(in srgb, var(--c) 7%, var(--bg-panel));
+  box-shadow: inset 3px 0 0 var(--c);
 }
-/* 没学之前：描边轻呼吸（第 3 层「首屏醒目」）；减弱动效时由底部的总开关关掉 */
-.dk-study:not(.running)::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  animation: dk-breathe 2.8s var(--ease) infinite alternate;
-}
-@keyframes dk-breathe {
-  from {
-    box-shadow: inset 0 0 0 0 transparent;
-  }
-  to {
-    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c) 22%, transparent);
-  }
-}
-.dk-st-top {
+.dk-st-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: var(--font-11);
-  color: var(--text-tertiary);
   min-width: 0;
 }
-.dk-st-top > span:first-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.dk-st-go {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--c);
+  color: var(--text-on-accent);
+  font-size: 9px;
+  display: grid;
+  place-items: center;
+  padding-left: 2px;
+  transition: transform 0.12s var(--ease), filter 0.12s var(--ease);
+}
+.dk-st-go:hover {
+  transform: scale(1.08);
+  filter: brightness(1.08);
+}
+.dk-st-what {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-13);
+  font-weight: 600;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+.dk-st-what small {
+  font-size: var(--font-11);
+  font-weight: 400;
+  color: var(--text-tertiary);
+  margin-right: 6px;
+}
+.dk-st-why {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  margin: 3px 0 0 30px;
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+}
+.dk-st-why b {
+  color: var(--warning);
+  font-weight: 600;
+}
+.dk-st-reason {
+  min-width: 0;
 }
 .dk-st-link {
   font-size: var(--font-11);
-  color: var(--accent);
+  color: var(--text-tertiary);
   padding: 0;
 }
 .dk-st-link:hover {
-  text-decoration: underline;
+  color: var(--accent);
+}
+.dk-st-a {
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+.dk-st-a:hover {
+  color: var(--text-primary);
+  background: var(--row-hover);
 }
 .dk-st-gear {
   font-size: var(--font-12);
@@ -712,36 +813,25 @@
   color: var(--text-primary);
   background: var(--row-hover);
 }
-.dk-st-what {
-  font-size: var(--font-16);
-  font-weight: 650;
-  margin: 4px 0 2px;
-  line-height: 1.35;
-}
-.dk-st-why {
-  font-size: var(--font-12);
-  color: var(--text-secondary);
-}
-.dk-st-why b {
-  color: var(--warning);
-  font-weight: 600;
-}
 .dk-st-acts {
   display: flex;
   gap: 6px;
-  margin-top: 10px;
+  margin: 6px 0 0;
   flex-wrap: wrap;
   align-items: center;
+}
+.dk-study .dk-btn {
+  height: 24px;
 }
 .dk-study .dk-btn.primary {
   background: var(--c);
   border-color: var(--c);
 }
 .dk-st-timer {
-  font-size: var(--font-32);
+  font-size: var(--font-20);
   font-weight: 650;
   letter-spacing: 0.01em;
-  margin: 2px 0;
+  flex-shrink: 0;
 }
 /* 学过了 / 今天没排 / 还没设置：收成一行 */
 .dk-st-line {
@@ -924,14 +1014,21 @@
   background: var(--accent-soft);
 }
 .dk-mc .dk-row {
-  height: 22px;
+  min-height: 22px;
   font-size: var(--font-12);
   gap: 6px;
-  padding: 0 4px;
+  padding: 3px 4px;
+}
+.dk-mc .dk-t {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 16px;
 }
 .dk-mc .dk-row .dk-chk {
   width: 11px;
   height: 11px;
+  margin-top: 2px;
   border-width: 1.3px;
 }
 .dk-mc .dk-row .dk-m {
@@ -999,7 +1096,7 @@
     opacity: 0;
   }
 }
-.dk-qa input {
+.dk-qa-in {
   width: 100%;
   height: 46px;
   border: 0;
@@ -1630,6 +1727,498 @@
   max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ── 工作 / 生活两区：生活 = 左色条 + 极淡底，不写字（负责人：非文字区分）── */
+.dk-zone {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-md);
+  transition:
+    background 0.12s var(--ease),
+    box-shadow 0.12s var(--ease);
+}
+.dk-zone.life {
+  margin-top: 6px;
+  padding: 2px 0;
+  background: var(--life-soft);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--life) 70%, transparent);
+}
+.dk-zone.empty {
+  display: none;
+}
+/* 拖动中：空区也露出来当落点（工作区虚线框，生活区带色） */
+.dk.dragging .dk-day:not(.past) .dk-zone.empty {
+  display: flex;
+  min-height: 30px;
+  margin-top: 6px;
+  border: 1px dashed var(--border-default);
+  box-shadow: none;
+}
+.dk.dragging .dk-day:not(.past) .dk-zone.life.empty {
+  border-color: color-mix(in srgb, var(--life) 50%, transparent);
+}
+.dk-zone.drop {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.dk-zone.life.drop {
+  background: color-mix(in srgb, var(--life) 14%, transparent);
+  box-shadow:
+    inset 0 0 0 1px var(--life),
+    inset 2px 0 0 var(--life);
+}
+
+/* ── 要事（每天最多 3 件）── */
+.dk-focus {
+  margin: 0 0 6px;
+  padding: 4px 0 2px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.dk-focus-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 0;
+  font-size: var(--font-11);
+  color: var(--accent);
+  font-weight: 600;
+}
+.dk-focus-h .n {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+.dk-focus-pick {
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+  font-weight: 400;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+}
+.dk-focus-pick:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.dk-focus .dk-row .dk-t {
+  font-size: var(--font-14);
+  font-weight: 550;
+}
+.dk-focus .dk-row.done .dk-t {
+  font-weight: 400;
+}
+
+/* ── 收起的周末：窄条 ── */
+.dk-day.rail {
+  width: var(--dk-rail-w);
+  align-items: center;
+  gap: 6px;
+  padding: 12px 0;
+  color: var(--text-tertiary);
+  background: color-mix(in srgb, var(--bg-panel) 60%, var(--bg-base));
+}
+.dk-day.rail:hover {
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+}
+.dk-day.rail .dk-dh-num {
+  font-size: var(--font-14);
+}
+.dk-rail-wd {
+  font-size: var(--font-11);
+}
+.dk-rail-n {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  background: var(--life-soft);
+  color: var(--life);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--life) 40%, transparent);
+}
+.dk-rail-ok {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+}
+/* 工具条「收起/展开周末」：七格小图，周末两格跟着状态变窄 */
+.dk-wk-ic {
+  display: inline-flex;
+  gap: 1.5px;
+  align-items: flex-end;
+}
+.dk-wk-ic i {
+  width: 3px;
+  height: 9px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.55;
+}
+.dk-wk-ic i.we {
+  width: 1.5px;
+  opacity: 0.35;
+}
+.dk-wk.on .dk-wk-ic i.we {
+  width: 3px;
+  opacity: 0.55;
+}
+
+/* ── 新建卡：点选一排 ── */
+.dk-qa-opts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px 10px;
+}
+.dk-qa .dk-seg button {
+  height: 24px;
+  padding: 0 10px;
+}
+.dk-qa .dk-seg.scope button.life.on {
+  color: var(--life);
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 -2px 0 var(--life);
+}
+.dk-qa .dk-seg button.urgent.on {
+  color: var(--danger);
+}
+.dk-qa .dk-seg button.soon.on {
+  color: var(--warning);
+}
+.dk-tog {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-12);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  background: transparent;
+}
+.dk-tog .dk-imp {
+  background: var(--text-tertiary);
+}
+.dk-tog:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+.dk-tog.on {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--accent-soft);
+}
+.dk-tog.on .dk-imp {
+  background: var(--accent);
+}
+.dk-tog:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.dk-qa-date {
+  position: relative;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border-default);
+  font-size: var(--font-12);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.dk-qa-date.on {
+  border-style: solid;
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--accent-soft);
+}
+.dk-qa-date input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* ── 挑要事 / 年度计划显示哪些 ── */
+.dk-fp {
+  width: 360px;
+}
+.dk-fp-n {
+  font-size: var(--font-12);
+  color: var(--accent);
+  font-weight: 600;
+}
+.dk-fl {
+  display: flex;
+  flex-direction: column;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.dk-fl-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  text-align: left;
+  font-size: var(--font-13);
+  color: var(--text-primary);
+}
+.dk-fl-row:hover:not(:disabled) {
+  background: var(--row-hover);
+}
+.dk-fl-row:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.dk-fl-row .star {
+  width: 16px;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  line-height: 18px;
+}
+.dk-fl-row.on .star {
+  color: var(--accent);
+}
+.dk-fl-row.on .t {
+  font-weight: 600;
+}
+.dk-fl-row .t {
+  flex: 1;
+  min-width: 0;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+.dk-fl-row .m {
+  font-size: var(--font-11);
+  color: var(--warning);
+  line-height: 18px;
+}
+.dk-pp {
+  width: 360px;
+}
+.dk-pp-list {
+  max-height: 52vh;
+  overflow-y: auto;
+}
+.dk-pp-g + .dk-pp-g {
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 2px;
+  padding-top: 2px;
+}
+.dk-pp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-13);
+  cursor: pointer;
+}
+.dk-pp-row:hover {
+  background: var(--row-hover);
+}
+.dk-pp-row.task {
+  padding-left: 30px;
+  font-size: var(--font-12);
+  color: var(--text-secondary);
+}
+.dk-pp-row input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+.dk-pp-row .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c);
+  flex-shrink: 0;
+}
+.dk-pp-row .t {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.dk-pp-row .m {
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+}
+.dk-pp-row.goal .t {
+  font-weight: 600;
+}
+
+/* ── 收尾面板（模态）── */
+.dk-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg-base) 55%, transparent);
+  animation: dk-fade 0.16s var(--ease);
+}
+@keyframes dk-fade {
+  from {
+    opacity: 0;
+  }
+}
+.dk-sd {
+  width: min(640px, 100%);
+  max-height: min(820px, calc(100vh - 48px));
+  overflow-y: auto;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--dk-card-radius);
+  box-shadow: var(--shadow-lg);
+  padding: 16px 16px 12px;
+  animation: dk-rise 0.18s var(--ease);
+}
+.dk-sd-h {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 0 4px 6px;
+}
+.dk-sd-h b {
+  font-size: var(--font-16);
+}
+.dk-sd-h small {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--font-12);
+  color: var(--text-tertiary);
+}
+.dk-sd-s {
+  padding: 10px 0 6px;
+  border-top: 1px solid var(--border-subtle);
+}
+.dk-sd-k {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 8px;
+  font-size: var(--font-13);
+  color: var(--text-secondary);
+}
+.dk-sd-k b {
+  color: var(--text-primary);
+}
+.dk-sd-k .no {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: var(--font-11);
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.dk-sd-done {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 4px;
+}
+.dk-sd-done span {
+  font-size: var(--font-12);
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: var(--success);
+  background: var(--success-soft);
+}
+.dk-empty.ok {
+  color: var(--success);
+}
+.dk-sd-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 6px 4px 6px 8px;
+  border-radius: var(--radius-md);
+}
+.dk-sd-row:hover {
+  background: var(--row-hover);
+}
+.dk-sd-row .t {
+  flex: 1 1 220px;
+  min-width: 0;
+  font-size: var(--font-13);
+  overflow-wrap: anywhere;
+}
+.dk-sd-row.imp .t {
+  font-weight: 600;
+}
+.dk-sd-row .t small {
+  font-size: var(--font-11);
+  color: var(--warning);
+}
+.dk-sd-row .acts {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+.dk-sd-row .acts button,
+.dk-sd-row .acts .pick {
+  position: relative;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-12);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.dk-sd-row .acts button:first-child {
+  color: var(--accent);
+  font-weight: 600;
+}
+.dk-sd-row .acts button:hover,
+.dk-sd-row .acts .pick:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+.dk-sd-row .acts button.ok:hover {
+  color: var(--success);
+}
+.dk-sd-row .acts .pick input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.dk-sd-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+.dk-sd-foot label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.dk-h-say .sd button {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 @media (prefers-reduced-motion: reduce) {

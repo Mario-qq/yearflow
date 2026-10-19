@@ -5,11 +5,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { todayStr } from '../lib/date';
+import type { WorkItem } from '../types/domain';
 import {
   dayCount,
   dayItemsFrom,
+  compareItems,
   effectiveUrgency,
   indexItemsByDate,
+  isFocusOn,
   rolledItems,
   routineOccurrencesOn,
   type DayCount,
@@ -27,6 +30,20 @@ export function useToday(): string {
   return today;
 }
 
+/** 现在几点 HH:mm（每 30 秒刷新；头部到点提醒收尾用） */
+export function useNowHm(): string {
+  const read = () => {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  };
+  const [hm, setHm] = useState(read);
+  useEffect(() => {
+    const t = setInterval(() => setHm(read), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  return hm;
+}
+
 export interface DayData {
   date: string;
   day: DayItems;
@@ -34,6 +51,8 @@ export interface DayData {
   count: DayCount;
   /** 未完成里显示为紧急的件数（小月历红点） */
   hot: number;
+  /** 这天的要事（focusOn = 这天；今天含顺延来的）：没做完的在前 */
+  focus: WorkItem[];
 }
 
 export function useDeskData() {
@@ -53,7 +72,11 @@ export function useDeskData() {
       const day = dayItemsFrom(index, rolled, date, today);
       const occ = routineOccurrencesOn(date, today, routineList, routineLogs, dayMarks);
       const hot = [...day.open, ...day.rolled].filter((i) => effectiveUrgency(i, today) === 'urgent').length;
-      return { date, day, occ, count: dayCount(date, today, day, occ), hot };
+      // 过去的日子只认做完的要事（没做完的已挂到今天，在那边按普通事项显示）
+      const focus = (date < today ? day.done : [...day.rolled, ...day.open, ...day.done])
+        .filter((i) => isFocusOn(i, date))
+        .sort((a, b) => Number(a.status === 'done') - Number(b.status === 'done') || compareItems(a, b, today));
+      return { date, day, occ, count: dayCount(date, today, day, occ), hot, focus };
     },
     [index, rolled, today, routineList, routineLogs, dayMarks],
   );

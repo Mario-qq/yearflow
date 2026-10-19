@@ -4,6 +4,7 @@
  */
 import { create } from 'zustand';
 import { todayStr } from '../lib/date';
+import type { WorkScope } from '../types/domain';
 
 export type DeskView = 'week' | 'month';
 
@@ -41,6 +42,19 @@ interface DeskUi {
   drawerTab: 'pending' | 'routines';
   editor: DeskEditor | null;
   quickAdd: boolean;
+  /** 从日卡「＋」打开新建时预填的日子与范围（一句话里写了的优先） */
+  qaPreset: { date: string; scope?: WorkScope } | null;
+  /** 下班收尾面板 */
+  shutdown: boolean;
+  /** 「挑要事」浮层：给哪天挑、锚在哪儿 */
+  focusPicker: { date: string; left: number; top: number } | null;
+  /** 「年度计划显示哪些」浮层（锚在哪儿） */
+  planPicker: { left: number; top: number } | null;
+  /** 哪天点过「收工」（记在本机；头部据此不再提醒） */
+  shutdownDoneOn: string | null;
+  markShutdownDone: (date: string) => void;
+  /** 周历收起周六日（收成窄条，仍可拖进去；今天是周末时那天照常展开）；记在本机 */
+  hideWeekend: boolean;
   menu: DeskMenu | null;
   mover: MoverState | null;
   dragging: boolean;
@@ -55,11 +69,29 @@ interface DeskUi {
 
   setView: (v: DeskView) => void;
   togglePlanFold: () => void;
+  toggleWeekend: () => void;
   set: (patch: Partial<Omit<DeskUi, 'set' | 'setView'>>) => void;
 }
 
 const VIEW_KEY = 'yearflow:desk:view';
 const PLAN_FOLD_KEY = 'yearflow:desk:planFolded';
+const WEEKEND_KEY = 'yearflow:desk:hideWeekend';
+const SHUTDOWN_KEY = 'yearflow:desk:shutdownDone';
+function readShutdown(): string | null {
+  try {
+    return localStorage.getItem(SHUTDOWN_KEY);
+  } catch {
+    return null;
+  }
+}
+/** 默认收起周末（负责人：周六日平时很少用） */
+function readHideWeekend(): boolean {
+  try {
+    return localStorage.getItem(WEEKEND_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
 function readPlanFolded(): boolean {
   try {
     return localStorage.getItem(PLAN_FOLD_KEY) === '1';
@@ -87,6 +119,20 @@ export const useDeskUi = create<DeskUi>()((set) => ({
   drawerTab: 'pending',
   editor: null,
   quickAdd: false,
+  qaPreset: null,
+  shutdown: false,
+  planPicker: null,
+  focusPicker: null,
+  shutdownDoneOn: readShutdown(),
+  markShutdownDone: (date) => {
+    try {
+      localStorage.setItem(SHUTDOWN_KEY, date);
+    } catch {
+      // 记不住最多是头部再提醒一次
+    }
+    set({ shutdownDoneOn: date });
+  },
+  hideWeekend: readHideWeekend(),
   menu: null,
   mover: null,
   dragging: false,
@@ -103,6 +149,15 @@ export const useDeskUi = create<DeskUi>()((set) => ({
       }
       return { planFolded: !s.planFolded };
     }),
+  toggleWeekend: () =>
+    set((s) => {
+      try {
+        localStorage.setItem(WEEKEND_KEY, s.hideWeekend ? '0' : '1');
+      } catch {
+        // 记不住只影响下次打开
+      }
+      return { hideWeekend: !s.hideWeekend };
+    }),
   setView: (view) => {
     try {
       localStorage.setItem(VIEW_KEY, view);
@@ -115,7 +170,15 @@ export const useDeskUi = create<DeskUi>()((set) => ({
   set: (patch) => set(patch),
 }));
 
+/** 有没有浮层开着（点空白先收浮层、Esc 先收浮层用；收尾面板是模态，单独处理） */
+export function hasOverlay(ui: Pick<DeskUi, (typeof OVERLAY_KEYS)[number] | 'editor'>): boolean {
+  return Boolean(ui.editor || OVERLAY_KEYS.some((k) => ui[k]));
+}
+
+/** 点空白可收起的浮层（编辑卡不在内：里面可能有没保存的字，只认 Esc / 取消 / 保存） */
+export const OVERLAY_KEYS = ['menu', 'mover', 'person', 'quickAdd', 'studySetup', 'planPicker', 'focusPicker'] as const;
+
 /** 关掉所有浮层（Esc / 点空白） */
 export function closeOverlays(): void {
-  useDeskUi.getState().set({ menu: null, mover: null, person: null, personLit: null, quickAdd: false, studySetup: null, editor: null });
+  useDeskUi.getState().set({ menu: null, mover: null, person: null, personLit: null, quickAdd: false, qaPreset: null, studySetup: null, editor: null, planPicker: null, focusPicker: null });
 }

@@ -39,5 +39,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     anchor: {},
     anchorByDow: [],
     remind: true,
+    planHiddenGoals: [],
+    planHiddenTasks: [],
+    shutdownAt: '17:30',
   },
 };

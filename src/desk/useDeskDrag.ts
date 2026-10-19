@@ -1,6 +1,7 @@
 /**
  * 工作台拖拽：任意一行按住拖 3px 起拖 → 右下角浮出「挪到…」小月历；
- * 落点 = 日卡 / 月历格（今天及以后）/ 小月历某天 / 「放进待处理」。多选时拖任意一行带走全部选中。
+ * 落点 = 日卡 / 日卡里的工作区或生活区（顺带改范围）/ 月历格（今天及以后）/ 小月历某天 / 「放进待处理」。
+ * 多选时拖任意一行带走全部选中。
  *
  * 性能约定（CLAUDE.md：拖拽中只改 transform）：拖动中**不触发 React 重绘** ——
  * 影子跟手只改 transform，落点高亮与小月历顶部提示直接改 class/textContent；
@@ -12,6 +13,7 @@ import { DRAG_THRESHOLD } from './constants';
 import { md, relDay, toastMove } from './format';
 import { parseKeys } from './keys';
 import { useDeskUi } from './uiStore';
+import type { WorkScope } from '../types/domain';
 
 interface DragState {
   key: string;
@@ -22,6 +24,8 @@ interface DragState {
   ghost?: HTMLDivElement;
   /** undefined = 没落在可放的地方；null = 待处理；字符串 = 日期 */
   target?: string | null;
+  /** 落在某天的工作/生活区里：顺带改范围 */
+  scope?: WorkScope;
   lastHot?: Element | null;
 }
 
@@ -51,7 +55,7 @@ export function useDeskDrag(rootRef: RefObject<HTMLDivElement | null>, today: st
       setTimeout(() => (swallowClick = false), 0);
       useDeskUi.getState().set({ dragging: false, mover: null });
       if (!apply || d.target === undefined) return;
-      const r = moveKeys(parseKeys(d.keys), d.target);
+      const r = moveKeys(parseKeys(d.keys), d.target, d.target === null ? undefined : d.scope);
       useDeskUi.getState().set({ sel: new Set() });
       toastMove(d.target, today, r);
     };
@@ -90,13 +94,19 @@ export function useDeskDrag(rootRef: RefObject<HTMLDivElement | null>, today: st
 
       const el = document.elementFromPoint(e.clientX, e.clientY);
       const hit =
-        el?.closest('[data-mv]') ?? el?.closest('[data-mv-pending]') ?? el?.closest('.dk-day[data-day], .dk-mc[data-day]') ?? null;
+        el?.closest('[data-mv]') ??
+        el?.closest('[data-mv-pending]') ??
+        el?.closest('.dk-zone[data-zone]') ??
+        el?.closest('.dk-day[data-day], .dk-mc[data-day]') ??
+        null;
       let target: string | null | undefined;
+      let scope: WorkScope | undefined;
       if (hit?.hasAttribute('data-mv')) target = hit.getAttribute('data-mv');
       else if (hit?.hasAttribute('data-mv-pending')) target = null;
       else if (hit) {
         const day = hit.getAttribute('data-day')!;
         target = day >= today ? day : undefined; // 过去的日子不能落
+        if (target !== undefined && hit.hasAttribute('data-zone')) scope = hit.getAttribute('data-zone') as WorkScope;
       }
       const hot = target === undefined ? null : hit;
       if (hot !== drag.lastHot) {
@@ -105,8 +115,11 @@ export function useDeskDrag(rootRef: RefObject<HTMLDivElement | null>, today: st
         drag.lastHot = hot;
       }
       drag.target = target;
+      drag.scope = scope;
       const tip = document.querySelector('[data-mv-tip]');
-      if (tip) tip.textContent = target === undefined ? ' ' : target === null ? '→ 放进待处理' : `→ ${relDay(target, today)} · ${md(target)}`;
+      if (tip)
+        tip.textContent =
+          target === undefined ? ' ' : target === null ? '→ 放进待处理' : `→ ${relDay(target, today)} · ${md(target)}${scope ? ` · ${scope === 'life' ? '生活' : '工作'}` : ''}`;
     };
 
     const onUp = () => {

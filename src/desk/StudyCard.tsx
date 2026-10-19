@@ -1,6 +1,6 @@
 /**
  * 学习卡（DESK_SPEC §五 六层防忘）：今天这张日卡的第一块。
- * 没学 = 醒目大卡（锚点句 · 学什么 · 为什么是它 · 一键开始 / 短版 / 换一个），主色描边轻呼吸；
+ * 没学 = 两行小卡（▶ 学什么 + 周点阵；锚点时间 · 为什么是它 + 短版 / 换一个 / 已学过 / ⚙），左边一道目标色；
  * 正在学 = 倒计时（经 1s 单例 ticker 直写 DOM，零 React 重渲）+ 结束并打卡 / 暂停 / 放弃；
  * 学过了 = 收成一行；今天没排学习 = 一行安静的「想学也可以」。
  */
@@ -67,15 +67,15 @@ export function StudyCard({ v, today }: { v: StudyView; today: string }) {
     const t = r.taskId ? tasks[r.taskId] : undefined;
     return (
       <div className="dk-study running" style={{ '--c': goalColor(g?.color ?? 'goal-1') } as React.CSSProperties}>
-        <div className="dk-st-top">
-          <span>
-            {r.paused ? '暂停中' : '专注中'} · {g?.name}
+        <div className="dk-st-row">
+          <Countdown />
+          <div className="dk-st-what">
+            <small>{r.paused ? '暂停中' : '专注中'}</small>
+            {g?.name}
             {t ? ` · ${t.name}` : ''}
-          </span>
-          <span className="dk-grow" />
+          </div>
           <StudyDots v={v} />
         </div>
-        <Countdown />
         <div className="dk-st-acts">
           <button type="button" className="dk-btn primary" onClick={() => finishStudy(r, today)}>
             结束并打卡
@@ -131,53 +131,52 @@ export function StudyCard({ v, today }: { v: StudyView; today: string }) {
   }
 
   const why: React.ReactNode[] = [];
-  if (v.broke) why.push(<b key="broke">昨天断了一天，今天别连断</b>);
-  else if (v.streak >= 2) why.push(<span key="streak">已连学 {v.streak} 天，接着来</span>);
-  if (p.behind >= 5) why.push(<span key="behind">落后计划 {p.behind}%</span>);
+  if (v.broke) why.push(<b key="broke">昨天断了，今天别连断</b>);
+  else if (v.streak >= 2) why.push(<span key="streak">连学 {v.streak} 天</span>);
+  if (p.behind >= 5) why.push(<span key="behind">落后 {p.behind}%</span>);
   else {
     const n = untouchedDays(p, today);
     if (n === null) why.push(<span key="new">还没开始过</span>);
-    else if (n >= 3) why.push(<span key="idle">{n} 天没碰了</span>);
+    else if (n >= 3) why.push(<span key="idle">{n} 天没碰</span>);
   }
   const anchor = v.anchor.time ? `${v.anchor.text ? `${v.anchor.text} ` : ''}${v.anchor.time}` : null;
+  if (anchor) why.unshift(<span key="anchor">{anchor}</span>);
 
+  // 精简版：一行「▶ 学什么 · 周点阵」，一行「为什么 + 次要操作」（负责人：学习卡小一点、简洁一点）
   return (
     <div className="dk-study" style={{ '--c': color } as React.CSSProperties}>
-      <div className="dk-st-top">
-        {anchor ? (
-          <span>
-            {anchor} · 学 {v.prefs.studyMinutes} 分钟
-          </span>
-        ) : (
-          <button type="button" className="dk-st-link" onClick={openSetup}>
-            还没定固定学习时间 · 设一个
-          </button>
-        )}
-        <span className="dk-grow" />
+      <div className="dk-st-row">
+        <button type="button" className="dk-st-go" title={`开始 ${v.prefs.studyMinutes} 分钟（S）`} aria-label={`开始学习 ${v.prefs.studyMinutes} 分钟`} onClick={() => startStudy(today, 'full', p)}>
+          ▶
+        </button>
+        <div className="dk-st-what" title={`${g?.name} · ${p.taskName}`}>
+          {g?.name} · {p.taskName}
+        </div>
         <StudyDots v={v} />
-        <button type="button" className="dk-st-gear" title="学习设置" aria-label="学习设置" onClick={openSetup}>
-          ⚙
-        </button>
       </div>
-      <div className="dk-st-what">
-        {g?.name} · {p.taskName}
-      </div>
-      {why.length > 0 && <div className="dk-st-why">{why.flatMap((w, i) => (i ? [' · ', w] : [w]))}</div>}
-      <div className="dk-st-acts">
-        <button type="button" className="dk-btn primary" title="快捷键 S" onClick={() => startStudy(today, 'full', p)}>
-          ▶ 开始 {v.prefs.studyMinutes} 分钟
-        </button>
-        <button type="button" className="dk-btn" title={`只有 ${v.prefs.shortMinutes} 分钟也算`} onClick={() => startStudy(today, 'short', p)}>
-          {v.prefs.shortMinutes} 分钟版
+      <div className="dk-st-why">
+        <span className="dk-st-reason">
+          {why.length > 0 ? why.flatMap((w, i) => (i ? [' · ', w] : [w])) : `学 ${v.prefs.studyMinutes} 分钟`}
+          {!anchor && (
+            <button type="button" className="dk-st-link" onClick={openSetup}>
+              {why.length ? ' · ' : ''}定个固定时间
+            </button>
+          )}
+        </span>
+        <span className="dk-grow" />
+        <button type="button" className="dk-st-a" title={`只有 ${v.prefs.shortMinutes} 分钟也算`} onClick={() => startStudy(today, 'short', p)}>
+          {v.prefs.shortMinutes} 分钟
         </button>
         {v.picks.length > 1 && (
-          <button type="button" className="dk-btn ghost" title="换一个学习任务" onClick={swapStudyPick}>
+          <button type="button" className="dk-st-a" title="换一个学习任务" onClick={swapStudyPick}>
             换一个
           </button>
         )}
-        <span className="dk-grow" />
-        <button type="button" className="dk-btn ghost" title="在别处学过了：直接打卡完成" onClick={() => markStudied(p, today)}>
+        <button type="button" className="dk-st-a" title="在别处学过了：直接打卡完成" onClick={() => markStudied(p, today)}>
           已学过
+        </button>
+        <button type="button" className="dk-st-gear" title="学习设置" aria-label="学习设置" onClick={openSetup}>
+          ⚙
         </button>
       </div>
     </div>

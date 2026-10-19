@@ -6,12 +6,12 @@
 import { useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { diffDays, toDay } from '../lib/date';
-import { addDays, effectiveUrgency, followupsByPerson, weekMonday } from '../lib/derive/desk';
+import { addDays, effectiveUrgency, followupsByPerson, shutdownDue, weekMonday } from '../lib/derive/desk';
 import { goalColor } from '../lib/colors';
 import { personColor } from './constants';
 import { weekdayCn } from './format';
 import type { PlanRowData } from './usePlanRows';
-import type { DayData } from './useDeskData';
+import { useNowHm, type DayData } from './useDeskData';
 import { useDeskUi } from './uiStore';
 import type { WorkItem } from '../types/domain';
 import type { StudyView } from './study';
@@ -23,11 +23,19 @@ const RING_C = 2 * Math.PI * RING_R;
 export function DeskHero({ today, items, dayOf, plan, study }: { today: string; items: WorkItem[]; dayOf: (d: string) => DayData; plan: PlanRowData[]; study: StudyView }) {
   const milestones = useStore((s) => s.milestones);
   const goals = useStore((s) => s.goals);
+  const marks = useStore((s) => s.dayMarks);
+  const shutdownAt = useStore((s) => s.settings.desk.shutdownAt);
+  const doneOn = useDeskUi((s) => s.shutdownDoneOn);
+  const nowHm = useNowHm();
 
   const t = dayOf(today);
   const urgent = [...t.day.rolled, ...t.day.open].filter((i) => effectiveUrgency(i, today) === 'urgent').length;
   const top = useMemo(() => followupsByPerson(items, today)[0], [items, today]);
   const planLeft = plan.filter((p) => !p.status).length;
+  const focus = t.focus;
+  const focusLeft = focus.filter((i) => i.status === 'open').length;
+  const openLeft = t.day.rolled.length + t.day.open.length;
+  const sdDue = shutdownDue({ nowHm, at: shutdownAt, today, doneOn, marks });
 
   const monday = weekMonday(today);
   const week = Array.from({ length: 7 }, (_, n) => dayOf(addDays(monday, n)).count);
@@ -58,6 +66,39 @@ export function DeskHero({ today, items, dayOf, plan, study }: { today: string; 
           {d.month() + 1}月{d.date()}日
         </div>
         <div className="dk-h-say">
+          {sdDue && (
+            <span className="sd">
+              <i style={{ '--c': 'var(--accent)' } as React.CSSProperties} />
+              <button type="button" onClick={() => useDeskUi.getState().set({ shutdown: true })}>
+                该收尾了
+              </button>
+              {openLeft ? (
+                <>
+                  还有 <b className="tnum">{openLeft}</b> 件没做完要安排
+                </>
+              ) : (
+                '今天的都做完了'
+              )}
+            </span>
+          )}
+          {doneOn === today && (
+            <span>
+              <i style={{ '--c': 'var(--success)' } as React.CSSProperties} />
+              今天已收工
+            </span>
+          )}
+          {focus.length > 0 && (
+            <span>
+              <i style={{ '--c': focusLeft ? 'var(--accent)' : 'var(--success)' } as React.CSSProperties} />
+              {focusLeft ? (
+                <>
+                  要事还剩 <b className="tnum">{focusLeft}</b> / {focus.length}
+                </>
+              ) : (
+                `${focus.length} 件要事都做完了`
+              )}
+            </span>
+          )}
           <span>
             <i style={{ '--c': urgent ? 'var(--danger)' : 'var(--success)' } as React.CSSProperties} />
             {urgent ? (

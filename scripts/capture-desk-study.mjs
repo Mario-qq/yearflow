@@ -89,7 +89,8 @@ for (const theme of ['dark', 'light']) {
     await seed(page, theme);
     await page.goto(`${BASE}/desk`);
     await page.waitForSelector('.dk-day.today');
-    check(`${theme} ${w}：学习卡在今天第一块`, (await page.locator('.dk-day.today .dk-db > :first-child').getAttribute('class'))?.includes('dk-study'));
+    // v3 起：要事区（有就）在最上，学习卡紧随其后
+    check(`${theme} ${w}：学习卡在今天第一块（要事之后）`, (await page.locator('.dk-day.today .dk-db > :not(.dk-focus)').first().getAttribute('class'))?.includes('dk-study'));
     check(`${theme} ${w}：头部有学习点阵`, (await page.locator('.dk-stat .dk-dots').count()) === 1);
     const overflow = await page.evaluate(() => Math.max(document.documentElement.scrollWidth - innerWidth, ...[...document.querySelectorAll('.dk-board, .dk-st-acts, .dk-st-top')].map((e) => e.scrollWidth - e.clientWidth)));
     check(`${theme} ${w}：无横向溢出（含学习卡按钮行）`, overflow <= 0, String(overflow));
@@ -113,7 +114,7 @@ const what1 = await page.locator('.dk-st-what').innerText();
 const planTexts = await page.locator('.dk-day.today .dk-row.plan').allInnerTexts();
 check('推荐的学习任务不在年度计划里重复出现', !planTexts.some((t) => t.includes(what1.split(' · ')[1])), what1);
 check('今日脉搏说还没学', (await page.locator('.dk-h-say').innerText()).includes('还没学'));
-await page.locator('.dk-st-acts button', { hasText: '换一个' }).click();
+await page.locator('.dk-study button', { hasText: '换一个' }).click();
 const what2 = await page.locator('.dk-st-what').innerText();
 check('换一个 → 换成别的学习任务', what2 !== what1, `${what1} → ${what2}`);
 
@@ -301,6 +302,10 @@ await ctx.close();
       backupList: () => Promise.resolve([]),
       backupRead: () => Promise.resolve('{}'),
       backupOpenDir: () => Promise.resolve(''),
+      backupMirror: () => Promise.resolve({ dir: null, at: null, error: null }),
+      backupMirrorChoose: () => Promise.resolve({ dir: null, at: null, error: null }),
+      backupMirrorClear: () => Promise.resolve({ dir: null, at: null, error: null }),
+      backupMirrorOpen: () => Promise.resolve(''),
       onPowerResume: off,
       onPipState: off,
       onPipMode: off,
@@ -332,7 +337,7 @@ await ctx.close();
   check('通知文案：到点学习了 / 15 分钟也算，点了跳工作台', r.notices[0]?.title === '到点学习了' && r.notices[1]?.body.includes('15 分钟也算') && r.notices.every((n) => n.route === '/desk'), JSON.stringify(r.notices));
   check('托盘提示写今天还没学', r.tray.some((t) => t.startsWith('今天还没学')), JSON.stringify(r.tray));
   // 学过了就不再提醒
-  await p.locator('.dk-st-acts button', { hasText: '已学过' }).click();
+  await p.locator('.dk-study button', { hasText: '已学过' }).click();
   const after = await p.evaluate(async () => {
     const { tickStudyNudge } = await import('/src/desk/studyNudge.ts');
     Object.keys(localStorage).filter((k) => k.startsWith('yearflow:desk:nudge:')).forEach((k) => localStorage.removeItem(k));

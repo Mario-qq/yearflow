@@ -3,7 +3,7 @@
  * 纯函数，单测见 parseQuickAdd.test.ts。界面上不放写法示例，写法只在新建按钮的悬停提示里：
  *
  *   !! 紧急 · ! 尽快 · @人（后面加空格）· 今天/明天/后天/周三/下周一/10.20/10月20日 · 截止周五 / ddl 10.31
- *   #目标名 · 每天/工作日/每周一三/每月5号/每月最后一天/每月第二个周三/每月最后一个周五 · ~生活 · 待处理
+ *   * 重要（独立的一个星号，或 ★）· #目标名 · 每天/工作日/每周一三/每月5号/每月最后一天/每月第二个周三/每月最后一个周五 · ~生活 · 待处理
  *   例行可带时间：9:00 / 9点 / 9点半 / 14点30（只在例行里认，待办标题里的「3点」原样保留）
  *
  * 不写日子 = 今天；写「待处理」= 不排日子。日期词在句首/句尾可以不加空格，句中要用空格隔开
@@ -30,6 +30,8 @@ export interface QuickAddResult {
   ruleLabel?: string;
   /** 例行的时间点 HH:mm（排序与提醒用） */
   time?: string;
+  /** 重要（写了独立的 * 或 ★） */
+  important?: boolean;
 }
 
 const WD: Record<string, number> = { 日: 0, 天: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6 };
@@ -152,6 +154,12 @@ export function parseQuickAdd(input: string, ctx: { today: string; goals: { id: 
     cut(m[0]);
   }
 
+  let important = false;
+  if ((m = /(^|\s)[*＊★](?=\s)/.exec(t))) {
+    important = true;
+    t = t.replace(m[0], ' ');
+  }
+
   let person: string | undefined;
   if ((m = /@([^\s@#~!！]+)/.exec(t))) {
     person = m[1];
@@ -217,5 +225,6 @@ export function parseQuickAdd(input: string, ctx: { today: string; goals: { id: 
     ...(person ? { person, mode } : {}),
     ...(goalId ? { goalId } : {}),
     ...(unknownGoal ? { unknownGoal } : {}),
+    ...(important ? { important } : {}),
   };
 }

@@ -109,3 +109,15 @@ describe('一句话新建', () => {
     expect(p('整理每天的巡检记录')).toMatchObject({ kind: 'todo' });
   });
 });
+
+describe('v3：重要', () => {
+  it('独立的 * / ★ ⇒ 重要，并从标题里去掉', () => {
+    expect(p('* 写周报')).toMatchObject({ title: '写周报', important: true });
+    expect(p('写周报 ★')).toMatchObject({ title: '写周报', important: true });
+    expect(p('!! * 修过帐 @李工')).toMatchObject({ urgency: 'urgent', important: true, person: '李工' });
+  });
+  it('标题里夹着的星号不算', () => {
+    expect(p('算 2*3 的结果').important).toBeUndefined();
+    expect(p('算 2*3 的结果').title).toBe('算 2*3 的结果');
+  });
+});

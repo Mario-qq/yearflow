@@ -1,6 +1,6 @@
-/** 选中后底部浮出的一条：挪到…（D）· 明天 · 下周一（⇧M）· 下周同一天（⇧W）· 紧急度 · 完成（X）· 不做了 · ✕ */
+/** 选中后底部浮出的一条：挪到…（D）· 明天 · 下周一（⇧M）· 下周同一天（⇧W）· 紧急度 · 重要（*）· 要事（F）· 完成（X）· 不做了 · ✕ */
 import { dropItems } from '../store/deskActions';
-import { completeSelected, moveSelected, openMoverFor, selectedItemIds } from './commands';
+import { completeSelected, moveSelected, openMoverFor, selectedItemIds, toggleFocus, toggleImportant } from './commands';
 import { toastUndo } from './format';
 import { useDeskUi } from './uiStore';
 
@@ -35,6 +35,12 @@ export function SelectionBar({ today }: { today: string }) {
             }}
           >
             紧急度
+          </button>
+          <button type="button" onClick={() => toggleImportant(selectedItemIds())}>
+            重要 <kbd>*</kbd>
+          </button>
+          <button type="button" onClick={() => toggleFocus(selectedItemIds(), today)}>
+            要事 <kbd>F</kbd>
           </button>
           <button type="button" onClick={completeSelected}>
             完成 <kbd>X</kbd>

@@ -1,9 +1,13 @@
 /**
- * 一天一张卡：卡头 = 大号日期 + 星期 + 完成数 + 2px 进度线；卡身按天的位置分三种：
- * 过去 = 已完成前几条 +「↻ 没做完的挂到了今天」；今天 = 年度计划 / 例行 / 事项（含顺延）；以后 = 例行 / 事项。
+ * 一天一张卡：卡头 = 大号日期 + 星期 + 完成数 + 2px 进度线；卡身自上而下：
+ * 要事（Ivy Lee，最多 3 件）→ 学习（今天）→ 工作区 → 生活区（淡色底 + 左色条，不写字）→ 年度计划（今天，可收起、可筛选）。
+ * 做完的就留在原区里打勾显示（一眼看到这周做了什么），不再折叠；只有「不做了」收在卡底。
+ * 工作/生活两区都是拖放目标：拖进另一区 = 顺带改范围（拖动中空区也会露出来）。
  */
+import type { WorkItem, WorkScope } from '../types/domain';
+import type { RoutineOccurrence } from '../lib/derive/desk';
 import { useStore } from '../store/useStore';
-import { PAST_DONE_PREVIEW } from './constants';
+import { MAX_FOCUS } from '../lib/derive/desk';
 import { isWeekendDate, weekdayCn } from './format';
 import { PlanRows } from './PlanSection';
 import { StudyCard } from './StudyCard';
@@ -13,39 +17,6 @@ import { ItemRow, RoutineRow } from './Rows';
 import type { DayData } from './useDeskData';
 import { useDeskUi } from './uiStore';
 
-/** 分区标题；给了 onToggle 就可折叠（标题整行可点，▾/▸ 示意） */
-function Sec({
-  title,
-  n,
-  children,
-  folded,
-  onToggle,
-}: {
-  title: string;
-  n: string | number;
-  children: React.ReactNode;
-  folded?: boolean;
-  onToggle?: () => void;
-}) {
-  return (
-    <>
-      {onToggle ? (
-        <button type="button" className="dk-sec fold" aria-expanded={!folded} onClick={onToggle} title={folded ? '展开' : '收起'}>
-          {title}
-          <span className="n tnum">{n}</span>
-          <span className="caret">{folded ? '▸' : '▾'}</span>
-        </button>
-      ) : (
-        <div className="dk-sec">
-          {title}
-          <span className="n tnum">{n}</span>
-        </div>
-      )}
-      {!folded && children}
-    </>
-  );
-}
-
 function toggleFold(date: string) {
   const ui = useDeskUi.getState();
   const next = new Set(ui.openFolds);
@@ -54,95 +25,87 @@ function toggleFold(date: string) {
   ui.set({ openFolds: next });
 }
 
-export function DayCard({ data, today, plan, study }: { data: DayData; today: string; plan?: PlanRowData[]; study?: StudyView }) {
-  const { date, day, occ, count } = data;
+/** 先放没做完的（顺延来的在最前），再放做完的（按完成时间） */
+function zoneOf(scope: WorkScope, data: DayData, focusIds: Set<string>, past: boolean) {
+  const { day, occ } = data;
+  const mine = (i: WorkItem) => i.scope === scope && !focusIds.has(i.id);
+  const mineOcc = (o: RoutineOccurrence) => o.routine.scope === scope;
+  const open = past ? [] : [...day.rolled.filter(mine), ...day.open.filter(mine)];
+  const openOcc = past ? [] : occ.filter((o) => mineOcc(o) && o.status === 'open');
+  const done = day.done.filter(mine).sort((a, b) => (a.doneAt ?? '').localeCompare(b.doneAt ?? ''));
+  const doneOcc = occ.filter((o) => mineOcc(o) && o.status === 'done');
+  const skipped = past ? [] : occ.filter((o) => mineOcc(o) && o.status === 'skipped');
+  return { open, openOcc, done, doneOcc, skipped, n: open.length + openOcc.length + done.length + doneOcc.length + skipped.length };
+}
+
+function Zone({ scope, z, date, today }: { scope: WorkScope; z: ReturnType<typeof zoneOf>; date: string; today: string }) {
+  const past = date < today;
+  return (
+    <div className={`dk-zone ${scope}${z.n === 0 ? ' empty' : ''}`} data-zone={scope} data-day={date}>
+      {z.open.map((i) => (
+        <ItemRow key={i.id} item={i} today={today} rolled={i.date !== date} inZone />
+      ))}
+      {z.openOcc.map((o) => (
+        <RoutineRow key={`${o.routine.id}@${o.origDate}`} occ={o} date={date} today={today} inZone />
+      ))}
+      {z.done.map((i) => (
+        <ItemRow key={i.id} item={i} today={today} compact={past} inZone />
+      ))}
+      {z.doneOcc.map((o) => (
+        <RoutineRow key={`${o.routine.id}@${o.origDate}`} occ={o} date={date} today={today} inZone />
+      ))}
+      {z.skipped.map((o) => (
+        <RoutineRow key={`${o.routine.id}@${o.origDate}`} occ={o} date={date} today={today} inZone />
+      ))}
+    </div>
+  );
+}
+
+function openQuickAdd(date: string) {
+  useDeskUi.getState().set({ quickAdd: true, qaPreset: { date, scope: isWeekendDate(date) ? 'life' : undefined }, menu: null });
+}
+
+/** 收起的周末：一根窄条（日期 + 件数点），仍是拖放目标；点一下展开周末 */
+function Rail({ data, today }: { data: DayData; today: string }) {
+  const { date, count } = data;
+  const left = date < today ? 0 : count.total - count.done;
+  return (
+    <button
+      type="button"
+      className={['dk-day rail', date < today ? 'past' : ''].join(' ')}
+      data-day={date}
+      title={`${weekdayCn(date)} ${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}${left ? ` · ${left} 件没做` : ''}${count.done ? ` · 做完 ${count.done}` : ''}\n点击展开周末`}
+      onClick={() => useDeskUi.getState().toggleWeekend()}
+    >
+      <span className="dk-dh-num tnum">{Number(date.slice(8, 10))}</span>
+      <span className="dk-rail-wd">{weekdayCn(date).slice(1)}</span>
+      {left > 0 && <span className="dk-rail-n tnum">{left}</span>}
+      {left === 0 && count.done > 0 && <span className="dk-rail-ok" aria-hidden />}
+    </button>
+  );
+}
+
+export function DayCard({ data, today, plan, planHidden, study, rail }: { data: DayData; today: string; plan?: PlanRowData[]; planHidden?: number; study?: StudyView; rail?: boolean }) {
+  const { date, day, occ, count, focus } = data;
   const mark = useStore((s) => s.dayMarks[date]);
-  const folded = !useDeskUi((s) => s.openFolds.has(date));
+  const droppedOpen = useDeskUi((s) => s.openFolds.has(date));
   const planFolded = useDeskUi((s) => s.planFolded);
   const togglePlanFold = useDeskUi((s) => s.togglePlanFold);
+  if (rail) return <Rail data={data} today={today} />;
+
   const past = date < today;
   const isToday = date === today;
   const weekend = isWeekendDate(date);
   const pct = count.total ? Math.round((count.done / count.total) * 100) : 0;
 
-  let body: React.ReactNode;
-  if (past) {
-    const doneOcc = occ.filter((o) => o.status === 'done');
-    const shown = folded ? day.done.slice(0, PAST_DONE_PREVIEW) : day.done;
-    const hidden = folded ? day.done.length - shown.length + doneOcc.length : 0;
-    const dropN = day.dropped.length;
-    const openN = day.open.length;
-    const missed = occ.filter((o) => o.status === 'open' && (o.routine.rule.type === 'weekly' || o.routine.rule.type.startsWith('monthly')));
-    body = (
-      <>
-        {!folded && doneOcc.map((o) => <RoutineRow key={`${o.routine.id}@${o.origDate}`} occ={o} date={date} today={today} />)}
-        {shown.map((i) => (
-          <ItemRow key={i.id} item={i} today={today} compact />
-        ))}
-        {!folded && day.dropped.map((i) => <ItemRow key={i.id} item={i} today={today} compact />)}
-        {(hidden > 0 || (folded && dropN > 0)) && (
-          <button type="button" className="dk-fold tnum" onClick={() => toggleFold(date)}>
-            {hidden > 0 ? `还有 ${hidden} 件已完成` : ''}
-            {hidden > 0 && dropN > 0 ? ' · ' : ''}
-            {dropN > 0 ? `不做了 ${dropN}` : ''}
-          </button>
-        )}
-        {!folded && day.done.length + doneOcc.length + dropN > PAST_DONE_PREVIEW && (
-          <button type="button" className="dk-fold" onClick={() => toggleFold(date)}>
-            收起
-          </button>
-        )}
-        {openN > 0 && <div className="dk-note">↻ {openN} 件没做完，挂到了今天</div>}
-        {missed.length > 0 && <div className="dk-note">↻ {missed.map((o) => o.routine.title).join('、')} 漏了</div>}
-        {shown.length === 0 && hidden === 0 && dropN === 0 && openN === 0 && missed.length === 0 && <div className="dk-empty">—</div>}
-      </>
-    );
-  } else {
-    const openOcc = isToday ? occ : occ.filter((o) => o.status !== 'done');
-    const doneOccHidden = occ.length - openOcc.length;
-    const items = [...day.rolled, ...day.open];
-    body = (
-      <>
-        {isToday && study && <StudyCard v={study} today={today} />}
-        {isToday && plan && plan.length > 0 && (
-          <Sec
-            title="年度计划"
-            n={`${plan.filter((p) => p.status === 'done' || p.status === 'skipped').length}/${plan.length}`}
-            folded={planFolded}
-            onToggle={togglePlanFold}
-          >
-            <PlanRows rows={plan} today={today} />
-          </Sec>
-        )}
-        {occ.length > 0 && (
-          <Sec title="例行" n={`${occ.filter((o) => o.status === 'done').length}/${occ.length}`}>
-            {openOcc.map((o) => (
-              <RoutineRow key={`${o.routine.id}@${o.origDate}`} occ={o} date={date} today={today} />
-            ))}
-            {doneOccHidden > 0 && <div className="dk-empty">已做完 {doneOccHidden} 项</div>}
-          </Sec>
-        )}
-        {(items.length > 0 || day.done.length > 0 || day.dropped.length > 0) && (
-          <Sec title="事项" n={items.length}>
-            {day.rolled.map((i) => (
-              <ItemRow key={i.id} item={i} today={today} rolled />
-            ))}
-            {day.open.map((i) => (
-              <ItemRow key={i.id} item={i} today={today} weekend={weekend} />
-            ))}
-            {day.done.length + day.dropped.length > 0 && (
-              <button type="button" className="dk-fold tnum" onClick={() => toggleFold(date)}>
-                {[day.done.length ? `已完成 ${day.done.length}` : '', day.dropped.length ? `不做了 ${day.dropped.length}` : ''].filter(Boolean).join(' · ')} {folded ? '▸' : '▾'}
-              </button>
-            )}
-            {!folded && day.done.map((i) => <ItemRow key={i.id} item={i} today={today} weekend={weekend} />)}
-            {!folded && day.dropped.map((i) => <ItemRow key={i.id} item={i} today={today} weekend={weekend} />)}
-          </Sec>
-        )}
-        {occ.length === 0 && items.length === 0 && day.done.length === 0 && day.dropped.length === 0 && !(isToday && (plan?.length || study?.pick)) && <div className="dk-empty">空</div>}
-      </>
-    );
-  }
+  const focusIds = new Set(focus.map((i) => i.id));
+  const work = zoneOf('work', data, focusIds, past);
+  const life = zoneOf('life', data, focusIds, past);
+  const openN = past ? day.open.length : 0;
+  const missed = past ? occ.filter((o) => o.status === 'open' && (o.routine.rule.type === 'weekly' || o.routine.rule.type.startsWith('monthly'))) : [];
+  const focusDone = focus.filter((i) => i.status === 'done').length;
+  const canPickFocus = isToday && focus.length < MAX_FOCUS && day.rolled.length + day.open.length > focus.filter((i) => i.status === 'open').length;
+  const empty = focus.length === 0 && work.n === 0 && life.n === 0 && day.dropped.length === 0 && openN === 0 && missed.length === 0 && !(isToday && (plan?.length || study?.pick));
 
   return (
     <div className={['dk-day', weekend ? 'weekend' : '', past ? 'past' : '', isToday ? 'today' : ''].join(' ')} data-day={date}>
@@ -155,6 +118,20 @@ export function DayCard({ data, today, plan, study }: { data: DayData; today: st
           </span>
           {mark && <span className={`dk-mark ${mark.type}`}>{mark.type === 'off' ? '休' : '班'}</span>}
           <span className="dk-dh-cnt tnum">{past ? (count.done ? `${count.done} 完成` : '') : count.total ? `${count.done}/${count.total}` : ''}</span>
+          {!past && (
+            <button
+              type="button"
+              className="dk-dh-add"
+              title="在这天新建"
+              aria-label="在这天新建"
+              onClick={(e) => {
+                e.stopPropagation();
+                openQuickAdd(date);
+              }}
+            >
+              ＋
+            </button>
+          )}
           <button
             type="button"
             className="dk-dh-menu"
@@ -173,7 +150,78 @@ export function DayCard({ data, today, plan, study }: { data: DayData; today: st
           <i style={{ width: `${past && count.done ? 100 : pct}%` }} />
         </div>
       </div>
-      <div className="dk-db">{body}</div>
+      <div className="dk-db">
+        {(focus.length > 0 || canPickFocus) && (
+          <div className="dk-focus" data-zone-focus={date}>
+            <div className="dk-focus-h">
+              <span>要事</span>
+              {focus.length > 0 && (
+                <span className="n tnum">
+                  {focusDone}/{focus.length}
+                </span>
+              )}
+              <span className="dk-grow" />
+              {canPickFocus && (
+                <button
+                  type="button"
+                  className="dk-focus-pick"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const r = e.currentTarget.getBoundingClientRect();
+                    useDeskUi.getState().set({ focusPicker: { date, left: r.left, top: r.bottom + 4 }, menu: null });
+                  }}
+                >
+                  {focus.length ? '再挑' : `挑今天最要紧的 ${MAX_FOCUS} 件`}
+                </button>
+              )}
+            </div>
+            {focus.map((i) => (
+              <ItemRow key={i.id} item={i} today={today} rolled={i.date !== date} inFocus compact={past} />
+            ))}
+          </div>
+        )}
+        {isToday && study && <StudyCard v={study} today={today} />}
+        <Zone scope="work" z={work} date={date} today={today} />
+        <Zone scope="life" z={life} date={date} today={today} />
+        {openN > 0 && <div className="dk-note">↻ {openN} 件没做完，挂到了今天</div>}
+        {missed.length > 0 && <div className="dk-note">↻ {missed.map((o) => o.routine.title).join('、')} 漏了</div>}
+        {day.dropped.length > 0 && (
+          <>
+            <button type="button" className="dk-fold tnum" onClick={() => toggleFold(date)}>
+              不做了 {day.dropped.length} {droppedOpen ? '▾' : '▸'}
+            </button>
+            {droppedOpen && day.dropped.map((i) => <ItemRow key={i.id} item={i} today={today} compact={past} />)}
+          </>
+        )}
+        {isToday && plan && (plan.length > 0 || (planHidden ?? 0) > 0) && (
+          <div className="dk-plan">
+            <div className="dk-sec">
+              <button type="button" className="dk-sec-t" aria-expanded={!planFolded} onClick={togglePlanFold} title={planFolded ? '展开' : '收起'}>
+                年度计划
+                <span className="n tnum">
+                  {plan.filter((p) => p.status === 'done' || p.status === 'skipped').length}/{plan.length}
+                </span>
+                <span className="caret">{planFolded ? '▸' : '▾'}</span>
+              </button>
+              <span className="dk-grow" />
+              <button
+                type="button"
+                className="dk-sec-act tnum"
+                title="选择哪些年度计划在这里显示"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  useDeskUi.getState().set({ planPicker: { left: r.right, top: r.bottom + 4 }, menu: null });
+                }}
+              >
+                {planHidden ? `已隐藏 ${planHidden} · ` : ''}选择显示
+              </button>
+            </div>
+            {!planFolded && <PlanRows rows={plan} today={today} />}
+          </div>
+        )}
+        {empty && <div className="dk-empty">{past ? '—' : '空'}</div>}
+      </div>
     </div>
   );
 }

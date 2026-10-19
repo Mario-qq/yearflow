@@ -217,6 +217,10 @@ export interface WorkItem {
   person?: string; // 跟进对象（kind=followup 必有）
   mode?: 'inform' | 'dispatch'; // 待告知 / 待下发
   goalId?: string; // 仅标签与筛选，不计入甘特进度
+  /** 重要（艾森豪威尔矩阵的另一轴）：与紧急度独立；缺省 = 不重要 ⇒ 老数据零迁移 */
+  important?: boolean;
+  /** 「要事」：这件是 focusOn 那天必须做完的（每天最多 MAX_FOCUS 件，Ivy Lee 法）；不是那天就不算 */
+  focusOn?: string;
   status: WorkItemStatus;
   doneAt?: string; // ISO，status 变 done/dropped 的时刻
   deferCount?: number; // 被往后挪的次数（拖延信号），缺省 0 ⇒ 老数据零迁移
@@ -379,6 +383,11 @@ export interface DeskSettings {
   lastCall?: string;
   /** 到点提醒总开关（只在桌面版生效） */
   remind: boolean;
+  /** 工作台「年度计划」不显示的目标 / 任务（甘特图当天该打卡的不一定都想在工作台看到） */
+  planHiddenGoals: string[];
+  planHiddenTasks: string[];
+  /** 下班收尾时间 HH:mm：到点后头部提示「收尾今天」，桌面版发一次通知；'' = 不提醒（缺省按 17:30） */
+  shutdownAt?: string;
 }
 
 /** 带同步元数据的实体（除 settings 外都满足） */

@@ -166,9 +166,11 @@ export function effectiveUrgency(item: WorkItem, today: string): Urgency {
   return item.urgency;
 }
 
+/** 排序：紧急度 → 重要（同紧急度里重要的在前）→ 截止日 → 创建顺序 */
 export function compareItems(a: WorkItem, b: WorkItem, today: string): number {
   return (
     URGENCY_RANK[effectiveUrgency(b, today)] - URGENCY_RANK[effectiveUrgency(a, today)] ||
+    Number(Boolean(b.important)) - Number(Boolean(a.important)) ||
     (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') ||
     a.order - b.order
   );
@@ -233,6 +235,25 @@ export function dayCount(date: string, today: string, day: DayItems, occ: Routin
   if (date < today) return { done, total: done };
   const open = day.open.length + day.rolled.length + occ.filter((o) => o.status === 'open').length;
   return { done, total: done + open };
+}
+
+// ── 要事（Ivy Lee：每天最多 3 件必须做完的）────────────────────────────
+
+export const MAX_FOCUS = 3;
+
+/** 这件是不是 date 那天的要事（「不做了」的不算） */
+export const isFocusOn = (item: WorkItem, date: string): boolean => item.focusOn === date && item.status !== 'dropped' && !item.deletedAt;
+
+/** date 之后的下一个工作日（遵守休/班标记；收尾时「挪到下个工作日」用） */
+export function nextWorkday(date: string, marks: Record<string, DayMark>): string {
+  let d = addDays(date, 1);
+  for (let n = 0; n < 31 && !isWorkday(d, marks); n++) d = addDays(d, 1);
+  return d;
+}
+
+/** 该不该提醒收尾：设了时间、今天是工作日、到点了、今天还没点过「收工」 */
+export function shutdownDue(p: { nowHm: string; at?: string; today: string; doneOn: string | null; marks: Record<string, DayMark> }): boolean {
+  return Boolean(p.at) && p.nowHm >= p.at! && p.doneOn !== p.today && isWorkday(p.today, p.marks);
 }
 
 /** 待处理 = 未完成且还没排日子 */

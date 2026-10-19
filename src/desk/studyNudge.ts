@@ -2,18 +2,20 @@
  * 学习到点提醒（DESK_SPEC §五 第 2 层）：只在桌面版主窗口跑（收进托盘时渲染进程照常跑）。
  * 每 30 秒判一次 lib/derive/study.studyNudgeDue：到锚点时间还没开始 → 第一次提醒；到最晚时间还没学 →
  * 第二次「15 分钟也算」。每天每种最多一次，记在 localStorage（按日期分键，只留最近几天）。
- * 顺带把「今天学没学」写到托盘悬停提示里。
+ * 顺带把「今天学没学」写到托盘悬停提示里；下班收尾提醒（DESK 收尾面板）也在这个轮询里。
  */
 import { todayStr } from '../lib/date';
 import { desktop } from '../lib/desktop';
 import { studyNudgeDue, type StudyNudge } from '../lib/derive/study';
+import { shutdownDue } from '../lib/derive/desk';
+import { useDeskUi } from './uiStore';
 import { useStore } from '../store/useStore';
 import { nowHm, studyNow, type StudyView } from './study';
 
 const POLL_MS = 30_000;
 const KEY_PREFIX = 'yearflow:desk:nudge:';
 
-type Sent = { anchor?: boolean; lastCall?: boolean };
+type Sent = { anchor?: boolean; lastCall?: boolean; shutdown?: boolean };
 
 function readSent(date: string): Sent {
   try {
@@ -100,13 +102,32 @@ export function tickStudyNudge(now = new Date()): StudyNudge | null {
   return kind;
 }
 
+/** 下班收尾提醒：到点、今天是工作日、还没点「收工」⇒ 每天一次通知，点开直接打开收尾面板 */
+export function tickShutdownNudge(now = new Date()): boolean {
+  const d = desktop();
+  const st = useStore.getState();
+  if (!d || !st.hydrated) return false;
+  const today = todayStr();
+  const sent = readSent(today);
+  if (sent.shutdown) return false;
+  const due = shutdownDue({ nowHm: nowHm(now), at: st.settings.desk.shutdownAt, today, doneOn: useDeskUi.getState().shutdownDoneOn, marks: st.dayMarks });
+  if (!due) return false;
+  writeSent(today, { ...sent, shutdown: true });
+  void d.notify('回顾今天、给没做完的找个去处、挑明天的要事，一分钟。', { title: '该收尾了', route: '/desk?shutdown=1', sound: false });
+  return true;
+}
+
 export function initStudyNudges(): void {
   const d = desktop();
   if (!d || started) return;
   started = true;
   // 刚启动别立刻弹（同步、hydrate 还在收尾），等一个轮询周期的零头
-  setTimeout(() => tickStudyNudge(), 5_000);
-  setInterval(() => tickStudyNudge(), POLL_MS);
+  const tick = () => {
+    tickStudyNudge();
+    tickShutdownNudge();
+  };
+  setTimeout(tick, 5_000);
+  setInterval(tick, POLL_MS);
   // 合盖/睡眠醒来：立刻补判一次，不等下一个 30 秒
-  d.onPowerResume(() => tickStudyNudge());
+  d.onPowerResume(tick);
 }

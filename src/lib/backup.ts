@@ -141,6 +141,8 @@ const workItemSchema = z.object({
   person: z.string().optional(),
   mode: z.enum(['inform', 'dispatch']).optional(),
   goalId: z.string().optional(),
+  important: z.boolean().optional(),
+  focusOn: dateStr.optional(),
   status: z.enum(['open', 'done', 'dropped']),
   doneAt: z.string().optional(),
   deferCount: z.number().int().min(0).optional(),
@@ -253,6 +255,9 @@ const deskSchema = z
     anchorByDow: z.array(studyAnchorSchema.nullable()).max(7).default([]),
     lastCall: hm.optional(),
     remind: z.boolean().default(true),
+    planHiddenGoals: z.array(z.string()).default([]),
+    planHiddenTasks: z.array(z.string()).default([]),
+    shutdownAt: z.union([hm, z.literal('')]).optional(),
   })
   .default(() => ({ ...DEFAULT_SETTINGS.desk }));
 

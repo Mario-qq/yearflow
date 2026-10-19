@@ -4,7 +4,7 @@
  * 铁律同 actions.ts：只构造受影响实体的新对象，未动实体保持引用。
  */
 import type { DayMark, Routine, RoutineLog, WorkItem } from '../types/domain';
-import { moveItem, routineLogId } from '../lib/derive/desk';
+import { isFocusOn, MAX_FOCUS, moveItem, routineLogId } from '../lib/derive/desk';
 import type { Change, EntityMaps } from './types';
 
 type DeskState = Pick<EntityMaps, 'workItems' | 'routines' | 'routineLogs' | 'dayMarks'>;
@@ -79,6 +79,55 @@ export function planEditItem(s: DeskState, id: string, patch: Partial<WorkItem>,
   if (!changed) return [];
   after.updatedAt = stamp;
   return [{ table: 'workItems', type: 'put', before, after }];
+}
+
+/**
+ * 设为 / 取消 date 那天的要事（date = null ⇒ 取消）。每天最多 MAX_FOCUS 件：
+ * 超出的不设，over = 没设上的件数（UI 提示「先移出一件」）。已经是那天要事的跳过、但照样占位。
+ */
+export function planSetFocus(s: DeskState, ids: string[], date: string | null, stamp: string): { changes: Change[]; over: number } {
+  if (date === null) {
+    const changes = ids.flatMap((id) => {
+      const before = s.workItems[id];
+      return before?.focusOn ? planPatchItems(s, [id], { focusOn: undefined }, stamp) : [];
+    });
+    return { changes, over: 0 };
+  }
+  // 已经是那天要事的照样占一个位子（下面直接跳过它们，不再占第二次）
+  let room = MAX_FOCUS - Object.values(s.workItems).filter((i) => isFocusOn(i, date)).length;
+  const changes: Change[] = [];
+  let over = 0;
+  for (const id of ids) {
+    const before = s.workItems[id];
+    if (!before || before.focusOn === date) continue;
+    if (room <= 0) {
+      over++;
+      continue;
+    }
+    room--;
+    changes.push(...planPatchItems(s, [id], { focusOn: date }, stamp));
+  }
+  return { changes, over };
+}
+
+/**
+ * 在挪动的基础上顺带改范围（拖到某天的「生活」区 = 挪到那天 + 改成生活）。
+ * 只改事项（例行的范围属于整条规则，不因挪一次而变）；同一天内拖到另一区 = 只改范围。
+ */
+export function withScope(s: DeskState, keys: DeskKey[], changes: Change[], scope: WorkItem['scope'], stamp: string): Change[] {
+  const out = [...changes];
+  for (const k of keys) {
+    if (k.type !== 'item') continue;
+    const at = out.findIndex((c) => c.table === 'workItems' && c.type === 'put' && c.after.id === k.id);
+    const c = out[at];
+    if (c && c.table === 'workItems' && c.type === 'put') {
+      if (c.after.scope !== scope) out[at] = { ...c, after: { ...c.after, scope } };
+      continue;
+    }
+    const before = s.workItems[k.id];
+    if (before && before.scope !== scope) out.push({ table: 'workItems', type: 'put', before, after: { ...before, scope, updatedAt: stamp } });
+  }
+  return out;
 }
 
 /** 某人的未完成跟进全部标为已说（人物卡「全部标为已说」） */

@@ -22,7 +22,9 @@ import { startPomodoro } from '../pomodoro/api';
 import { useLocate } from '../annual/useLocate';
 import { md, toastMove, toastUndo, weekdayCn } from './format';
 import { parseKey, parseKeys } from './keys';
-import { openMoverFor, selectedItemIds, undoneKeysOf } from './commands';
+import { openMoverFor, selectedItemIds, toggleFocus, toggleImportant, undoneKeysOf } from './commands';
+import { setPlanHidden } from './pickModel';
+import { showToast } from '../lib/toast';
 import { selectOnly } from './selection';
 import type { DayData } from './useDeskData';
 import { useDeskUi } from './uiStore';
@@ -139,6 +141,30 @@ export function DeskMenus({ today, dayOf }: { today: string; dayOf: (d: string) 
         <button type="button" onClick={() => (close(), locateTask(taskId, Number(today.slice(0, 4))))}>
           在甘特图中打开
         </button>
+        <hr />
+        <button
+          type="button"
+          onClick={() => {
+            const prev = useStore.getState().settings.desk.planHiddenTasks ?? [];
+            setPlanHidden({ tasks: [...new Set([...prev, taskId])] });
+            close();
+            // 显示偏好不进撤销栈（本机设置），撤销按钮直接还原名单
+            showToast(`工作台不再显示「${taskName}」`, { label: '撤销', run: () => setPlanHidden({ tasks: prev }) });
+          }}
+        >
+          不在工作台显示<span>这个任务</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const prev = useStore.getState().settings.desk.planHiddenGoals ?? [];
+            setPlanHidden({ goals: [...new Set([...prev, goalId])] });
+            close();
+            showToast(`工作台不再显示「${goals[goalId]?.name ?? ''}」的任务`, { label: '撤销', run: () => setPlanHidden({ goals: prev }) });
+          }}
+        >
+          不显示整个目标<span>{goals[goalId]?.name ?? ''}</span>
+        </button>
       </>
     );
   }
@@ -247,7 +273,17 @@ export function DeskMenus({ today, dayOf }: { today: string; dayOf: (d: string) 
                 {item.urgency === u && !multi ? <span>✓</span> : <span>{key}</span>}
               </button>
             ))}
+            <button type="button" onClick={() => (toggleImportant(ids), close())}>
+              {!multi && item.important ? '取消重要' : '标为重要'}
+              <span>*</span>
+            </button>
             <hr />
+            {item.status !== 'dropped' && (
+              <button type="button" onClick={() => (toggleFocus(ids, today), close())}>
+                {!multi && item.focusOn && item.focusOn >= today ? '移出要事' : '设为要事'}
+                <span>F</span>
+              </button>
+            )}
             {moveBtn}
             {!multi && (
               <>

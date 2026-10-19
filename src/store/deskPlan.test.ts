@@ -10,6 +10,8 @@ import {
   planSkipOccurrence,
   planToggleItem,
   planToggleOccurrence,
+  planSetFocus,
+  withScope,
 } from './deskPlan';
 import { invertChange, type Change } from './types';
 
@@ -185,5 +187,30 @@ describe('休/班标记', () => {
     expect(after(planSetDayMark(state({ marks: [mark] }), '2026-10-10', 'off', NOW)[0])).toMatchObject({ type: 'off' });
     expect(planSetDayMark(state({ marks: [mark] }), '2026-10-10', null, NOW)[0].type).toBe('delete');
     expect(planSetDayMark(state(), '2026-10-10', null, NOW)).toEqual([]);
+  });
+});
+
+describe('v3：要事上限、拖进另一区改范围', () => {
+  const D = '2026-10-16';
+  it('每天最多 3 件：超出的不设、over 计数；已经是要事的不重复算', () => {
+    const s = state({ items: [wi('a', { focusOn: D }), wi('b', { focusOn: D }), wi('c'), wi('d'), wi('x', { focusOn: D, status: 'dropped' })] });
+    const r = planSetFocus(s, ['a', 'c', 'd'], D, NOW);
+    expect(r.changes.map((c) => after(c)?.id)).toEqual(['c']);
+    expect(r.over).toBe(1);
+    expect((after(r.changes[0]) as WorkItem).focusOn).toBe(D);
+  });
+  it('移出要事 = 删掉 focusOn 字段（不留 undefined 键）；本来就不是的不产生变更', () => {
+    const s = state({ items: [wi('a', { focusOn: D }), wi('b')] });
+    const r = planSetFocus(s, ['a', 'b'], null, NOW);
+    expect(r.changes).toHaveLength(1);
+    expect('focusOn' in (after(r.changes[0]) as WorkItem)).toBe(false);
+  });
+  it('挪动 + 改范围合成同一条变更；同一天换区 = 只改范围；例行不改', () => {
+    const s = state({ items: [wi('a', { date: D }), wi('b', { date: D, scope: 'life' }), wi('c', { date: D })] });
+    const moved = planMove(s, [{ type: 'item', id: 'a' }], () => '2026-10-19', NOW).changes;
+    const out = withScope(s, [{ type: 'item', id: 'a' }, { type: 'item', id: 'b' }, { type: 'item', id: 'c' }, { type: 'routine', routineId: 'r', origDate: D }], moved, 'life', NOW);
+    expect(out).toHaveLength(2);
+    expect(after(out[0])).toMatchObject({ id: 'a', date: '2026-10-19', scope: 'life' });
+    expect(after(out[1])).toMatchObject({ id: 'c', date: D, scope: 'life' });
   });
 });

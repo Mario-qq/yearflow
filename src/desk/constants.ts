@@ -13,7 +13,9 @@ export const PAST_DONE_PREVIEW = 4;
 /** 月历每格最多列几件 */
 export const MONTH_CELL_ITEMS = 3;
 /** 日卡列宽权重：今天 / 普通 / 有事的周末 / 空周末 */
-export const COL_FR = { today: 2, normal: 1, weekendBusy: 1, weekendEmpty: 0.7 } as const;
+export const COL_FR = { today: 1.7, normal: 1, weekendBusy: 1, weekendEmpty: 0.7 } as const;
+/** 收起的周末窄条宽（px，--dk-rail-w） */
+export const RAIL_W = 40;
 /** 跟进对象头像色轮（按名字哈希取色，同一个人永远同色） */
 export const PERSON_COLORS = ['var(--goal-1)', 'var(--goal-6)', 'var(--goal-3)', 'var(--goal-9)', 'var(--goal-7)', 'var(--goal-2)'];
 

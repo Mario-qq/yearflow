@@ -9,7 +9,7 @@ import { patchItem, toggleItem, toggleOccurrence } from '../store/deskActions';
 import { useStore } from '../store/useStore';
 import { goalColor } from '../lib/colors';
 import { CHECK_ANIM_MS, personColor } from './constants';
-import { isWeekendDate, md, relDay, weekdayCn } from './format';
+import { md, relDay, weekdayCn } from './format';
 import { itemKey, occKey } from './keys';
 import { clickSelect } from './selection';
 import { useDeskUi } from './uiStore';
@@ -66,15 +66,17 @@ interface ItemRowProps {
   rolled?: boolean;
   /** 只要勾选 + 标题（过去的日卡、月历格） */
   compact?: boolean;
-  /** 在周末列里：不再标「生活」 */
-  weekend?: boolean;
+  /** 在日卡的工作/生活区里：范围由区本身表达，行上不再画生活色条 */
+  inZone?: boolean;
+  /** 在要事区里：不再画要事标记 */
+  inFocus?: boolean;
   /** 人物卡里：行尾写哪天 */
   showWhen?: boolean;
   /** 人物卡里的行不带 @人 */
   hideWho?: boolean;
 }
 
-export function ItemRow({ item, today, rolled, compact, weekend, showWhen, hideWho }: ItemRowProps) {
+export function ItemRow({ item, today, rolled, compact, inZone, inFocus, showWhen, hideWho }: ItemRowProps) {
   const key = itemKey(item.id);
   const selected = useDeskUi((s) => s.sel.has(key));
   const personLit = useDeskUi((s) => s.personLit);
@@ -85,7 +87,15 @@ export function ItemRow({ item, today, rolled, compact, weekend, showWhen, hideW
   const done = item.status === 'done' || checking;
   const dropped = item.status === 'dropped';
   const u = item.status === 'open' ? effectiveUrgency(item, today) : 'normal';
-  const cls = ['dk-row', done ? 'done' : '', dropped ? 'skipped' : '', u === 'urgent' ? 'u2' : u === 'soon' ? 'u1' : '', selected ? 'sel' : ''];
+  const cls = [
+    'dk-row',
+    done ? 'done' : '',
+    dropped ? 'skipped' : '',
+    u === 'urgent' ? 'u2' : u === 'soon' ? 'u1' : '',
+    item.important && !done && !dropped ? 'imp' : '',
+    item.scope === 'life' && !inZone ? 'life' : '',
+    selected ? 'sel' : '',
+  ];
   if (personLit) cls.push(item.person === personLit ? 'lit' : 'dim');
 
   const meta: React.ReactNode[] = [];
@@ -94,7 +104,13 @@ export function ItemRow({ item, today, rolled, compact, weekend, showWhen, hideW
     if (item.kind === 'followup' && !hideWho) meta.push(<WhoChip key="who" item={item} />);
     if (hideWho && item.kind === 'followup') meta.push(<span key="mode">{item.mode === 'dispatch' ? '下发' : '告知'}</span>);
     if (goal) meta.push(<span key="g" className="gd" title={`#${goal.name}`} style={{ '--c': goalColor(goal.color) } as React.CSSProperties} />);
-    if (item.scope === 'life' && !weekend) meta.push(<span key="life">生活</span>);
+    if (item.focusOn && !inFocus && item.status === 'open' && item.focusOn >= today) {
+      meta.push(
+        <span key="focus" className="fo" title={`${relDay(item.focusOn, today)}的要事`}>
+          ◎
+        </span>,
+      );
+    }
     if (item.dueDate && item.status === 'open') {
       const late = item.dueDate <= today;
       meta.push(
@@ -128,6 +144,7 @@ export function ItemRow({ item, today, rolled, compact, weekend, showWhen, hideW
           else toggleItem(item.id);
         }}
       />
+      <span className="dk-rb">
       <span
         className="dk-t"
         onDoubleClick={(e) => {
@@ -155,15 +172,19 @@ export function ItemRow({ item, today, rolled, compact, weekend, showWhen, hideW
             }}
           />
         ) : (
-          item.title
+          <>
+            {item.important && <i className="dk-imp" aria-label="重要" title="重要" />}
+            {item.title}
+          </>
         )}
       </span>
       {meta.length > 0 && <span className="dk-m">{meta}</span>}
+      </span>
     </div>
   );
 }
 
-export function RoutineRow({ occ, date, today }: { occ: RoutineOccurrence; date: string; today: string }) {
+export function RoutineRow({ occ, date, today, inZone }: { occ: RoutineOccurrence; date: string; today: string; inZone?: boolean }) {
   const key = occKey(occ.routine.id, occ.origDate);
   const selected = useDeskUi((s) => s.sel.has(key));
   const personLit = useDeskUi((s) => s.personLit);
@@ -175,12 +196,11 @@ export function RoutineRow({ occ, date, today }: { occ: RoutineOccurrence; date:
   if (occ.makeup && !occ.movedIn) meta.push(<span key="mk" className="age">补做 · {weekdayCn(occ.origDate)}漏了</span>);
   else if (occ.movedIn) meta.push(<span key="mv">从{relDay(occ.origDate, today)}改来</span>);
   if (occ.status === 'skipped') meta.push(<span key="sk">跳过</span>);
-  if (r.scope === 'life' && !isWeekendDate(date)) meta.push(<span key="life">生活</span>);
   if (r.time) meta.push(<span key="tm" className="tnum">{r.time}</span>);
 
   return (
     <div
-      className={['dk-row routine', done ? 'done' : '', occ.status === 'skipped' ? 'skipped' : '', selected ? 'sel' : '', personLit ? 'dim' : ''].join(' ')}
+      className={['dk-row routine', done ? 'done' : '', occ.status === 'skipped' ? 'skipped' : '', r.scope === 'life' && !inZone ? 'life' : '', selected ? 'sel' : '', personLit ? 'dim' : ''].join(' ')}
       data-key={key}
       data-day={date}
       title={`例行：${r.title}${r.note ? `\n${r.note}` : ''}`}
@@ -197,8 +217,10 @@ export function RoutineRow({ occ, date, today }: { occ: RoutineOccurrence; date:
           else check();
         }}
       />
-      <span className="dk-t">{r.title}</span>
-      {meta.length > 0 && <span className="dk-m">{meta}</span>}
+      <span className="dk-rb">
+        <span className="dk-t">{r.title}</span>
+        {meta.length > 0 && <span className="dk-m">{meta}</span>}
+      </span>
     </div>
   );
 }
