@@ -1,5 +1,5 @@
 /**
- * 日常习惯（DESK_SPEC §十二）：今天那列最上面一排小胶囊 + 编辑卡 + 抽屉「习惯」页。
+ * 日常习惯（DESK_SPEC §十二）：周历最下方一条「今天的习惯」小胶囊 + 编辑卡 + 抽屉「习惯」页。
  * 不是待办：不进完成数、不顺延、不能拖。点胶囊 = 打卡（要做的）/ 记一次破戒（要忍住的），右键更多。
  */
 import { useMemo, useState } from 'react';
@@ -63,7 +63,7 @@ function Chip({ v, today }: { v: HabitView; today: string }) {
   );
 }
 
-/** 今天那列最上面的一排习惯 */
+/** 周历最下方的一条：今天的习惯（周 / 月视图都在） */
 export function HabitStrip({ today }: { today: string }) {
   const habits = useStore((s) => s.habits);
   const logs = useStore((s) => s.habitLogs);
@@ -71,18 +71,20 @@ export function HabitStrip({ today }: { today: string }) {
   const add = (e: React.MouseEvent) => {
     e.stopPropagation();
     const r = e.currentTarget.getBoundingClientRect();
-    openHabitEditor(null, r.left, r.bottom);
+    openHabitEditor(null, r.left, r.top - 8);
   };
   if (!views.length)
     return (
       <div className="dk-habits">
+        <span className="dk-habits-k">今天的习惯</span>
         <button type="button" className="dk-hb-add empty" onClick={add} title="冲牙、不吃热食这类天天要做 / 要忍住的事：不当待办，只在这里提醒">
           ＋ 日常习惯
         </button>
       </div>
     );
   return (
-    <div className="dk-habits" aria-label="日常习惯">
+    <div className="dk-habits" aria-label="今天的习惯">
+      <span className="dk-habits-k">今天的习惯</span>
       {views.map((v) => (
         <Chip key={v.habit.id} v={v} today={today} />
       ))}

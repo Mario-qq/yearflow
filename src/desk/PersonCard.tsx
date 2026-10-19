@@ -1,10 +1,9 @@
 /**
  * 人物卡：点任何 @人（或今日脉搏里的人名）浮出 TA 的全部未完成跟进，周历里同时高亮 TA 的事项、其余淡化。
  * 「复制给 TA」生成一段可直接贴进聊天工具的话；「全部标为已说」一键完成。
- * 建过人际档案的人，卡头下面多一段摘要（关系 · 上次联系 · 快到的日子 · 最新近况）+「记一笔」「打开档案」。
+ * 建过人际档案的人，卡头下面多一段摘要（关系 · 上次联系 · 快到的日子 · 最新近况）+「记一笔」「打开档案」（开人际弹窗）。
  */
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { createPerson } from '../store/peopleActions';
 import { agoLabel, interactionsOf, lastContactOf, LOVE_LABEL, RELATION_LABEL, upcomingDates } from '../lib/derive/people';
@@ -27,7 +26,6 @@ import type { WorkItem } from '../types/domain';
 function Profile({ name, items, today, onResize }: { name: string; items: WorkItem[]; today: string; onResize: () => void }) {
   const people = useStore((s) => s.people);
   const interactions = useStore((s) => s.interactions);
-  const navigate = useNavigate();
   const [logging, setLogging] = useState(false);
   const p = useMemo(() => Object.values(people).find((x) => x.name === name), [people, name]);
   const info = useMemo(() => {
@@ -39,8 +37,6 @@ function Profile({ name, items, today, onResize }: { name: string; items: WorkIt
     const learned = interactionsOf(p.id, list).find((i) => i.learned)?.learned;
     return { last, over, next, learned };
   }, [p, interactions, items, today]);
-  const close = () => useDeskUi.getState().set({ person: null, personLit: null });
-
   if (!p || !info) {
     return (
       <div className="pp-card">
@@ -97,10 +93,7 @@ function Profile({ name, items, today, onResize }: { name: string; items: WorkIt
         <button
           type="button"
           className="dk-ed-x"
-          onClick={() => {
-            close();
-            navigate(`/people?p=${p.id}`);
-          }}
+          onClick={() => useDeskUi.getState().set({ person: null, personLit: null, people: { id: p.id } })}
         >
           打开档案 →
         </button>

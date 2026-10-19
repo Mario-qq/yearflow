@@ -1,16 +1,39 @@
 /**
  * 人际页（docs/PEOPLE_SPEC.md）。控件复用工作台的 .dk-btn / .dk-in / .dk-seg / .dk-av；
  * 颜色一律走 tokens.css；本页专属尺寸集中在 .pp 上的 --pp-* 变量。
- * ⚠️ 覆盖工作台同名规则时一律多挂一个类（.dk.pp / .pp .pp-av / .dk-in.pp-text）：本表也被工作台的人物卡引用，
- * 和 desk.css 谁先注入不固定，同特异性时谁后到谁赢 —— 曾因此把本页左右两栏叠成上下。
+ * ⚠️ 覆盖工作台同名规则时一律多挂一个类（.pp .pp-av / .dk-in.pp-text）：本表和 desk.css 谁先注入不固定，
+ * 同特异性时谁后到谁赢 —— 曾因此把左右两栏叠成上下。
  */
-.dk.pp {
-  --pp-side-w: 272px; /* 左栏宽 */
+.pp {
+  --pp-side-w: 256px; /* 左栏宽 */
   --pp-max-w: 1080px; /* 右栏内容最大宽 */
   --pp-av: 36px; /* 档案抬头头像 */
 
-  flex-direction: row;
+  position: relative;
+  display: flex;
+  width: min(1240px, 100%);
+  height: min(860px, calc(100vh - 48px));
+  overflow: hidden;
   background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: var(--dk-card-radius);
+  box-shadow: var(--shadow-lg);
+  animation: dk-rise 0.18s var(--ease);
+}
+.pp-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-16);
+  color: var(--text-tertiary);
+}
+.pp-close:hover {
+  color: var(--text-primary);
+  background: var(--row-hover);
 }
 
 /* ── 左栏 ── */
@@ -542,21 +565,9 @@ li:hover > .pp-x,
     grid-template-columns: minmax(0, 1fr);
   }
 }
-@media (max-width: 767px) {
-  .dk.pp {
-    flex-direction: column;
-    overflow-y: auto;
-  }
-  .pp-side {
-    width: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--border-default);
-    overflow: visible;
-  }
-  .pp-main {
-    overflow: visible;
-    padding: 16px;
-  }
+/* 右上角的关闭按钮压在档案抬头上：给「删除档案」让位 */
+.pp-head {
+  padding-right: 36px;
 }
 
 /* 喜欢 / 避开 / 背景：左边一个小标签，填了字也知道是哪一栏 */

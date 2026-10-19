@@ -1,6 +1,7 @@
 /**
- * 人际模块自查（docs/PEOPLE_SPEC.md）：工作台头部「快到的日子 / 该联系」药丸、人物卡档案摘要与「记一笔」、
- * 重要日子倒推准备待办（确定 id、删掉不再生成）、/people 页（需要关注、档案各栏、改名带跟进、@人 一键建档）。
+ * 人际模块自查（docs/PEOPLE_SPEC.md）：工具条「收尾今天」左边的「人际」小按钮（安静角标）+ 弹窗（需要关注、档案各栏、
+ * 改名带跟进、@人 一键建档）、人物卡档案摘要与「记一笔」「打开档案」、重要日子倒推准备待办（确定 id、删掉不再生成）。
+ * 负责人 10-19：人际不放工作台主体 ⇒ 头部不再有人际药丸，顶栏也没有单独的页面。
  * 前置：vite dev（preview_start yearflow-dev）。跑法：node scripts/check-people.mjs [端口]
  * 时钟固定在 2026-10-19（周一）15:00。截图到 docs/screenshots/people/*.png。
  */
@@ -53,7 +54,11 @@ async function seed(page, theme) {
       I('x4', 'p3', '2026-10-12', { kind: 'meet', note: '汇报 MRP 优化进度' }),
     ];
     const W = (id, o) => ({ id, kind: 'followup', urgency: 'normal', scope: 'work', status: 'open', order: 1, createdAt: stamp, updatedAt: stamp, mode: 'inform', date: '2026-10-19', ...o });
-    const workItems = [W('w1', { title: '下周六晚停机窗口', person: '张经理' }), W('w2', { title: 'cmrp810 索引脚本', person: '李工', mode: 'dispatch' })];
+    const workItems = [
+      W('w1', { title: '下周六晚停机窗口', person: '张经理' }),
+      W('w2', { title: 'cmrp810 索引脚本', person: '李工', mode: 'dispatch' }),
+      W('w3', { title: '体检报告结果', person: '妈妈', scope: 'life' }),
+    ];
     const { buildSeedBundle } = await import('/src/seed/seedData.ts');
     await s.replaceAllData({ ...buildSeedBundle('2026-10-19'), workItems, routines: [], routineLogs: [], dayMarks: [], habits: [], habitLogs: [], people, interactions });
   }, theme);
@@ -62,29 +67,41 @@ async function seed(page, theme) {
 
 const browser = await chromium.launch({ channel: 'chrome' });
 const errors = [];
-async function open(theme, w = 1440, h = 900, path = '/desk') {
+async function open(theme, w = 1440, h = 900, modal = false) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h } });
   const page = await ctx.newPage();
   await page.clock.setFixedTime(new Date(`${TODAY}T15:00:00`));
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   await seed(page, theme);
-  await page.goto(`${BASE}${path}`);
-  await page.waitForSelector(path === '/desk' ? '.dk-day.today' : '.pp-side');
+  await page.goto(`${BASE}/desk`);
+  await page.waitForSelector('.dk-day.today');
   await page.waitForTimeout(400);
+  if (modal) {
+    await page.locator('.dk-people-btn').click();
+    await page.waitForSelector('.pp-side');
+    await page.waitForTimeout(300); // 等弹窗淡入播完
+  }
   return { ctx, page };
 }
 const st = (page, fn, arg) => page.evaluate(fn, arg);
 const workItems = (page) => st(page, () => Object.values(window.__store.getState().workItems));
 
-// ── 工作台：头部药丸 + 倒推准备 ──
+// ── 工作台：「人际」小按钮 + 倒推准备 ──
 for (const theme of ['dark', 'light']) {
   const { ctx, page } = await open(theme);
   const say = await page.locator('.dk-h-say').innerText();
-  // 妈妈农历九月二十 = 2026-10-29（10 天）；61 岁
-  check(`${theme}：头部「妈妈 61 岁生日 还有 10 天」`, /妈妈 61 岁生日\s*还有\s*10\s*天/.test(say), say.replace(/\n/g, ' '));
-  // 小美节奏 1 天、昨天见过 ⇒ 1/1；妈妈 23/7 ⇒ 妈妈超得最多
-  check(`${theme}：头部「该联系 妈妈 了 · 23 天没联系」`, /该联系\s*妈妈\s*了\s*·\s*23\s*天没联系/.test(say), say.replace(/\n/g, ' '));
+  check(`${theme}：头部不再有人际药丸`, !/生日|该联系/.test(say), say.replace(/\n/g, ' '));
+  const btn = page.locator('.dk-bar .dk-people-btn');
+  const pos = await page.evaluate(() => {
+    const a = document.querySelector('.dk-people-btn').getBoundingClientRect();
+    const b = [...document.querySelectorAll('.dk-bar button')].find((x) => x.textContent.includes('收尾今天')).getBoundingClientRect();
+    return { gap: Math.round(b.left - a.right), sameRow: Math.abs(a.top + a.height / 2 - (b.top + b.height / 2)) < 2 };
+  });
+  check(`${theme}：「人际」在「收尾今天」左边、同一行`, pos.sameRow && pos.gap >= 0 && pos.gap <= 12, JSON.stringify(pos));
+  // 妈妈：生日 10 天 + 23 天没联系；小美：生日 14 天 ⇒ 2 人
+  check(`${theme}：角标 = 需要关注的人数（2），安静样式`, (await btn.locator('.dk-badge.soft').innerText()) === '2');
+  check(`${theme}：顶栏没有单独的「人际」页`, (await page.locator('header nav a', { hasText: '人际' }).count()) === 0);
   const items = await workItems(page);
   const prep = items.filter((i) => i.id.startsWith('prep-')).map((i) => `${i.date} ${i.title}`).sort();
   check(
@@ -127,11 +144,11 @@ for (const theme of ['dark', 'light']) {
   await page.waitForTimeout(500);
   check('删掉生成的待办，刷新后不会再生成', !(await workItems(page)).some((i) => i.id === 'prep-p2-d2-2026-11-02-14'));
 
-  // 点药丸 ⇒ 人物卡带档案摘要
-  await page.locator('.dk-h-say button', { hasText: '妈妈' }).first().click();
+  // 点 @妈妈 ⇒ 人物卡带档案摘要
+  await page.locator('.dk-who', { hasText: '妈妈' }).first().click();
   const card = page.locator('.dk-pop', { hasText: '妈妈' });
   const ct = await card.innerText();
-  check('点药丸打开人物卡，带档案摘要（关系 · 上次联系 · 生日 · 爱的语言 · 近况）', /家人/.test(ct) && /该联系了/.test(ct) && /生日/.test(ct) && /精心的时刻/.test(ct) && /复查膝盖/.test(ct), ct.replace(/\n/g, ' / '));
+  check('点 @人 打开人物卡，带档案摘要（关系 · 上次联系 · 生日 · 爱的语言 · 近况）', /家人/.test(ct) && /该联系了/.test(ct) && /生日/.test(ct) && /精心的时刻/.test(ct) && /复查膝盖/.test(ct), ct.replace(/\n/g, ' / '));
   await page.screenshot({ path: `${OUT}/personcard-dark.png` });
   await card.getByRole('button', { name: '记一笔' }).click();
   await card.locator('[aria-label="聊了什么"]').fill('视频，看了新开的花');
@@ -141,10 +158,16 @@ for (const theme of ['dark', 'light']) {
   await card.locator('.pp-log button.primary').click();
   const it = await st(page, () => Object.values(window.__store.getState().interactions).find((i) => i.note === '视频，看了新开的花'));
   check('记一笔落库（今天 · 聊天 · 新知道的事）', it?.date === '2026-10-19' && it?.kind === 'chat' && it?.learned === '周末想去花市', JSON.stringify(it));
+  // 「打开档案 →」⇒ 人际弹窗，选中妈妈
+  await card.getByRole('button', { name: '打开档案 →' }).click();
+  await page.waitForSelector('.pp-detail');
+  check('人物卡「打开档案」⇒ 人际弹窗选中 TA、人物卡收起', (await page.locator('.pp-name').inputValue()) === '妈妈' && (await page.locator('.dk-pop').count()) === 0);
+  check('刚记的一笔已进弹窗里的近况', (await page.locator('.pp-learned').innerText()).includes('周末想去花市'));
+  await page.waitForTimeout(300); // 等弹窗淡入播完再截
+  await page.screenshot({ path: `${OUT}/modal-from-card-dark.png` });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(150);
-  const say2 = await page.locator('.dk-h-say').innerText();
-  check('联系过妈妈后「该联系」药丸换人或消失', !/该联系\s*妈妈/.test(say2), say2.replace(/\n/g, ' '));
+  check('Esc 关人际弹窗', (await page.locator('.pp').count()) === 0);
 
   // 没建档的 @人：人物卡给「建档」
   await page.locator('.dk-who', { hasText: '李工' }).first().click();
@@ -152,20 +175,20 @@ for (const theme of ['dark', 'light']) {
   check('没建档的人，人物卡给「＋ 建档」', await lcard.getByRole('button', { name: '＋ 建档' }).isVisible());
   await page.keyboard.press('Escape');
 
-  // 导航有「人际」
-  check('顶栏导航有「人际」', await page.locator('header nav a', { hasText: '人际' }).isVisible());
+  // 旧链接 /people 不再是页面
+  await page.goto(`${BASE}/people`);
+  await page.waitForTimeout(400);
+  check('旧链接 /people 回到首页', !page.url().endsWith('/people'), page.url());
   await ctx.close();
 }
 
-// ── /people 页 ──
+// ── 人际弹窗 ──
 for (const [theme, w] of [
   ['dark', 1440],
   ['light', 1440],
   ['dark', 1280],
 ]) {
-  const { ctx, page } = await open(theme, w, 900, '/desk');
-  await page.locator('header nav a', { hasText: '人际' }).click(); // 先进工作台再点过来：复现两张样式表的注入顺序
-  await page.waitForSelector('.pp-side');
+  const { ctx, page } = await open(theme, w, 900, true);
   const side = await page.locator('.pp-side').innerText();
   const attn = await page.locator('.pp-group.attn .pp-row').allInnerTexts();
   check(`${theme} ${w}：「需要关注」一人一行：日子与没联系并在一行`, attn.length === 2 && /妈妈[\s\S]*生日 10 天 · 23 天没联系/.test(attn[0]) && /小美[\s\S]*生日 14 天/.test(attn[1]), attn.map((t) => t.replace(/\n/g, ' ')).join(' | '));
@@ -179,21 +202,35 @@ for (const [theme, w] of [
   const cols = await page.evaluate(() => {
     const a = document.querySelector('.pp-side').getBoundingClientRect();
     const b = document.querySelector('.pp-main').getBoundingClientRect();
-    return { side: Math.round(a.width), sameTop: Math.abs(a.top - b.top) < 1, mainLeft: Math.round(b.left), av: Math.round(document.querySelector('.pp-head .dk-av').getBoundingClientRect().width) };
+    const d = document.querySelector('.pp').getBoundingClientRect();
+    return { side: Math.round(a.width), sameTop: Math.abs(a.top - b.top) < 1, adj: Math.abs(b.left - a.right) < 1, av: Math.round(document.querySelector('.pp-head .dk-av').getBoundingClientRect().width), inView: d.top >= 0 && d.bottom <= innerHeight && d.left >= 0 && d.right <= innerWidth };
   });
-  check(`${theme} ${w}：左右两栏并排（不叠成上下）、头像 36px`, cols.sameTop && cols.side === 272 && cols.mainLeft >= 272 && cols.av === 36, JSON.stringify(cols));
+  check(`${theme} ${w}：弹窗在屏内、左右两栏并排、头像 36px`, cols.sameTop && cols.adj && cols.side === 256 && cols.av === 36 && cols.inView, JSON.stringify(cols));
+  const field = await page.evaluate(() => {
+    const f = [...document.querySelectorAll('.pp-field')].map((l) => {
+      const k = l.querySelector('span').getBoundingClientRect();
+      const t = l.querySelector('textarea').getBoundingClientRect();
+      const sec = l.closest('.pp-sec').getBoundingClientRect();
+      return { side: k.right <= t.left && Math.abs(k.top - t.top) < 10, wide: t.width > sec.width * 0.7 };
+    });
+    return { n: f.length, ok: f.every((x) => x.side && x.wide) };
+  });
+  check(`${theme} ${w}：喜欢 / 避开 / 背景：标签在左、输入框占满`, field.n === 3 && field.ok, JSON.stringify(field));
   const overflow = await page.evaluate(() => Math.max(document.documentElement.scrollWidth - innerWidth, ...[...document.querySelectorAll('.pp-main, .pp-side')].map((e) => e.scrollWidth - e.clientWidth)));
   check(`${theme} ${w}：无横向溢出`, overflow <= 0, String(overflow));
   await page.screenshot({ path: `${OUT}/people-detail-${theme}-${w}.png`, fullPage: false });
   await ctx.close();
 }
 
-// ── /people 交互（深色）──
+// ── 人际弹窗交互（深色）──
 {
-  const { ctx, page } = await open('dark', 1440, 900, '/people');
-  await page.locator('.pp-new input').fill('王阿姨');
+  const { ctx, page } = await open('dark', 1440, 900, true);
+  await page.locator('.pp-new input').click();
+  await page.keyboard.type('王阿姨n'); // n 是工作台「新建」快捷键：弹窗里打字不能被抢走
+  await page.keyboard.press('Backspace');
+  check('弹窗里打字不触发工作台快捷键', (await page.locator('.dk-qa').count()) === 0 && (await page.locator('.pp-new input').inputValue()) === '王阿姨');
   await page.keyboard.press('Enter');
-  check('左上角写名字回车 ⇒ 建档并选中', (await page.locator('.pp-name').inputValue()) === '王阿姨' && (await page.url()).includes('?p='));
+  check('左上角写名字回车 ⇒ 建档并选中', (await page.locator('.pp-name').inputValue()) === '王阿姨');
 
   // 农历生日
   await page.locator('.pp-sec', { hasText: '重要日子' }).getByRole('button', { name: '＋ 添加' }).click();
@@ -241,6 +278,10 @@ for (const [theme, w] of [
   await page.locator('.pp-chip', { hasText: '李工' }).click();
   await page.waitForFunction(() => document.querySelector('.pp-name')?.value === '李工', null, { timeout: 3000 }).catch(() => {});
   check('点「＋ 李工」建档（默认同事）', (await page.locator('.pp-name').inputValue()) === '李工' && (await st(page, () => Object.values(window.__store.getState().people).find((x) => x.name === '李工')?.relation)) === 'colleague');
+  await page.locator('.pp-new input').click();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(150);
+  check('输入框里按 Esc 也能关弹窗', (await page.locator('.pp').count()) === 0);
   await ctx.close();
 }
 

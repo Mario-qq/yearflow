@@ -403,6 +403,11 @@
   font-weight: 600;
   box-shadow: var(--shadow-sm);
 }
+.dk-badge.soft {
+  /* 安静的角标：不用强调色实底（人际提醒负责人嫌显眼） */
+  background: var(--warning-soft);
+  color: var(--warning);
+}
 .dk-badge {
   min-width: 18px;
   height: 18px;
@@ -2396,12 +2401,20 @@
   }
 }
 
-/* ── 日常习惯（DESK_SPEC §十二）：今天那列最上面一排小胶囊，不算待办 ── */
+/* ── 日常习惯（DESK_SPEC §十二）：周历最下方一条，不算待办（负责人：不放日卡里） ── */
 .dk-habits {
+  flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 4px;
-  margin: 0 0 6px;
+  padding: 8px var(--dk-pad) 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+.dk-habits-k {
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+  margin-right: 6px;
 }
 .dk-hb {
   display: inline-flex;

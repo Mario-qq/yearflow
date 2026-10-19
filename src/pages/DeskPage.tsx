@@ -2,7 +2,7 @@
  * 个人主工作台 /desk（DESK_SPEC，版式以 docs/desk/w0-prototype.html v2 为准）。
  * 电脑宽度才有；手机打开直接回打卡页（负责人：手机端不显示工作台）。
  */
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { fmtDay, toDay } from '../lib/date';
 import { addDays, pendingItems, weekMonday } from '../lib/derive/desk';
@@ -29,7 +29,13 @@ import { useStudy } from '../desk/study';
 import { StudySetupPop } from '../desk/StudySetup';
 import { DeskEditorPop } from '../desk/Editors';
 import { usePrepGeneration } from '../people/usePreps';
+import { useStore } from '../store/useStore';
+import { contactStates, DATE_SOON_DAYS, upcomingDates } from '../lib/derive/people';
+import { HabitStrip } from '../desk/Habits';
 import '../desk/desk.css';
+
+// 人际弹窗低频：lazy 分包，点「人际」才拉
+const PeopleModal = lazy(() => import('../people/PeopleModal'));
 
 export default function DeskPage() {
   const isMobile = useIsMobile();
@@ -60,6 +66,16 @@ export default function DeskPage() {
   const drawer = useDeskUi((s) => s.drawer);
   const dragging = useDeskUi((s) => s.dragging);
   const pendingN = pendingItems(items, today).length;
+  const peopleOpen = useDeskUi((s) => s.people !== null);
+  const people = useStore((s) => s.people);
+  const interactions = useStore((s) => s.interactions);
+  /** 「人际」角标：14 天内的重要日子 + 超了联系节奏的人（同一个人只算一次） */
+  const peopleAttn = useMemo(() => {
+    const list = Object.values(people);
+    const ids = new Set(upcomingDates(list, today, DATE_SOON_DAYS).map((u) => u.person.id));
+    for (const c of contactStates(list, Object.values(interactions), items, today)) if (c.over >= 0) ids.add(c.person.id);
+    return ids.size;
+  }, [people, interactions, items, today]);
 
   const monday = weekMonday(anchor);
   const step = useCallback(
@@ -151,6 +167,14 @@ export default function DeskPage() {
           </button>
         )}
         <span className="dk-grow" />
+        <button
+          type="button"
+          className="dk-btn ghost dk-people-btn"
+          title={peopleAttn ? `人际：${peopleAttn} 个人需要关注（快到的日子 / 该联系了）` : '人际：人物档案、记一笔、重要日子'}
+          onClick={() => useDeskUi.getState().set({ people: { id: null }, menu: null, person: null, personLit: null })}
+        >
+          人际 {peopleAttn > 0 && <span className="dk-badge soft tnum">{peopleAttn}</span>}
+        </button>
         <button type="button" className="dk-btn" title="下班前：回顾今天、安排没做完的、挑明天的要事" onClick={() => useDeskUi.getState().set({ shutdown: true })}>
           收尾今天
         </button>
@@ -168,6 +192,8 @@ export default function DeskPage() {
         <QuickAdd today={today} />
         <PendingDrawer items={items} today={today} />
       </div>
+      {/* 日常习惯：周历最下方一条（负责人：不放日卡里） */}
+      <HabitStrip today={today} />
 
       <Mover today={today} dayOf={dayOf} />
       <SelectionBar today={today} />
@@ -178,6 +204,11 @@ export default function DeskPage() {
       <FocusPicker today={today} />
       <PlanPicker rows={dueRows} />
       <ShutdownSheet today={today} dayOf={dayOf} plan={allPlan} />
+      {peopleOpen && (
+        <Suspense fallback={null}>
+          <PeopleModal today={today} />
+        </Suspense>
+      )}
     </div>
   );
 }

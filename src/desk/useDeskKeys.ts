@@ -25,12 +25,13 @@ export function useDeskKeys(today: string, step: (n: number) => void, goToday: (
       if (k === 'Escape') {
         if (hasOverlay(ui)) closeOverlays();
         else if (ui.shutdown) ui.set({ shutdown: false });
+        else if (ui.people) ui.set({ people: null });
         else if (hasSel) ui.set({ sel: new Set() });
         else if (ui.drawer) ui.set({ drawer: false });
         return;
       }
-      // 收尾面板是模态：开着时只认 Esc
-      if (ui.shutdown) return;
+      // 收尾面板、人际弹窗是模态：开着时只认 Esc
+      if (ui.shutdown || ui.people) return;
       // * 要按 Shift，放在 Shift 分支之前
       if (k === '*' && hasSel && !ui.editor) {
         const ids = selectedItemIds();

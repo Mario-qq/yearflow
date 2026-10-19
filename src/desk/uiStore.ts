@@ -49,6 +49,8 @@ interface DeskUi {
   qaPreset: { date: string; scope?: WorkScope } | null;
   /** 下班收尾面板 */
   shutdown: boolean;
+  /** 人际弹窗（工具条「人际」/ 人物卡「打开档案」）；id = 打开时选中谁 */
+  people: { id: string | null } | null;
   /** 「挑要事」浮层：给哪天挑、锚在哪儿 */
   focusPicker: { date: string; left: number; top: number } | null;
   /** 「年度计划显示哪些」浮层（锚在哪儿） */
@@ -124,6 +126,7 @@ export const useDeskUi = create<DeskUi>()((set) => ({
   quickAdd: false,
   qaPreset: null,
   shutdown: false,
+  people: null,
   planPicker: null,
   focusPicker: null,
   shutdownDoneOn: readShutdown(),

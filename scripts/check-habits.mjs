@@ -1,5 +1,5 @@
 /**
- * 日常习惯自查（DESK_SPEC §十二）：今天那列顶上的胶囊、点一下打卡 / 记破戒、右键菜单、编辑卡、抽屉「习惯」页、
+ * 日常习惯自查（DESK_SPEC §十二）：周历最下方一条「今天的习惯」胶囊、点一下打卡 / 记破戒、右键菜单、编辑卡、抽屉「习惯」页、
  * 「别连着断两天」的颜色、到点通知（模拟桌面桥）。头部不再有「紧急的都处理完了」「年度计划还有」两个药丸。
  * 前置：vite dev（preview_start yearflow-dev）。跑法：node scripts/check-habits.mjs [端口]
  * 截图到 docs/screenshots/desk/habits-*.png。
@@ -89,7 +89,7 @@ const open = async (theme, w, h, { hm = '15:00', withHabits = true } = {}) => {
   await page.waitForTimeout(250);
   return { ctx, page };
 };
-const chip = (page, title) => page.locator('.dk-day.today .dk-hb', { hasText: title });
+const chip = (page, title) => page.locator('.dk-habits .dk-hb', { hasText: title });
 const logOf = (page, id) => page.evaluate((id) => window.__store.getState().habitLogs[id] ?? null, id);
 
 // ── 版式：深浅 × 两档宽 ──
@@ -100,35 +100,39 @@ for (const theme of ['dark', 'light']) {
   ]) {
     const { ctx, page } = await open(theme, w, h);
     const tag = `${theme} ${w}`;
-    const first = await page.$eval('.dk-day.today .dk-db', (db) => db.children[0]?.className);
-    check(`${tag}：今天卡最上面是习惯条`, first === 'dk-habits', first);
-    check(`${tag}：5 个习惯胶囊 + ＋`, (await page.locator('.dk-day.today .dk-hb').count()) === 5 && (await page.locator('.dk-day.today .dk-hb-add').count()) === 1);
-    check(`${tag}：其他日子没有习惯条`, (await page.locator('.dk-day:not(.today) .dk-habits').count()) === 0);
+    const place = await page.evaluate(() => {
+      const bar = document.querySelector('.dk-habits').getBoundingClientRect();
+      const stage = document.querySelector('.dk-stage').getBoundingClientRect();
+      return { below: bar.top >= stage.bottom - 1, bottom: Math.round(innerHeight - bar.bottom), fullW: Math.round(bar.width) };
+    });
+    check(`${tag}：习惯条在周历最下方（周历下面、贴着窗口底、通栏）`, place.below && place.bottom <= 1 && place.fullW >= w - 2, JSON.stringify(place));
+    check(`${tag}：日卡里不再有习惯条`, (await page.locator('.dk-day .dk-habits').count()) === 0);
+    check(`${tag}：5 个习惯胶囊 + ＋`, (await page.locator('.dk-habits .dk-hb').count()) === 5 && (await page.locator('.dk-habits .dk-hb-add').count()) === 1);
     const cls = async (t) => (await chip(page, t).getAttribute('class')) ?? '';
     check(`${tag}：冲牙昨天漏了 ⇒ 琥珀 + 「昨天断了」`, (await cls('冲牙')).includes('b1') && (await chip(page, '冲牙').innerText()).includes('昨天断了'), await chip(page, '冲牙').innerText());
     check(`${tag}：悬停说明里有完整的话 + 最近两周`, /今天接上[\s\S]*最近两周/.test((await chip(page, '冲牙').getAttribute('title')) ?? ''));
     check(`${tag}：午休连漏两天 ⇒ 红`, (await cls('午休')).includes('b2'));
     check(`${tag}：喝水今天做了 ⇒ done + 4天`, (await cls('喝够')).includes('done') && (await chip(page, '喝够').innerText()).includes('4天'));
     check(`${tag}：不吃热食 ⇒ 4天`, (await chip(page, '不吃热食').innerText()).includes('4天'));
-    const bgs = await page.$$eval('.dk-day.today .dk-hb', (els) => els.map((e) => getComputedStyle(e).backgroundColor));
+    const bgs = await page.$$eval('.dk-habits .dk-hb', (els) => els.map((e) => getComputedStyle(e).backgroundColor));
     check(`${tag}：几种状态底色互不相同（琥珀 / 红 / 绿 / 淡）`, new Set(bgs).size >= 4, bgs.join(' | '));
-    const box = await page.$eval('.dk-day.today', (d) => {
+    const box = await page.$eval('.dk-habits', (d) => {
       const r = d.getBoundingClientRect();
       return [...d.querySelectorAll('.dk-hb, .dk-hb-add')].every((c) => {
         const b = c.getBoundingClientRect();
         return b.left >= r.left - 0.5 && b.right <= r.right + 0.5;
       });
     });
-    check(`${tag}：胶囊都在今天卡内（自动换行，不溢出）`, box);
-    const stripH = await page.$eval('.dk-day.today .dk-habits', (e) => e.getBoundingClientRect().height);
-    check(`${tag}：5 个习惯最多占 ${w >= 1920 ? 2 : 3} 行`, stripH <= (w >= 1920 ? 2 : 3) * 28, String(Math.round(stripH)));
+    check(`${tag}：胶囊都在习惯条内（不溢出）`, box);
+    const stripH = await page.$eval('.dk-habits', (e) => e.getBoundingClientRect().height);
+    check(`${tag}：5 个习惯一行放下（条高 ≤ 44px）`, stripH <= 44, String(Math.round(stripH)));
     const overflow = await page.evaluate(() => Math.max(document.documentElement.scrollWidth - innerWidth, ...[...document.querySelectorAll('.dk-board')].map((e) => e.scrollWidth - e.clientWidth)));
     check(`${tag}：无横向溢出`, overflow <= 0, String(overflow));
     const say = await page.locator('.dk-h-say').innerText();
     check(`${tag}：头部不再有「紧急」「年度计划」两个药丸`, !/紧急|年度计划/.test(say), say.replace(/\n/g, ' '));
     await page.screenshot({ path: `${OUT}/habits-week-${theme}-${w}.png` });
-    const card = await page.locator('.dk-day.today').boundingBox();
-    await page.screenshot({ path: `${OUT}/habits-today-${theme}-${w}.png`, clip: { x: card.x - 4, y: card.y - 4, width: card.width + 8, height: Math.min(card.height + 8, 300) } });
+    const bar = await page.locator('.dk-habits').boundingBox();
+    await page.screenshot({ path: `${OUT}/habits-bar-${theme}-${w}.png`, clip: { x: 0, y: bar.y - 60, width: w, height: bar.height + 60 } });
     await ctx.close();
   }
 }
@@ -172,7 +176,7 @@ for (const theme of ['dark', 'light']) {
   check('保存锚点', (await page.evaluate(() => window.__store.getState().habits.h1.cue)) === '晚上刷完牙后');
 
   // ＋ 新建
-  await page.locator('.dk-day.today .dk-hb-add').click();
+  await page.locator('.dk-habits .dk-hb-add').click();
   check('点 ＋ 打开新建习惯', await page.locator('.dk-pop.dk-ed', { hasText: '新建日常习惯' }).isVisible());
   await page.keyboard.type('饭后散步');
   await page.locator('.dk-hb-icons button', { hasText: '🚶' }).click();
@@ -200,7 +204,7 @@ for (const theme of ['dark', 'light']) {
 // ── 没有习惯时：只有一个淡淡的「＋ 日常习惯」 ──
 {
   const { ctx, page } = await open('light', 1440, 900, { withHabits: false });
-  check('没有习惯 ⇒ 只显示「＋ 日常习惯」', (await page.locator('.dk-day.today .dk-hb-add.empty').innerText()).includes('日常习惯') && (await page.locator('.dk-hb').count()) === 0);
+  check('没有习惯 ⇒ 只显示「＋ 日常习惯」', (await page.locator('.dk-habits .dk-hb-add.empty').innerText()).includes('日常习惯') && (await page.locator('.dk-hb').count()) === 0);
   await ctx.close();
 }
 
