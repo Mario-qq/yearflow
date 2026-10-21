@@ -187,10 +187,21 @@ export default function App() {
       <DesktopBridge />
       <div className="flex h-full flex-col">
         <header
-          className="flex h-12 shrink-0 items-center gap-4 border-b px-4"
-          style={{ borderColor: 'var(--border-default)', background: 'var(--bg-panel)' }}
+          className="app-header glass-chrome relative z-30 flex h-12 shrink-0 items-center gap-4 border-b px-4"
+          style={{ borderColor: 'var(--glass-border)' }}
         >
-          <span className="font-semibold" style={{ fontSize: 'var(--font-16)' }}>
+          <span className="flex items-center gap-2 font-semibold" style={{ fontSize: 'var(--font-16)', letterSpacing: '-0.01em' }}>
+            <span
+              aria-hidden
+              className="inline-block"
+              style={{
+                width: 'var(--space-3)',
+                height: 'var(--space-3)',
+                borderRadius: 'var(--radius-sm)',
+                background: 'linear-gradient(135deg, var(--accent), var(--goal-7))',
+                boxShadow: '0 0 12px color-mix(in srgb, var(--accent) 55%, transparent)',
+              }}
+            />
             YearFlow
           </span>
           <nav className="flex items-center gap-1 max-md:hidden">

@@ -37,7 +37,7 @@ export function BulkBar() {
 
   return (
     <div
-      className="fixed left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 px-4 py-2"
+      className="glass-float float-in fixed left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 px-4 py-2"
       style={{
         bottom: MINIMAP_H + 12,
         background: 'var(--bg-raised)',

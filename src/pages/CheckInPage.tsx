@@ -197,7 +197,12 @@ export default function CheckInPage() {
       >
         <div
           className="h-full"
-          style={{ width: `${yearPct}%`, background: 'var(--accent)', borderRadius: 999 }}
+          style={{
+            width: `${yearPct}%`,
+            background: 'linear-gradient(90deg, color-mix(in srgb, var(--accent) 55%, var(--goal-7)), var(--accent))',
+            boxShadow: '0 0 8px color-mix(in srgb, var(--accent) 55%, transparent)',
+            borderRadius: 999,
+          }}
         />
       </div>
 

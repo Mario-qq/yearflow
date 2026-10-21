@@ -124,7 +124,7 @@ export function GoalIconPicker() {
   return (
     <div
       ref={ref}
-      className="fixed z-50 flex flex-col p-2"
+      className="glass-float float-in fixed z-50 flex flex-col p-2"
       style={{
         left: x,
         top: y,

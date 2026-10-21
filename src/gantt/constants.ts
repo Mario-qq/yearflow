@@ -38,7 +38,9 @@ export const HEAT_H = 3; // 热度条高度（紧贴 bar 底）
 export const HEAT_MODE_THRESHOLD = 10;
 
 /** bar 外观（SPEC 4.4） */
-export const BAR_REMAINDER_ALPHA = 25; // 右侧剩余段透明度 %
+export const BAR_REMAINDER_ALPHA = 14; // 右侧剩余段底色透明度 %（淡底 + 目标色细边，深色下不发浑）
+export const BAR_REMAINDER_EDGE_ALPHA = 42; // 剩余段目标色内描边透明度 %
+export const BAR_FILL_SHEEN = 86; // 已完成段渐变顶端：目标色占比 %（其余兑白），做出胶囊光泽
 export const BAR_LABEL_PAD = 6; // bar 内/外标签水平内边距
 export const BAR_LABEL_FONT = 12; // 标签字号（textWidth 测量用）
 export const BEHIND_BADGE = 7; // 落后警示角标（右上角三角）边长
@@ -100,6 +102,7 @@ export const DUR_DROP_MS = 120;
 
 /** 今日线 */
 export const TODAY_LINE_W = 2;
+export const TODAY_LINE_GLOW = 8; // 今日线两侧柔光半径 px
 /** 表头今天日期的主色圆底直径 */
 export const TODAY_BADGE_D = 18;
 

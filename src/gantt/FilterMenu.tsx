@@ -70,7 +70,7 @@ export function FilterMenu() {
 
       {open && (
         <div
-          className="absolute left-0 top-full z-50 mt-1 py-1"
+          className="glass-float float-in absolute left-0 top-full z-50 mt-1 py-1"
           style={{
             width: 188,
             background: 'var(--bg-raised)',

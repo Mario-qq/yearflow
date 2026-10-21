@@ -41,14 +41,13 @@ export function ShortcutHelp({ open, onClose }: { open: boolean; onClose: () => 
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.25)' }}
+      className="scrim fixed inset-0 z-50 flex items-center justify-center"
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className="w-full overflow-hidden"
+        className="glass-float float-in w-full overflow-hidden"
         style={{
           maxWidth: 460,
           background: 'var(--bg-raised)',

@@ -363,7 +363,7 @@ export function GanttContextMenu() {
   return (
     <div
       ref={ref}
-      className="fixed z-50 py-1"
+      className="glass-float float-in fixed z-50 py-1"
       style={{
         left: x,
         top: y,

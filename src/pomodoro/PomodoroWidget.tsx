@@ -41,9 +41,9 @@ export function PomodoroWidget() {
 /** 结算对话（§5.5 第 4 行）：失联超过 90 秒且未到点时唯一会打扰用户的地方 */
 function AskDialog({ ask }: { ask: AskState }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.25)' }}>
+    <div className="scrim fixed inset-0 z-50 flex items-center justify-center">
       <div
-        className="flex w-80 flex-col gap-2 border p-4"
+        className="glass-float float-in flex w-80 flex-col gap-2 border p-4"
         style={{
           borderColor: 'var(--border-default)',
           borderRadius: 'var(--radius-lg)',

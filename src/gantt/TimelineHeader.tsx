@@ -42,7 +42,8 @@ function DayCell({ cell, wide }: { cell: HeaderCell; wide: boolean }) {
         height: TODAY_BADGE_D,
         lineHeight: `${TODAY_BADGE_D}px`,
         borderRadius: '50%',
-        background: 'var(--accent)',
+        background: 'linear-gradient(180deg, color-mix(in srgb, var(--accent) 80%, white), var(--accent))',
+        boxShadow: '0 0 0 3px var(--accent-soft), 0 2px 8px -1px color-mix(in srgb, var(--accent) 60%, transparent)',
         textAlign: 'center',
       }
     : { lineHeight: '1.1' };
@@ -210,6 +211,7 @@ export const TimelineHeader = memo(function TimelineHeader({
             color: 'var(--text-on-accent)',
             background: 'var(--danger)',
             borderRadius: 'var(--radius-sm)',
+            boxShadow: '0 0 10px color-mix(in srgb, var(--danger) 55%, transparent)',
           }}
         >
           今

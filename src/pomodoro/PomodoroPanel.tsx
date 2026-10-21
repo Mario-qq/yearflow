@@ -98,7 +98,7 @@ export function PomodoroPanel({
 
   return (
     <div
-      className="absolute right-0 z-50 mt-1 flex flex-col gap-3 border p-3"
+      className="glass-float float-in absolute right-0 z-50 mt-1 flex flex-col gap-3 border p-3"
       style={{
         top: '100%',
         width: PANEL_W,

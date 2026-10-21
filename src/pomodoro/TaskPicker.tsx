@@ -203,7 +203,7 @@ export function TaskPicker({
 
       {open && (
         <div
-          className="absolute right-0 left-0 z-50 flex flex-col border p-2"
+          className="glass-float float-in absolute right-0 left-0 z-50 flex flex-col border p-2"
           style={{
             top: drop.up ? undefined : '100%',
             bottom: drop.up ? '100%' : undefined,

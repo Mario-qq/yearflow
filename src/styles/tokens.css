@@ -79,9 +79,34 @@
   --radius-lg: 10px;  /* 面板/浮层 */
   --radius-xl: 18px;  /* 年报海报面板（唯一用途） */
 
-  /* ── 阴影 ── */
-  --shadow-sm: 0 1px 2px rgba(16, 16, 24, 0.06), 0 1px 1px rgba(16, 16, 24, 0.04);
-  --shadow-lg: 0 8px 24px rgba(16, 16, 24, 0.12), 0 2px 6px rgba(16, 16, 24, 0.08);
+  /* ── 阴影（光从上方来：顶部 1px 内高光 + 多层柔阴影，靠光分层而不是靠描边） ── */
+  --shadow-sm:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 1px 2px rgba(16, 16, 24, 0.05),
+    0 2px 6px -2px rgba(16, 16, 24, 0.05);
+  --shadow-md:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 1px 2px rgba(16, 16, 24, 0.05),
+    0 6px 16px -6px rgba(16, 16, 24, 0.1);
+  --shadow-lg:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 1px 2px rgba(16, 16, 24, 0.06),
+    0 6px 14px -4px rgba(16, 16, 24, 0.08), 0 18px 40px -12px rgba(16, 16, 24, 0.18);
+
+  /* ── 材质（克制的 Linear 式透明）──────────────────────────────────────
+     三层：环境光（应用最底）→ 底座（卡片/网格，不透明）→ 玻璃（顶栏等常驻框架 / 浮层）。
+     玻璃只给「框架」和「浮起来的东西」，信息密集区（甘特网格、卡片正文）保持不透明以保可读性。
+     系统开了「减少透明度」时在文件末尾整体退回不透明。 */
+  --glass-chrome: rgba(255, 255, 255, 0.72);         /* 顶栏 / 甘特表头等常驻框架 */
+  --glass-float: rgba(255, 255, 255, 0.8);           /* 浮层：命令面板、菜单、popover、抽屉、弹窗 */
+  --glass-border: rgba(20, 20, 40, 0.09);            /* 玻璃边：比实色边更轻 */
+  --glass-blur-chrome: blur(20px) saturate(160%);
+  --glass-blur-float: blur(24px) saturate(170%);
+  --scrim: rgba(18, 18, 30, 0.2);                    /* 弹窗遮罩 */
+  --scrim-blur: blur(6px);
+  /* 环境光：页面顶部两团极淡的光（主色偏左、青偏右），毛玻璃才有东西可透 */
+  --ambient:
+    radial-gradient(900px 480px at 8% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%),
+    radial-gradient(800px 420px at 94% 0%, color-mix(in srgb, var(--goal-7) 9%, transparent), transparent 70%);
+  /* 「今天」光晕：今日线 / 今天列 / 今天格的统一高光 */
+  --today-glow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), 0 8px 28px -10px color-mix(in srgb, var(--accent) 45%, transparent);
 
   /* ── 间距（4px 基准） ── */
   --space-1: 4px;
@@ -162,8 +187,36 @@
   --danger: #e05d52;
   --info: #57a8e5;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 1px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow-sm:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 1px 2px rgba(0, 0, 0, 0.35),
+    0 2px 6px -2px rgba(0, 0, 0, 0.3);
+  --shadow-md:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.35),
+    0 8px 20px -8px rgba(0, 0, 0, 0.55);
+  --shadow-lg:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 1px 2px rgba(0, 0, 0, 0.4),
+    0 8px 18px -6px rgba(0, 0, 0, 0.45), 0 24px 56px -16px rgba(0, 0, 0, 0.7);
+
+  --glass-chrome: rgba(22, 22, 28, 0.72);
+  --glass-float: rgba(32, 32, 40, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --scrim: rgba(4, 4, 10, 0.45);
+  --ambient:
+    radial-gradient(900px 480px at 8% 0%, color-mix(in srgb, var(--accent) 17%, transparent), transparent 70%),
+    radial-gradient(800px 420px at 94% 0%, color-mix(in srgb, var(--goal-7) 10%, transparent), transparent 70%);
 
   color-scheme: dark;
+}
+
+/* 系统「减少透明度」：玻璃全部退回实色（模糊在 index.css 的 .glass-* 里一起关掉） */
+@media (prefers-reduced-transparency: reduce) {
+  :root,
+  :root[data-theme='dark'] {
+    --glass-chrome: var(--bg-panel);
+    --glass-float: var(--bg-raised);
+    --glass-border: var(--border-default);
+    --glass-blur-chrome: none;
+    --glass-blur-float: none;
+    --scrim-blur: none;
+  }
 }

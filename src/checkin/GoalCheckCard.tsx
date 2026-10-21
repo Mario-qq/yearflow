@@ -73,11 +73,13 @@ export function StatusButtons({
             className={`min-h-9 cursor-pointer px-3 transition-colors max-md:min-h-11 max-md:px-2.5${compact ? ' px-2.5' : ''}`}
             style={{
               fontSize: 'var(--font-13)',
-              border: `1px solid ${active ? color : 'var(--border-default)'}`,
+              // 「完成」是主动作：闲置时就带一点成功色的边与字，三键不再一样重
+              border: `1px solid ${active ? color : status === 'done' ? `color-mix(in srgb, ${color} 45%, var(--border-default))` : 'var(--border-default)'}`,
               borderRadius: 'var(--radius-md)',
               background: active ? `color-mix(in srgb, ${color} 14%, transparent)` : 'var(--bg-panel)',
-              color: active ? color : 'var(--text-secondary)',
-              fontWeight: active ? 500 : 400,
+              color: active || status === 'done' ? color : 'var(--text-secondary)',
+              fontWeight: active || status === 'done' ? 500 : 400,
+              boxShadow: active ? `0 0 0 3px color-mix(in srgb, ${color} 14%, transparent)` : 'var(--shadow-sm)',
             }}
             title={label}
           >
@@ -354,8 +356,10 @@ export function GoalCheckCard({
       style={{
         borderColor: 'var(--border-subtle)',
         borderRadius: 'var(--radius-lg)',
-        background: 'var(--bg-panel)',
+        // 左侧目标色晕开一点，卡片自带身份色
+        background: `linear-gradient(90deg, color-mix(in srgb, ${goalColor(goal.color)} 8%, var(--bg-panel)), var(--bg-panel) 45%)`,
         borderLeft: `3px solid ${goalColor(goal.color)}`,
+        boxShadow: 'var(--shadow-sm)',
       }}
     >
       <div className="flex items-center gap-3 p-3">

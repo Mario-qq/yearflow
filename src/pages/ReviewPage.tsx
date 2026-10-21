@@ -25,6 +25,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
         borderColor: 'var(--border-subtle)',
         borderRadius: 'var(--radius-lg)',
         background: 'var(--bg-panel)',
+        boxShadow: 'var(--shadow-md)',
       }}
     >
       <h2 className="mb-3 font-medium" style={{ fontSize: 'var(--font-14)' }}>
@@ -277,7 +278,9 @@ export default function ReviewPage() {
                           className="absolute inset-y-0 left-0"
                           style={{
                             width: `${s.rate}%`,
-                            background: goalColor(goal.color),
+                            // 与甘特 bar 同一套胶囊光泽：上亮下实 + 顶部高光
+                            background: `linear-gradient(180deg, color-mix(in srgb, ${goalColor(goal.color)} 86%, white), ${goalColor(goal.color)})`,
+                            boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.22)',
                             borderRadius: 'var(--radius-sm)',
                             transition: 'width var(--dur-zoom) var(--ease)',
                           }}

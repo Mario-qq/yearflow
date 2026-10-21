@@ -42,7 +42,7 @@ function ColumnMenu({ anchor, onClose }: { anchor: { x: number; y: number }; onC
   return (
     <div
       ref={ref}
-      className="fixed z-50 py-1"
+      className="glass-float float-in fixed z-50 py-1"
       style={{
         left: anchor.x,
         top: anchor.y,

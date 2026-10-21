@@ -11,7 +11,7 @@ export function Toasts() {
       {items.map((t) => (
         <div
           key={t.id}
-          className={t.action ? 'pointer-events-auto flex items-center gap-3' : undefined}
+          className={t.action ? 'glass-float float-in pointer-events-auto flex items-center gap-3' : 'glass-float float-in'}
           style={{
             padding: '6px 12px',
             fontSize: 'var(--font-12)',

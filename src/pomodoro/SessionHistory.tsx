@@ -194,8 +194,7 @@ export function SessionHistory({ open, onClose }: { open: boolean; onClose: () =
    */
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0, 0, 0, 0.35)' }}
+      className="scrim fixed inset-0 z-50 flex items-center justify-center"
       onClick={onClose}
       onKeyDown={(e) => {
         if (e.key === 'Escape') onClose();
@@ -203,7 +202,7 @@ export function SessionHistory({ open, onClose }: { open: boolean; onClose: () =
       role="presentation"
     >
       <div
-        className="flex max-h-[80vh] w-[560px] max-w-[calc(100vw-32px)] flex-col gap-3 border p-4"
+        className="glass-float float-in flex max-h-[80vh] w-[560px] max-w-[calc(100vw-32px)] flex-col gap-3 border p-4"
         style={{
           borderColor: 'var(--border-default)',
           borderRadius: 'var(--radius-lg)',

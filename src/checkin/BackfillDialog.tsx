@@ -67,8 +67,7 @@ export function BackfillDialog({ open, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0, 0, 0, 0.35)' }}
+      className="scrim fixed inset-0 z-50 flex items-center justify-center"
       onClick={onClose}
       onKeyDown={(e) => {
         if (e.key === 'Escape') onClose();
@@ -76,7 +75,7 @@ export function BackfillDialog({ open, onClose }: Props) {
       role="presentation"
     >
       <div
-        className="flex w-96 max-w-[calc(100vw-32px)] flex-col gap-3 border p-4"
+        className="glass-float float-in flex w-96 max-w-[calc(100vw-32px)] flex-col gap-3 border p-4"
         style={{
           borderColor: 'var(--border-default)',
           borderRadius: 'var(--radius-lg)',

@@ -164,14 +164,14 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
   return (
     <div
-      className="fixed inset-0 z-50 flex justify-center"
-      style={{ background: 'rgba(0,0,0,0.25)', paddingTop: '15vh' }}
+      className="scrim fixed inset-0 z-50 flex justify-center"
+      style={{ paddingTop: '15vh' }}
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className="flex h-fit w-full flex-col overflow-hidden"
+        className="glass-float float-in flex h-fit w-full flex-col overflow-hidden"
         style={{
           maxWidth: 520,
           background: 'var(--bg-raised)',

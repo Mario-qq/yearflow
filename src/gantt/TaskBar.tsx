@@ -16,6 +16,8 @@ import {
   BAR_H,
   BAR_LABEL_PAD,
   BAR_REMAINDER_ALPHA,
+  BAR_REMAINDER_EDGE_ALPHA,
+  BAR_FILL_SHEEN,
   BAR_TOP,
   BEHIND_BADGE,
   DEP_HANDLE_D,
@@ -59,6 +61,8 @@ export const TaskBar = memo(function TaskBar({
   const solid = goalColor(color);
   const fill =
     task.status === 'done' ? `color-mix(in srgb, ${solid} 55%, var(--bg-panel))` : solid;
+  // 剩余段：目标色细内边（替代整块半透明叠深底，深色下不发浑）
+  const edge = `inset 0 0 0 1px color-mix(in srgb, ${solid} ${BAR_REMAINDER_EDGE_ALPHA}%, transparent)`;
   const label = task.status === 'done' ? `${task.name} ✓` : task.name;
   const labelW = barLabelWidth(label);
   const inside = labelW + BAR_LABEL_PAD * 2 <= width;
@@ -79,12 +83,12 @@ export const TaskBar = memo(function TaskBar({
           borderRadius: 'var(--radius-md)',
           background: goalColorAlpha(color, BAR_REMAINDER_ALPHA),
           boxShadow: dragging
-            ? 'inset 0 0 0 1px var(--bar-inner-stroke), var(--shadow-lg)'
+            ? `${edge}, var(--shadow-lg)`
             : selected
-              ? 'inset 0 0 0 1px var(--bar-inner-stroke), 0 0 0 2px var(--accent), 0 0 0 4px var(--accent-soft)'
+              ? `${edge}, 0 0 0 2px var(--accent), 0 0 0 4px var(--accent-soft)`
               : linked
-                ? `inset 0 0 0 1px var(--bar-inner-stroke), 0 0 0 2px ${solid}`
-                : 'inset 0 0 0 1px var(--bar-inner-stroke)',
+                ? `${edge}, 0 0 0 2px ${solid}`
+                : edge,
           zIndex: dragging ? 10 : undefined,
           pointerEvents: 'auto',
           touchAction: 'none',
@@ -102,7 +106,12 @@ export const TaskBar = memo(function TaskBar({
       >
         <div
           className="absolute bottom-0 left-0 top-0"
-          style={{ width: `${tg.effectiveProgress}%`, background: fill }}
+          style={{
+            width: `${tg.effectiveProgress}%`,
+            // 上亮下实 + 顶部 1px 高光：胶囊光泽
+            background: `linear-gradient(180deg, color-mix(in srgb, ${fill} ${BAR_FILL_SHEEN}%, white), ${fill})`,
+            boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.22), inset 0 0 0 1px var(--bar-inner-stroke)',
+          }}
         />
         {task.status === 'paused' && (
           <div

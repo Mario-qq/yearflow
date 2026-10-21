@@ -9,7 +9,7 @@
   --dk-gap: 8px; /* 日卡间距 */
   --dk-row-h: 30px; /* 事项行高 */
   --dk-card-radius: 14px; /* 统计卡、浮层卡片 */
-  --dk-shadow-md: 0 4px 14px rgba(16, 16, 24, 0.08), 0 1px 3px rgba(16, 16, 24, 0.06);
+  --dk-shadow-md: var(--shadow-md);
   --dk-mover-w: 300px; /* 「挪到…」小月历宽（constants.MOVER_W） */
   --dk-drawer-w: 320px; /* 待处理抽屉宽 */
   --dk-rail-w: 40px; /* 收起的周末窄条（constants.RAIL_W） */
@@ -19,9 +19,6 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-:root[data-theme='dark'] .dk {
-  --dk-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .dk button {
@@ -54,9 +51,12 @@
   border-color: var(--border-strong);
 }
 .dk-btn.primary {
-  background: var(--accent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, white), var(--accent));
   border-color: var(--accent);
   color: var(--text-on-accent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 2px 8px -2px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 .dk-btn.primary:hover {
   filter: brightness(1.07);
@@ -282,7 +282,7 @@
   background: var(--bg-panel);
   border: 1px solid var(--border-subtle);
   border-radius: var(--dk-card-radius);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
 }
 .dk-stat {
   padding: 7px 14px;
@@ -443,6 +443,7 @@
   background: var(--bg-panel);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
   min-width: 0;
   min-height: calc(100% - 4px);
   display: flex;
@@ -454,12 +455,15 @@
 }
 .dk-day.weekend {
   background: color-mix(in srgb, var(--bg-panel) 70%, var(--bg-base));
+  box-shadow: none;
 }
+/* 今天：极淡主色底（实色，sticky 日头 inherit 也对得上）+ 主色细环 + 向下晕开的光 */
 .dk-day.today {
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 3%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
   box-shadow:
-    0 0 0 3px var(--accent-soft),
-    var(--shadow-sm);
+    var(--today-glow),
+    var(--shadow-md);
 }
 .dk-day.drop,
 .dk-mc.drop {
@@ -549,8 +553,13 @@
   border-radius: 2px;
   transition: width 0.3s var(--ease);
 }
+.dk-day.today .dk-dh-prog {
+  height: 3px;
+  background: var(--accent-soft);
+}
 .dk-day.today .dk-dh-prog i {
-  background: var(--accent);
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--goal-7)));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 .dk-day.past .dk-dh-prog i {
   background: var(--success);
@@ -1204,8 +1213,10 @@
   gap: 8px;
   padding: 0 12px 0 14px;
   border-radius: 999px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-default);
+  background: var(--glass-float);
+  -webkit-backdrop-filter: var(--glass-blur-float);
+  backdrop-filter: var(--glass-blur-float);
+  border: 1px solid var(--glass-border);
   box-shadow: var(--shadow-lg);
   font-size: var(--font-13);
   color: var(--text-secondary);
@@ -1221,7 +1232,8 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: var(--accent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 85%, white), var(--accent));
+  box-shadow: 0 2px 8px -1px color-mix(in srgb, var(--accent) 60%, transparent);
   color: var(--text-on-accent);
   display: grid;
   place-items: center;
@@ -1234,8 +1246,10 @@
   bottom: 18px;
   z-index: 16;
   width: min(460px, calc(100% - 40px));
-  background: var(--bg-raised);
-  border: 1px solid var(--border-default);
+  background: var(--glass-float);
+  -webkit-backdrop-filter: var(--glass-blur-float);
+  backdrop-filter: var(--glass-blur-float);
+  border: 1px solid var(--glass-border);
   border-radius: var(--dk-card-radius);
   box-shadow: var(--shadow-lg);
   transform-origin: bottom right;
@@ -1309,8 +1323,10 @@
   position: fixed;
   z-index: 45;
   width: var(--dk-mover-w);
-  background: var(--bg-raised);
-  border: 1px solid var(--border-default);
+  background: var(--glass-float);
+  -webkit-backdrop-filter: var(--glass-blur-float);
+  backdrop-filter: var(--glass-blur-float);
+  border: 1px solid var(--glass-border);
   border-radius: var(--dk-card-radius);
   box-shadow: var(--shadow-lg);
   padding: 12px 12px 10px;
@@ -1437,7 +1453,9 @@
   bottom: 0;
   width: var(--dk-drawer-w);
   z-index: 20;
-  background: var(--bg-raised);
+  background: var(--glass-float);
+  -webkit-backdrop-filter: var(--glass-blur-float);
+  backdrop-filter: var(--glass-blur-float);
   border-left: 1px solid var(--border-default);
   box-shadow: var(--shadow-lg);
   display: flex;
@@ -1493,8 +1511,10 @@
   gap: 2px;
   padding: 5px;
   border-radius: var(--dk-card-radius);
-  background: var(--bg-raised);
-  border: 1px solid var(--border-default);
+  background: var(--glass-float);
+  -webkit-backdrop-filter: var(--glass-blur-float);
+  backdrop-filter: var(--glass-blur-float);
+  border: 1px solid var(--glass-border);
   box-shadow: var(--shadow-lg);
   animation: dk-rise 0.16s var(--ease);
 }
@@ -1535,8 +1555,10 @@
 .dk-pop {
   position: fixed;
   z-index: 40;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-default);
+  background: var(--glass-float);
+  -webkit-backdrop-filter: var(--glass-blur-float);
+  backdrop-filter: var(--glass-blur-float);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
 }
@@ -2239,7 +2261,9 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: color-mix(in srgb, var(--bg-base) 55%, transparent);
+  background: var(--scrim);
+  -webkit-backdrop-filter: var(--scrim-blur);
+  backdrop-filter: var(--scrim-blur);
   animation: dk-fade 0.16s var(--ease);
 }
 @keyframes dk-fade {
@@ -2251,8 +2275,10 @@
   width: min(640px, 100%);
   max-height: min(820px, calc(100vh - 48px));
   overflow-y: auto;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-default);
+  background: var(--glass-float);
+  -webkit-backdrop-filter: var(--glass-blur-float);
+  backdrop-filter: var(--glass-blur-float);
+  border: 1px solid var(--glass-border);
   border-radius: var(--dk-card-radius);
   box-shadow: var(--shadow-lg);
   padding: 16px 16px 12px;
@@ -2409,7 +2435,10 @@
   align-items: center;
   gap: 4px;
   padding: 8px var(--dk-pad) 10px;
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--glass-border);
+  background: var(--glass-chrome);
+  -webkit-backdrop-filter: var(--glass-blur-chrome);
+  backdrop-filter: var(--glass-blur-chrome);
 }
 .dk-habits-k {
   font-size: var(--font-11);

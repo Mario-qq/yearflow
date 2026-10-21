@@ -131,7 +131,7 @@ export function CheckinPopover() {
   return createPortal(
     <div
       ref={ref}
-      className="fixed z-50 flex w-64 flex-col gap-2 border p-3"
+      className="glass-float float-in fixed z-50 flex w-64 flex-col gap-2 border p-3"
       style={{
         left: pos?.left ?? anchor.x,
         top: pos?.top ?? anchor.y,

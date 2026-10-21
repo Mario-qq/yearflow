@@ -67,7 +67,7 @@ export function TaskDrawer() {
 
   return (
     <div
-      className="fixed right-0 z-40 flex flex-col"
+      className="glass-float fixed right-0 z-40 flex flex-col"
       style={{
         top: 48,
         bottom: 0,

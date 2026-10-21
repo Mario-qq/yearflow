@@ -56,7 +56,7 @@ export const BarTooltip = memo(function BarTooltip({ anchor, task, tg, streak, f
 
   return createPortal(
     <div
-      className="tnum pointer-events-none fixed z-50"
+      className="glass-float tnum pointer-events-none fixed z-50"
       style={{
         left,
         top,

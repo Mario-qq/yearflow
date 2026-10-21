@@ -38,8 +38,9 @@ export const DayStrip = memo(function DayStrip({ days, selected, today, onSelect
             className="flex min-h-11 min-w-11 flex-1 cursor-pointer flex-col items-center gap-0.5 py-1.5 transition-colors"
             style={{
               borderRadius: 'var(--radius-md)',
-              border: `1px solid ${isSelected ? 'var(--accent)' : 'transparent'}`,
+              border: `1px solid ${isSelected ? 'color-mix(in srgb, var(--accent) 60%, transparent)' : 'transparent'}`,
               background: isSelected ? 'var(--accent-soft)' : 'transparent',
+              boxShadow: isSelected ? 'var(--today-glow)' : undefined,
             }}
             title={date}
           >

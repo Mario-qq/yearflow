@@ -24,7 +24,8 @@ body,
 
 body {
   margin: 0;
-  background: var(--bg-base);
+  /* 环境光固定在视口上，不随内容滚动 */
+  background: var(--ambient) fixed, var(--bg-base);
   color: var(--text-primary);
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
@@ -45,6 +46,61 @@ button {
   color: inherit;
 }
 
+/* ── 材质类（令牌见 tokens.css「材质」）── */
+/* 常驻框架：顶栏、甘特表头 */
+.glass-chrome {
+  background: var(--glass-chrome);
+  -webkit-backdrop-filter: var(--glass-blur-chrome);
+  backdrop-filter: var(--glass-blur-chrome);
+}
+/* 顶栏底部的「光边」：主色 → 透明 → 青，替代死灰分隔线 */
+.app-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 45%, transparent),
+    transparent 35%,
+    transparent 65%,
+    color-mix(in srgb, var(--goal-7) 35%, transparent)
+  );
+}
+/* 浮层：菜单、popover、抽屉、命令面板、弹窗卡片。用 !important 盖过各组件 inline 的实色底与阴影 */
+.glass-float {
+  background: var(--glass-float) !important;
+  -webkit-backdrop-filter: var(--glass-blur-float);
+  backdrop-filter: var(--glass-blur-float);
+  border-color: var(--glass-border) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+/* 弹窗遮罩：压暗 + 轻模糊，让背景退后 */
+.scrim {
+  background: var(--scrim) !important;
+  -webkit-backdrop-filter: var(--scrim-blur);
+  backdrop-filter: var(--scrim-blur);
+  animation: scrim-in var(--dur-drawer) var(--ease);
+}
+/* 浮层弹出：轻微放大 + 淡入（功能性：告诉你它从哪层冒出来） */
+.float-in {
+  animation: float-in 140ms var(--ease);
+  transform-origin: top center;
+}
+@keyframes float-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+}
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+}
 /* 定位闪烁（左栏点击定位 bar / 命令面板跳转）：outline 脉冲两次，不与 box-shadow 描边打架 */
 @keyframes bar-flash {
   0%,

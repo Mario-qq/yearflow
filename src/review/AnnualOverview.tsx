@@ -35,6 +35,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
         borderColor: 'var(--border-subtle)',
         borderRadius: 'var(--radius-lg)',
         background: 'var(--bg-panel)',
+        boxShadow: 'var(--shadow-md)',
       }}
     >
       <h2 className="mb-3 font-medium" style={{ fontSize: 'var(--font-14)' }}>
@@ -58,7 +59,7 @@ function HoursTooltip({
   if (!active || !payload?.length) return null;
   return (
     <div
-      className="border px-3 py-2"
+      className="glass-float border px-3 py-2"
       style={{
         borderColor: 'var(--border-default)',
         borderRadius: 'var(--radius-md)',
