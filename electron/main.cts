@@ -625,6 +625,8 @@ function createMainWindow(hidden = false): BrowserWindow {
     // 有亚克力时窗底必须全透明，否则系统材质被这层底色盖住；没有时与 index.html 的 theme-color 一致，避免开窗闪白
     backgroundColor: ACRYLIC ? '#00000000' : '#101014',
     ...(ACRYLIC ? { backgroundMaterial: 'acrylic' as const } : {}),
+    // 菜单栏默认收起，玻璃一直通到标题栏下沿；按 Alt 临时呼出，菜单里的快捷键照常生效
+    autoHideMenuBar: true,
     title: 'YearFlow — 年度计划',
     webPreferences: {
       preload: PRELOAD,

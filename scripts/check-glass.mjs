@@ -231,6 +231,8 @@ const translucent = (c) => /\/\s*0?\.\d+\)$|,\s*0?\.\d+\)$/.test(c ?? '');
   await page.goto(`${BASE}/gantt`);
   await sleep(800);
   check('桌面：甘特图仍是实色（不透明）', (await glassState(page)).glass === null);
+  const menu = await app.evaluate(() => ({ visible: globalThis.__main.isMenuBarVisible(), autoHide: globalThis.__main.isMenuBarAutoHide() }));
+  check('桌面：顶部菜单栏默认收起（Alt 呼出）', !menu.visible && menu.autoHide, JSON.stringify(menu));
   await app.evaluate(() => {
     globalThis.__main.setAlwaysOnTop(false);
     globalThis.__back?.close();

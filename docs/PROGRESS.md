@@ -1101,3 +1101,7 @@ Document PiP 与主页面**同一个 JS realm**，所以旧实现是 `createPort
 **验收**：`tsc -b` + `oxlint` 干净；vitest 362 全绿。新增 `scripts/check-glass.mjs` 15 项全过：网页版图片模式深浅、甘特图不受影响、开关、滑块写 `--gl-a`；桌面版（Electron 独立 userData）亚克力模式深浅、nativeTheme 跟主题、**失焦壁纸接住**、甘特图仍实色 —— 截图用 desktopCapturer 截系统合成后的真实画面（`screenshots/glass/`，本机不提交——带真实桌面与任务栏；含「窗后是壁纸」与「窗后是别的窗口」两种）。`electron:build` 后 `desktop-smoke` 全过。
 
 **负责人要做的**：右键托盘「退出」后重开桌面版；想调透明程度去 设置 → 外观。
+
+### 2026-10-28 补：收起顶部菜单栏
+
+负责人拍板：主窗 `autoHideMenuBar: true`，File / Edit / View / Window 默认收起，玻璃直通标题栏下沿；按 Alt 临时呼出，菜单快捷键（刷新、缩放、开发者工具）照常生效。`check-glass.mjs` 加一项断言菜单栏默认不可见且为自动隐藏（16 项全过），`electron:build` 后 `desktop-smoke` 全过。
