@@ -1092,7 +1092,7 @@ Document PiP 与主页面**同一个 JS realm**，所以旧实现是 `createPort
 
 ## 2026-10-27 工作台透明（系统真亚克力）
 
-负责人：上一轮「渐变式」美化不对，要的是**真的透明**；先只做工作台，开工前先确认效果。流程：在真实工作台上注入三套方案出效果图（A 磨砂玻璃卡 / B 亚克力窗 / C 云母，`docs/design/glass/compare.png`）→ 负责人选 B → 在负责人电脑上跑 Electron 实机原型截真实合成画面（`docs/design/glass/real-*.png`），暴露两个问题后再定稿：① 深色主题下亚克力被系统浅色模式染成灰脏 ② 失焦时 Windows 把亚克力换成实色。负责人确认：系统真亚克力 + 失焦用桌面壁纸接住 + 设置里加通透程度滑块。
+负责人：上一轮「渐变式」美化不对，要的是**真的透明**；先只做工作台，开工前先确认效果。流程：在真实工作台上注入三套方案出效果图（A 磨砂玻璃卡 / B 亚克力窗 / C 云母，`screenshots/glass/design/compare.png`，本机不提交）→ 负责人选 B → 在负责人电脑上跑 Electron 实机原型截真实合成画面（`screenshots/glass/design/real-*.png`），暴露两个问题后再定稿：① 深色主题下亚克力被系统浅色模式染成灰脏 ② 失焦时 Windows 把亚克力换成实色。负责人确认：系统真亚克力 + 失焦用桌面壁纸接住 + 设置里加通透程度滑块。
 
 - **主进程**（`electron/main.cts`「工作台透明」）：主窗常驻 `backgroundMaterial: 'acrylic'`（Win11 22H2+，窗底全透明）；`nativeTheme.themeSource` 跟应用主题（镜像存 shell-prefs，开窗前就定好深浅）；读桌面壁纸 `TranscodedWallpaper` 缩到 1600 宽给页面；焦点 / 移动 / 拉伸时推送窗口在屏幕上的几何。
 - **渲染进程**：`components/GlassLayer.tsx` 只在工作台设 `<html data-glass>`（acrylic / image），其余页面一个像素不变；失焦时淡入一层按屏幕位置对齐、同样模糊着色的壁纸接住；网页版 / Win10 没有亚克力时用图垫底模拟。样式 `styles/glass.css`，令牌 tokens.css「工作台透明」（`--gl-*`，`--gl-a` 由滑块写入）。顶栏 + 头部 + 工具条连成一整块玻璃，字永远落在玻璃上；亚克力上再压一层随滑块变化的主题底色，窗后是白色浏览器时深色主题也不发灰。
