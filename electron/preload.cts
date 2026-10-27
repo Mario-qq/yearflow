@@ -12,6 +12,18 @@ interface ShellPrefsView {
   canAutoStart: boolean;
 }
 
+interface RectView {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+interface GlassGeomView {
+  active: boolean;
+  content: RectView;
+  display: RectView;
+}
+
 const api = {
   openPip: (): Promise<boolean> => ipcRenderer.invoke('pip:open'),
   closePip: (): Promise<boolean> => ipcRenderer.invoke('pip:close'),
@@ -91,6 +103,22 @@ const api = {
     const handler = (_e: unknown, info: Parameters<typeof cb>[0]): void => cb(info);
     ipcRenderer.on('pip:mode', handler);
     return () => ipcRenderer.off('pip:mode', handler);
+  },
+  /** 工作台透明：是否有系统亚克力 + 当前窗口几何（见 main.cts「工作台透明」） */
+  glassInfo: (): Promise<{ acrylic: boolean; geom: GlassGeomView | null }> => ipcRenderer.invoke('glass:info'),
+  /** 当前桌面壁纸（缩小后的 data URL），读不到为 null */
+  glassWallpaper: (): Promise<string | null> => ipcRenderer.invoke('glass:wallpaper'),
+  /** 应用主题偏好同步给系统亚克力（它按 nativeTheme 定深浅） */
+  glassTheme: (pref: 'light' | 'dark' | 'system'): Promise<void> => ipcRenderer.invoke('glass:theme', pref),
+  onGlassGeom: (cb: (g: GlassGeomView) => void): (() => void) => {
+    const handler = (_e: unknown, g: GlassGeomView): void => cb(g);
+    ipcRenderer.on('glass:geom', handler);
+    return () => ipcRenderer.off('glass:geom', handler);
+  },
+  onGlassWallpaperChanged: (cb: () => void): (() => void) => {
+    const handler = (): void => cb();
+    ipcRenderer.on('glass:wallpaper-changed', handler);
+    return () => ipcRenderer.off('glass:wallpaper-changed', handler);
   },
 };
 

@@ -10,6 +10,7 @@ import { isDesktop } from '../lib/desktop';
 import { PomodoroSettings } from '../pomodoro/PomodoroSettings';
 import { StudySetupForm } from '../desk/StudySetup';
 import { DesktopShellSection } from '../components/DesktopShellSection';
+import { GlassSection } from '../components/GlassSection';
 import '../desk/desk.css';
 import { buildBackupJSON, parseBackupJSON } from '../lib/backup';
 import { buildSeedBundle } from '../seed/seedData';
@@ -185,6 +186,9 @@ export default function SettingsPage() {
             </select>
             开始
           </label>
+        </div>
+        <div className="mt-3">
+          <GlassSection />
         </div>
       </Section>
 

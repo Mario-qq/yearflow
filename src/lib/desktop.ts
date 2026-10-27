@@ -44,6 +44,21 @@ export interface ShellPrefsView {
   canAutoStart: boolean;
 }
 
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+/** 工作台透明用的窗口几何（DIP）。active = 窗口有焦点（失焦时系统亚克力变实色，页面要用壁纸接住） */
+export interface GlassGeom {
+  active: boolean;
+  /** 页面内容区在屏幕上的位置 */
+  content: Rect;
+  /** 窗口所在显示器的整块区域：桌面壁纸按它铺 */
+  display: Rect;
+}
+
 export interface DesktopApi {
   openPip(): Promise<boolean>;
   closePip(): Promise<boolean>;
@@ -82,6 +97,14 @@ export interface DesktopApi {
    * 原生 hit-test 把鼠标判给「移动窗口」，:hover / onPointerEnter 一概不触发。
    */
   onPipHover(cb: (on: boolean) => void): () => void;
+  /** 工作台透明：acrylic = 主窗带系统亚克力（Win11 22H2+） */
+  glassInfo(): Promise<{ acrylic: boolean; geom: GlassGeom | null }>;
+  /** 当前桌面壁纸（缩小后的 JPEG data URL）；纯色背景 / 读不到为 null */
+  glassWallpaper(): Promise<string | null>;
+  /** 亚克力按系统的 nativeTheme 定深浅：应用切主题要同步过去 */
+  glassTheme(pref: 'light' | 'dark' | 'system'): Promise<void>;
+  onGlassGeom(cb: (g: GlassGeom) => void): () => void;
+  onGlassWallpaperChanged(cb: () => void): () => void;
 }
 
 export function desktop(): DesktopApi | null {

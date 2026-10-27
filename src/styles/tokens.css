@@ -105,6 +105,23 @@
   --ambient:
     radial-gradient(900px 480px at 8% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%),
     radial-gradient(800px 420px at 94% 0%, color-mix(in srgb, var(--goal-7) 9%, transparent), transparent 70%);
+  /* ── 工作台透明（styles/glass.css；--gl-a 由设置页「通透程度」写到 <html> 上）──────────
+     窗后是系统亚克力（或模拟它的模糊壁纸），面板只是半透明着色层，不再自己 blur。 */
+  --gl-a: 0.51;
+  --gl-card: rgb(255 255 255 / min(1, calc(var(--gl-a) + 0.1)));
+  --gl-card-strong: rgb(255 255 255 / min(1, calc(var(--gl-a) + 0.3)));
+  --gl-chrome: rgb(250 252 255 / calc(var(--gl-a) * 0.75));  /* 顶栏 + 头部 + 工具条那一整块 */
+  --gl-line: rgba(255, 255, 255, 0.6);                       /* 玻璃的亮边 */
+  --gl-line-strong: rgba(20, 30, 50, 0.14);                  /* 按钮 / 输入框边 */
+  --gl-hi: rgba(255, 255, 255, 0.85);                        /* 卡片顶部 1px 受光 */
+  --gl-drop: rgba(16, 24, 40, 0.18);                         /* 卡片投影 */
+  --gl-wall-tint: rgba(242, 245, 249, 0.45);                 /* 模拟亚克力：模糊壁纸上的着色 */
+  /* 亚克力上再压一层主题底色：窗后是白色浏览器时深色主题会被冲成中灰，字的对比度靠它兜住；随通透程度变化 */
+  --gl-base: rgb(246 248 251 / calc(var(--gl-a) * 0.35));
+  --gl-wall-blur: blur(64px) saturate(140%);
+  --gl-wall-bleed: -96px;                                    /* 模糊会把边缘吃成透明：图往外多铺一圈 */
+  --gl-fade: 160ms;                                          /* 失焦 / 回焦时垫底层的淡入淡出 */
+
   /* 「今天」光晕：今日线 / 今天列 / 今天格的统一高光 */
   --today-glow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), 0 8px 28px -10px color-mix(in srgb, var(--accent) 45%, transparent);
 
@@ -201,6 +218,16 @@
   --glass-float: rgba(32, 32, 40, 0.8);
   --glass-border: rgba(255, 255, 255, 0.08);
   --scrim: rgba(4, 4, 10, 0.45);
+
+  --gl-card: rgb(24 26 34 / var(--gl-a));
+  --gl-card-strong: rgb(26 28 40 / min(1, calc(var(--gl-a) + 0.18)));
+  --gl-chrome: rgb(14 16 22 / calc(var(--gl-a) * 0.85));
+  --gl-line: rgba(255, 255, 255, 0.09);
+  --gl-line-strong: rgba(255, 255, 255, 0.15);
+  --gl-hi: rgba(255, 255, 255, 0.07);
+  --gl-drop: rgba(0, 0, 0, 0.4);
+  --gl-wall-tint: rgba(16, 17, 22, 0.58);
+  --gl-base: rgb(10 11 15 / calc(var(--gl-a) * 0.9));
   --ambient:
     radial-gradient(900px 480px at 8% 0%, color-mix(in srgb, var(--accent) 17%, transparent), transparent 70%),
     radial-gradient(800px 420px at 94% 0%, color-mix(in srgb, var(--goal-7) 10%, transparent), transparent 70%);

@@ -13,6 +13,8 @@ import { initPomodoro } from './pomodoro/kernel';
 import { initStudyAutoCheckIn } from './desk/study';
 import { initStudyNudges } from './desk/studyNudge';
 import { DesktopBridge } from './components/DesktopBridge';
+import { GlassLayer } from './components/GlassLayer';
+import { desktop } from './lib/desktop';
 import { initDesktopPip } from './pomodoro/pip';
 import { PomodoroWidget } from './pomodoro/PomodoroWidget';
 import { CommandPalette } from './components/CommandPalette';
@@ -106,6 +108,8 @@ export default function App() {
   useEffect(() => {
     if (!hydrated) return;
     applyTheme(theme);
+    // 系统亚克力按 nativeTheme 定深浅，不跟页面：主题一变就同步过去（工作台透明）
+    void desktop()?.glassTheme(theme);
     return subscribeSystemTheme(theme);
   }, [theme, hydrated]);
 
@@ -185,6 +189,7 @@ export default function App() {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
       <DesktopBridge />
+      <GlassLayer />
       <div className="flex h-full flex-col">
         <header
           className="app-header glass-chrome relative z-30 flex h-12 shrink-0 items-center gap-4 border-b px-4"

@@ -26,11 +26,13 @@ import {
   Menu,
   Tray,
   nativeImage,
+  nativeTheme,
   shell,
   dialog,
   type Rectangle,
 } from 'electron';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -91,6 +93,8 @@ interface ShellPrefs {
   /** 上次另存成功的时间（ISO）/ 上次另存失败的原因（成功后清空） */
   backupMirrorAt: string | null;
   backupMirrorError: string | null;
+  /** 应用主题偏好的镜像：开窗前就要给系统亚克力定好深浅（见下「工作台透明」） */
+  theme: 'light' | 'dark' | 'system';
 }
 const SHELL_PREFS_DEFAULT: ShellPrefs = {
   closeToTray: true,
@@ -98,6 +102,7 @@ const SHELL_PREFS_DEFAULT: ShellPrefs = {
   backupMirrorDir: null,
   backupMirrorAt: null,
   backupMirrorError: null,
+  theme: 'system',
 };
 let shellPrefs: ShellPrefs = { ...SHELL_PREFS_DEFAULT };
 let tray: Tray | null = null;
@@ -529,6 +534,87 @@ function pageURL(route: string): string {
   return DEV_URL ? new URL(route, DEV_URL).toString() : `${APP_ORIGIN}/${route}`;
 }
 
+// ——— 工作台透明（负责人 2026-10-27 拍板：系统真亚克力）———
+//
+// 主窗**常驻**系统亚克力材质（Win11 22H2+），页面自己决定透不透：工作台 + 开启透明时页面底透明，
+// 其余页面与关闭时页面铺实色把亚克力盖住 —— 开关与换页都不用重建窗口，也不用重启。
+// 两个系统行为要接住：
+//   ① 亚克力的深浅跟 nativeTheme 走而不是跟页面走 ⇒ 渲染进程每次切主题都告诉这里（glass:theme）；
+//      开窗前就要知道，所以镜像一份存 shell-prefs。
+//   ② 窗口失焦时 Windows 把亚克力换成实色 ⇒ 把焦点与窗口在屏幕上的几何推给页面（glass:geom），
+//      页面在失焦期间用桌面壁纸画一层同样模糊的底「接住」（壁纸由 glass:wallpaper 读出）。
+
+/** Windows 11 22H2（build 22621）起才有系统亚克力 */
+const ACRYLIC = process.platform === 'win32' && Number(os.release().split('.')[2] ?? 0) >= 22621;
+/** 壁纸缩到这个宽度再给页面：反正要模糊，原图 3K 只会白占内存与 IPC */
+const WALLPAPER_W = 1600;
+const WALLPAPER_JPEG_Q = 80;
+/** 拖动 / 拉伸窗口时几何推送的节流 */
+const GEOM_THROTTLE_MS = 60;
+
+function wallpaperFile(): string | null {
+  if (process.platform !== 'win32' || !process.env.APPDATA) return null;
+  return path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Themes', 'TranscodedWallpaper');
+}
+
+let wallpaperCache: { mtimeMs: number; url: string | null } | null = null;
+
+/** 当前桌面壁纸（缩小后的 JPEG data URL）；纯色背景 / 读不到时为 null */
+function readWallpaper(): string | null {
+  const file = wallpaperFile();
+  if (!file) return null;
+  try {
+    const { mtimeMs } = fs.statSync(file);
+    if (wallpaperCache?.mtimeMs === mtimeMs) return wallpaperCache.url;
+    // TranscodedWallpaper 没有扩展名，按内容识别格式只能走 createFromBuffer
+    const img = nativeImage.createFromBuffer(fs.readFileSync(file));
+    const url = img.isEmpty()
+      ? null
+      : `data:image/jpeg;base64,${img
+          .resize({ width: Math.min(WALLPAPER_W, img.getSize().width), quality: 'good' })
+          .toJPEG(WALLPAPER_JPEG_Q)
+          .toString('base64')}`;
+    wallpaperCache = { mtimeMs, url };
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+interface GlassGeom {
+  active: boolean;
+  /** 页面内容区在屏幕上的位置（DIP） */
+  content: Rectangle;
+  /** 窗口所在显示器的整块区域（DIP）：桌面壁纸按它铺 */
+  display: Rectangle;
+}
+
+function glassGeom(win: BrowserWindow): GlassGeom {
+  const content = win.getContentBounds();
+  return { active: win.isFocused(), content, display: screen.getDisplayMatching(content).bounds };
+}
+
+function wireGlass(win: BrowserWindow): void {
+  let timer: NodeJS.Timeout | null = null;
+  const push = (): void => {
+    if (timer) return;
+    timer = setTimeout(() => {
+      timer = null;
+      if (!win.isDestroyed()) win.webContents.send('glass:geom', glassGeom(win));
+    }, GEOM_THROTTLE_MS);
+  };
+  win.on('focus', push);
+  win.on('move', push);
+  win.on('resize', push);
+  win.on('blur', () => {
+    push();
+    // 失焦正是要用壁纸的时候：顺手看一眼壁纸换没换
+    const before = wallpaperCache?.mtimeMs;
+    readWallpaper();
+    if (wallpaperCache && wallpaperCache.mtimeMs !== before) win.webContents.send('glass:wallpaper-changed');
+  });
+}
+
 function createMainWindow(hidden = false): BrowserWindow {
   const win = new BrowserWindow({
     width: 1440,
@@ -536,7 +622,9 @@ function createMainWindow(hidden = false): BrowserWindow {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    backgroundColor: '#101014', // 与 index.html 的 theme-color 一致，避免开窗闪白
+    // 有亚克力时窗底必须全透明，否则系统材质被这层底色盖住；没有时与 index.html 的 theme-color 一致，避免开窗闪白
+    backgroundColor: ACRYLIC ? '#00000000' : '#101014',
+    ...(ACRYLIC ? { backgroundMaterial: 'acrylic' as const } : {}),
     title: 'YearFlow — 年度计划',
     webPreferences: {
       preload: PRELOAD,
@@ -574,6 +662,7 @@ function createMainWindow(hidden = false): BrowserWindow {
   win.on('closed', () => {
     mainWindow = null;
   });
+  wireGlass(win);
   void win.loadURL(pageURL('index.html'));
   return win;
 }
@@ -747,6 +836,17 @@ ipcMain.handle('tray:status', (_e, text: string) => {
 
 /** 主窗被小窗/通知唤起 */
 ipcMain.handle('win:focus-main', () => showMain());
+
+ipcMain.handle('glass:info', (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  return { acrylic: ACRYLIC, geom: win ? glassGeom(win) : null };
+});
+ipcMain.handle('glass:wallpaper', () => readWallpaper());
+ipcMain.handle('glass:theme', (_e, pref: string) => {
+  if (pref !== 'light' && pref !== 'dark' && pref !== 'system') return;
+  nativeTheme.themeSource = pref;
+  if (shellPrefs.theme !== pref) writeShellPrefs({ theme: pref });
+});
 
 // ——— 本机自动备份（DESK_SPEC §七）———
 //
@@ -928,6 +1028,8 @@ if (!app.requestSingleInstanceLock()) {
     });
 
     shellPrefs = readShellPrefs();
+    // 亚克力的深浅跟 nativeTheme：开窗前先按上次的主题定好，免得深色主题先闪一下浅色亚克力
+    nativeTheme.themeSource = shellPrefs.theme;
     mainWindow = createMainWindow(START_HIDDEN);
     createTray();
 

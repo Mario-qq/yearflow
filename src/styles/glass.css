@@ -1,0 +1,129 @@
+/**
+ * 工作台透明（负责人 2026-10-27 拍板：系统真亚克力）。开关与模式见 components/GlassLayer.tsx：
+ * 只有 <html data-glass="acrylic|image"> 时才生效，且只在工作台设上 —— 其余页面一个像素都不变。
+ *
+ * 做法：页面底全部透明，窗后是系统亚克力（或模拟它的模糊壁纸 .gl-wall）；
+ * 卡片、顶部那一整块都只是半透明着色层（--gl-*），不再自己 backdrop-filter —— 模糊系统已经做过了，
+ * 再叠一层既没区别又费 GPU。浮层（菜单、抽屉、弹窗）沿用原来的玻璃，只把底色换成更实的 --gl-card-strong。
+ */
+
+html[data-glass] body,
+html[data-glass] #root {
+  background: transparent;
+}
+/* 亚克力上压一层主题底色（失焦垫底层自带着色，所以图片模式不需要） */
+html[data-glass='acrylic'] {
+  background: var(--gl-base);
+}
+html[data-glass='image'] {
+  background: transparent;
+}
+/* 周历滚动条：细、透明轨道，别在玻璃上划一道实色 */
+html[data-glass] .dk-board {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gl-line-strong) transparent;
+}
+
+/* ── 垫底层：网页版一直显示；桌面版只在窗口失焦（系统亚克力变实色）时淡入 ── */
+.gl-wall {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--gl-fade) var(--ease);
+}
+.gl-wall.on {
+  opacity: 1;
+}
+.gl-wall-img {
+  position: absolute;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: var(--gl-wall-blur);
+}
+.gl-wall.fill .gl-wall-img {
+  inset: var(--gl-wall-bleed);
+}
+.gl-wall::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--gl-wall-tint);
+}
+
+/* ── 顶部一整块玻璃：顶栏 + 头部 + 工具条连成一片，字永远落在玻璃上 ── */
+html[data-glass] .app-header {
+  background: var(--gl-chrome);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-bottom-color: transparent;
+}
+html[data-glass] .app-header::after {
+  display: none;
+}
+html[data-glass] .dk-hero,
+html[data-glass] .dk-bar {
+  background: var(--gl-chrome);
+}
+html[data-glass] .dk-bar {
+  border-bottom: 1px solid var(--gl-line);
+  padding-bottom: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+/* ── 工作台内：面板色换成半透明着色，边换成玻璃亮边 ── */
+html[data-glass] .dk {
+  --bg-panel: var(--gl-card);
+  --border-subtle: var(--gl-line);
+  --border-default: var(--gl-line-strong);
+  --glass-float: var(--gl-card-strong);
+  --glass-chrome: var(--gl-chrome);
+  --glass-border: var(--gl-line);
+}
+html[data-glass] .dk-day {
+  background: var(--gl-card);
+  border-color: var(--gl-line);
+  box-shadow:
+    inset 0 1px 0 var(--gl-hi),
+    0 8px 24px -12px var(--gl-drop);
+}
+/* 周末更淡一档：一眼分出工作日 */
+html[data-glass] .dk-day.weekend {
+  background: color-mix(in srgb, var(--gl-card) 60%, transparent);
+  box-shadow: none;
+}
+/* 今天：更实的玻璃 + 主色细环，在一排半透明里最先被看见 */
+html[data-glass] .dk-day.today {
+  background: var(--gl-card-strong);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow:
+    inset 0 1px 0 var(--gl-hi),
+    0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent),
+    0 12px 32px -12px var(--gl-drop);
+}
+/* sticky 日头原本 inherit 卡片底；半透明下再叠一层会比卡身深一截 */
+html[data-glass] .dk-dh {
+  background: transparent;
+}
+html[data-glass] .dk-stats,
+html[data-glass] .dk-h-cal {
+  background: var(--gl-card);
+  border-color: var(--gl-line);
+  box-shadow:
+    inset 0 1px 0 var(--gl-hi),
+    0 8px 24px -12px var(--gl-drop);
+}
+html[data-glass] .dk-btn:not(.primary),
+html[data-glass] .dk-seg {
+  background: color-mix(in srgb, var(--gl-card) 80%, transparent);
+  border-color: var(--gl-line-strong);
+}
+html[data-glass] .dk-habits {
+  background: var(--gl-chrome);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-top-color: var(--gl-line);
+}
