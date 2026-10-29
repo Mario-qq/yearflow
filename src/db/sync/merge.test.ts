@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { planPullApply, remoteWins } from './merge';
-import type { SyncableEntity } from '../../types/domain';
+import { noteConflictCopies, planPullApply, redactForPush, remoteWins } from './merge';
+import type { Note, SyncableEntity } from '../../types/domain';
 
 const e = (id: string, updatedAt: string, deletedAt?: string): SyncableEntity => ({
   id,
@@ -78,5 +78,63 @@ describe('planPullApply（拉取应用计划）', () => {
     expect(plan.dbPuts.map((x) => x.id).sort()).toEqual(['a', 'c', 'd']);
     expect(plan.mapPuts.map((x) => x.id).sort()).toEqual(['a', 'd']);
     expect(plan.mapDeletes).toEqual(['c']);
+  });
+});
+
+describe('noteConflictCopies（便签冲突副本）', () => {
+  const n = (id: string, body: string, p: Partial<Note> = {}): Note => ({
+    id,
+    body,
+    editedAt: T1,
+    createdAt: T1,
+    updatedAt: T1,
+    ...p,
+  });
+  const NOW = '2026-07-05T00:00:00.000Z';
+  let seq = 0;
+  const mk = () => `copy${++seq}`;
+
+  it('本机正文在上次推送后改过且和远端不同 ⇒ 另存一份本机版', () => {
+    const local = { a: n('a', '本机版', { editedAt: T2, updatedAt: T2 }) };
+    const remote = n('a', '远端版', { updatedAt: T3 });
+    const copies = noteConflictCopies(local, [remote], T1, NOW, mk);
+    expect(copies).toHaveLength(1);
+    expect(copies[0]).toMatchObject({ body: '本机版', conflictOf: 'a', pinnedAt: NOW, createdAt: NOW, updatedAt: NOW });
+    expect(copies[0].id).not.toBe('a');
+  });
+
+  it('本机修改已推过 / 正文相同 / 本机只改了颜色 ⇒ 不出副本', () => {
+    expect(noteConflictCopies({ a: n('a', '旧', { editedAt: T1 }) }, [n('a', '新', { updatedAt: T3 })], T2, NOW, mk)).toEqual([]);
+    expect(noteConflictCopies({ a: n('a', '同', { editedAt: T2 }) }, [n('a', '同', { updatedAt: T3, color: 'blue' })], T1, NOW, mk)).toEqual([]);
+    expect(
+      noteConflictCopies({ a: n('a', '旧', { editedAt: T1, updatedAt: T2, color: 'pink' }) }, [n('a', '新', { updatedAt: T3 })], T1, NOW, mk),
+    ).toEqual([]);
+  });
+
+  it('远端删了而本机有没推的修改 ⇒ 保住本机版', () => {
+    const copies = noteConflictCopies({ a: n('a', '本机', { editedAt: T2 }) }, [n('a', '本机', { updatedAt: T3, deletedAt: T3 })], T1, NOW, mk);
+    expect(copies.map((c) => c.body)).toEqual(['本机']);
+  });
+
+  it('从没推过（游标 null）⇒ 本机修改都算没推；本机已删 / 空正文 / 本机没有 ⇒ 不出', () => {
+    expect(noteConflictCopies({ a: n('a', '甲') }, [n('a', '乙', { updatedAt: T3 })], null, NOW, mk)).toHaveLength(1);
+    expect(noteConflictCopies({ a: n('a', '甲', { editedAt: T2, deletedAt: T2 }) }, [n('a', '乙', { updatedAt: T3 })], T1, NOW, mk)).toEqual([]);
+    expect(noteConflictCopies({ a: n('a', '  ', { editedAt: T2 }) }, [n('a', '乙', { updatedAt: T3 })], T1, NOW, mk)).toEqual([]);
+    expect(noteConflictCopies({}, [n('a', '乙', { updatedAt: T3 })], T1, NOW, mk)).toEqual([]);
+  });
+});
+
+describe('redactForPush（仅本机便签只推墓碑）', () => {
+  it('仅本机 ⇒ 不含正文的墓碑，updatedAt 不变', () => {
+    const note: Note = { id: 'a', body: '密码 123', localOnly: true, color: 'pink', editedAt: T2, createdAt: T1, updatedAt: T3 };
+    const out = redactForPush('notes', note) as Note;
+    expect(out).toEqual({ id: 'a', body: '', editedAt: T1, createdAt: T1, updatedAt: T3, deletedAt: T3 });
+    expect(JSON.stringify(out)).not.toContain('密码');
+  });
+  it('普通便签与别的表原样', () => {
+    const note: Note = { id: 'a', body: 'x', editedAt: T1, createdAt: T1, updatedAt: T1 };
+    expect(redactForPush('notes', note)).toBe(note);
+    const other = e('b', T1);
+    expect(redactForPush('goals', other)).toBe(other);
   });
 });

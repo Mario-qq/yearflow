@@ -1,4 +1,4 @@
-import type { SyncableEntity } from '../../types/domain';
+import type { Note, SyncableEntity } from '../../types/domain';
 
 /**
  * 云同步冲突归并 — 纯函数（vitest 单测覆盖）。
@@ -48,4 +48,56 @@ export function planPullApply<T extends SyncableEntity>(
     else mapPuts.push(remote);
   }
   return { dbPuts, mapPuts, mapDeletes };
+}
+
+/**
+ * 便签冲突副本（NOTES_SPEC §三）：拉到的远端行要赢了，而本机这条的正文在上次推送之后改过、
+ * 且和远端不同（或远端已删）⇒ 本机那版另存成一条新便签（conflictOf 指回原 id、置顶），两边都不丢。
+ * 只看 editedAt（正文修改时刻）：本机只改了颜色 / 置顶不算冲突 —— 那种情况远端整行赢就对了。
+ * pushedAt = 便签表的推送游标；null = 从没推过 ⇒ 本机的修改都算没推。
+ */
+export function noteConflictCopies(
+  localById: Record<string, Note>,
+  winners: Note[],
+  pushedAt: string | null,
+  now: string,
+  makeId: () => string,
+): Note[] {
+  const copies: Note[] = [];
+  for (const remote of winners) {
+    const local = localById[remote.id];
+    if (!local || local.deletedAt || local.trashedAt) continue;
+    if (pushedAt && local.editedAt <= pushedAt) continue;
+    if (!local.body.trim()) continue;
+    if (!remote.deletedAt && !remote.trashedAt && remote.body === local.body) continue;
+    const { convertedTo: _c, archivedAt: _a, deletedAt: _d, ...rest } = local;
+    copies.push({
+      ...rest,
+      id: makeId(),
+      conflictOf: remote.id,
+      pinnedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  return copies;
+}
+
+/**
+ * 推送前脱敏：「仅本机」的便签只推一个不含正文的墓碑 ⇒ 云端看不到内容，其他设备上这条消失。
+ * 关掉仅本机后整行（updatedAt 更新）再推上去，其他设备按 LWW 恢复。
+ */
+export function redactForPush<T extends SyncableEntity>(table: string, e: T): SyncableEntity {
+  if (table !== 'notes') return e;
+  const n = e as unknown as Note;
+  if (!n.localOnly) return e;
+  const stub: Note = {
+    id: n.id,
+    body: '',
+    editedAt: n.createdAt,
+    createdAt: n.createdAt,
+    updatedAt: n.updatedAt,
+    deletedAt: n.deletedAt ?? n.updatedAt,
+  };
+  return stub;
 }

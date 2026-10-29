@@ -36,6 +36,7 @@ const TABLE_LABEL: Record<TableName, string> = {
   habitLogs: '习惯记录',
   people: '人物档案',
   interactions: '互动记录',
+  notes: '便签',
 };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

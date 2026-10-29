@@ -11,6 +11,7 @@ import type {
   Interaction,
   Milestone,
   MonthlyReview,
+  Note,
   Person,
   Routine,
   RoutineLog,
@@ -42,6 +43,7 @@ export class YearFlowDB extends Dexie {
   habitLogs!: Table<HabitLog, string>;
   people!: Table<Person, string>;
   interactions!: Table<Interaction, string>;
+  notes!: Table<Note, string>;
   settings!: Table<SettingsRow, string>;
 
   constructor(name = 'yearflow') {
@@ -86,6 +88,10 @@ export class YearFlowDB extends Dexie {
       habitLogs: 'id, habitId, date, updatedAt',
       people: 'id, updatedAt',
       interactions: 'id, personId, date, updatedAt',
+    });
+    /** v6：便签（NOTES_SPEC）。同上，只声明新表 */
+    this.version(6).stores({
+      notes: 'id, updatedAt',
     });
   }
 }

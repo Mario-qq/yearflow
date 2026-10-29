@@ -386,6 +386,36 @@ export interface Interaction {
   deletedAt?: string;
 }
 
+// ── 便签（docs/NOTES_SPEC.md）─────────────────────────────────────────────
+
+/** 便签色：缺省 = 跟主题走的默认底。取值对应 tokens.css 的 --note-* 令牌 */
+export type NoteColor = 'yellow' | 'green' | 'blue' | 'pink' | 'purple' | 'gray';
+
+/**
+ * 便签 = 要记住的东西（不是要做的事：没有日期、没有完成、不进统计）。
+ * 标题 / 标签 / 清单进度都从 body 派生（derive/notes.ts），不入库。
+ */
+export interface Note {
+  id: string;
+  body: string; // 纯文本：第一行即标题；`- [ ]` 清单、`#标签`
+  color?: NoteColor;
+  pinnedAt?: string; // ISO，置顶时刻；缺省 = 没置顶
+  archivedAt?: string;
+  /** 进回收站的时刻（可恢复）；满 30 天自动永久删除（deletedAt）。和 deletedAt 分开：回收站要留在内存里给人看 */
+  trashedAt?: string;
+  /** 仅本机：推送时只推不含正文的墓碑（db/sync/merge.ts redactForPush） */
+  localOnly?: boolean;
+  /** 冲突副本：同步时两边都改过，本机那版另存的这一条指回原便签 */
+  conflictOf?: string;
+  /** 转成的待办 id */
+  convertedTo?: string[];
+  /** 内容（body）最后修改；列表按它排 ⇒ 改颜色 / 置顶不让便签跳位 */
+  editedAt: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string;
+}
+
 /** 免打卡区间：出差/生病/长假，期间不判缺卡、不断 streak */
 export interface ExemptionPeriod {
   id: string;

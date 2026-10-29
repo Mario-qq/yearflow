@@ -261,6 +261,23 @@ const interactionSchema = z.object({
   deletedAt: z.string().optional(),
 });
 
+// ── 便签（NOTES_SPEC）──
+const noteSchema = z.object({
+  id: z.string().min(1),
+  body: z.string(),
+  color: z.enum(['yellow', 'green', 'blue', 'pink', 'purple', 'gray']).optional(),
+  pinnedAt: z.string().optional(),
+  archivedAt: z.string().optional(),
+  trashedAt: z.string().optional(),
+  localOnly: z.boolean().optional(),
+  conflictOf: z.string().optional(),
+  convertedTo: z.array(z.string()).optional(),
+  editedAt: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().optional(),
+});
+
 const dayMarkSchema = z.object({
   id: z.string().min(1),
   date: dateStr,
@@ -365,6 +382,8 @@ const backupSchema = z.object({
     habitLogs: z.array(habitLogSchema).default([]),
     people: z.array(personSchema).default([]),
     interactions: z.array(interactionSchema).default([]),
+    // 便签新增：老备份缺省补空数组
+    notes: z.array(noteSchema).default([]),
   }),
   settings: settingsSchema.optional(),
 });

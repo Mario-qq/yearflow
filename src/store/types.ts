@@ -9,6 +9,7 @@ import type {
   Interaction,
   Milestone,
   MonthlyReview,
+  Note,
   Person,
   Routine,
   RoutineLog,
@@ -17,7 +18,7 @@ import type {
   WorkItem,
 } from '../types/domain';
 
-/** 十六张实体表（settings 单独处理，不进 undo 栈） */
+/** 十七张实体表（settings 单独处理，不进 undo 栈） */
 export interface EntityOf {
   goals: Goal;
   tasks: Task;
@@ -35,6 +36,7 @@ export interface EntityOf {
   habitLogs: HabitLog;
   people: Person;
   interactions: Interaction;
+  notes: Note;
 }
 
 export type TableName = keyof EntityOf;
@@ -60,6 +62,7 @@ const TABLE_SET: Record<TableName, true> = {
   habitLogs: true,
   people: true,
   interactions: true,
+  notes: true,
 };
 
 /** 驱动同步推拉与墓碑、replaceAllData、exportBundle、applyRemote、hydrate、设置页计数 */
@@ -79,6 +82,33 @@ export type Change = {
 export interface Command {
   label: string; // 撤销 toast 显示的内容摘要，如 "删除目标「英语」"
   changes: Change[];
+  /** 合并键：连续几次 execute 带同一个键 ⇒ 合成栈顶这一条（如一次编辑会话里的多次自动保存） */
+  mergeKey?: string;
+}
+
+/**
+ * 把 next 并进 prev（同一实体保留最早的 before、取最新的 after）。
+ * 新建后又改 ⇒ 仍是新建；新建后又删 ⇒ 两条抵消。
+ */
+export function mergeChanges(prev: Change[], next: Change[]): Change[] {
+  const out = [...prev];
+  for (const c of next) {
+    const id = c.type === 'put' ? c.after.id : c.before.id;
+    const i = out.findIndex((o) => o.table === c.table && (o.type === 'put' ? o.after.id : o.before.id) === id);
+    if (i < 0) {
+      out.push(c);
+      continue;
+    }
+    const o = out[i];
+    const before = o.type === 'put' ? o.before : o.before;
+    if (c.type === 'delete') {
+      if (before) out[i] = { table: c.table, type: 'delete', before } as Change;
+      else out.splice(i, 1);
+    } else {
+      out[i] = { table: c.table, type: 'put', before, after: c.after } as Change;
+    }
+  }
+  return out;
 }
 
 /** 内存中的全量实体（Record 按 id 索引）—— 由 EntityOf 映射，加表无需再改 */

@@ -2,13 +2,14 @@ import type { Table } from 'dexie';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from './client';
 import { db } from '../schema';
-import { planPullApply } from './merge';
+import { nanoid } from 'nanoid';
+import { noteConflictCopies, planPullApply, redactForPush } from './merge';
 import { onLocalWrite } from './signal';
 import { useSyncStore } from './useSyncStore';
 import { useStore } from '../../store/useStore';
 import { flushNow } from '../../store/persist';
 import { TABLE_NAMES, type TableName } from '../../store/types';
-import type { SyncableEntity } from '../../types/domain';
+import type { Note, SyncableEntity } from '../../types/domain';
 import {
   advancePush,
   describeFailures,
@@ -47,6 +48,7 @@ const REMOTE_TABLE: Record<TableName, string> = {
   habitLogs: 'habit_logs',
   people: 'people',
   interactions: 'interactions',
+  notes: 'notes', // 需先执行 0007_notes.sql
 };
 
 /** 同步引擎直接读写 Dexie 原始表（属数据层；不得经 repo，repo 会重盖 updatedAt） */
@@ -168,6 +170,18 @@ async function pullAll(
       const localById: Record<string, SyncableEntity> = {};
       for (const row of localRows) if (row) localById[row.id] = row;
       const plan = planPullApply(localById, pulled);
+      if (t === 'notes') {
+        // 两边都改过正文：远端照常赢，本机那版另存成冲突副本（NOTES_SPEC §三）
+        const copies = noteConflictCopies(
+          localById as Record<string, Note>,
+          plan.dbPuts as Note[],
+          pushCursorOf(cursors, t),
+          new Date().toISOString(),
+          nanoid,
+        );
+        plan.dbPuts.push(...copies);
+        plan.mapPuts.push(...copies);
+      }
       if (plan.dbPuts.length > 0) await rawTable(t).bulkPut(plan.dbPuts);
       if (plan.mapPuts.length > 0 || plan.mapDeletes.length > 0) {
         ops[t] = { puts: plan.mapPuts, deletes: plan.mapDeletes };
@@ -196,12 +210,10 @@ async function pushAll(
     const since = pushCursorOf(cursors, t);
     const dirty = since ? await table.where('updatedAt').above(since).toArray() : await table.toArray();
     for (let i = 0; i < dirty.length; i += PUSH_CHUNK_SIZE) {
-      const chunk = dirty.slice(i, i + PUSH_CHUNK_SIZE).map((e) => ({
-        id: e.id,
-        data: e,
-        updated_at: e.updatedAt,
-        deleted_at: e.deletedAt ?? null,
-      }));
+      const chunk = dirty.slice(i, i + PUSH_CHUNK_SIZE).map((row) => {
+        const e = redactForPush(t, row); // 仅本机的便签只推墓碑
+        return { id: e.id, data: e, updated_at: e.updatedAt, deleted_at: e.deletedAt ?? null };
+      });
       const { error } = await sb.rpc('upsert_rows', {
         p_table: REMOTE_TABLE[t],
         p_rows: chunk,

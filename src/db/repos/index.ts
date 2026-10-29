@@ -12,6 +12,7 @@ import type {
   Interaction,
   Milestone,
   MonthlyReview,
+  Note,
   Person,
   Routine,
   RoutineLog,
@@ -68,6 +69,7 @@ export const habitRepo = new BaseRepo<Habit>(db.habits);
 export const habitLogRepo = new BaseRepo<HabitLog>(db.habitLogs);
 export const personRepo = new BaseRepo<Person>(db.people);
 export const interactionRepo = new BaseRepo<Interaction>(db.interactions);
+export const noteRepo = new BaseRepo<Note>(db.notes);
 export const settingsRepo = new SettingsRepo();
 
 /** 清空全库（JSON 导入重建 / 清空示例数据） */
@@ -89,5 +91,6 @@ export async function clearAllData(): Promise<void> {
     db.habitLogs.clear(),
     db.people.clear(),
     db.interactions.clear(),
+    db.notes.clear(),
   ]);
 }

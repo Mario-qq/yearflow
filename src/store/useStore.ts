@@ -7,6 +7,7 @@ import { emitLocalWrite } from '../db/sync/signal';
 import { DEFAULT_SETTINGS } from './defaults';
 import {
   invertChange,
+  mergeChanges,
   TABLE_NAMES,
   type Change,
   type Command,
@@ -54,8 +55,11 @@ export interface StoreState extends EntityMaps {
 
   /** 启动时从 Dexie 全量载入 */
   hydrate: () => Promise<void>;
-  /** 一切实体 mutation 的唯一入口：应用变更 + 进 undo 栈 + 防抖落库 */
-  execute: (label: string, changes: Change[]) => void;
+  /**
+   * 一切实体 mutation 的唯一入口：应用变更 + 进 undo 栈 + 防抖落库。
+   * opts.mergeKey：栈顶是同一个键（且没有可重做的）⇒ 并进栈顶那一条，不另起一条撤销。
+   */
+  execute: (label: string, changes: Change[], opts?: { mergeKey?: string }) => void;
   /** 返回被撤销命令的 label（toast 用），无可撤销返回 null */
   undo: () => string | null;
   redo: () => string | null;
@@ -93,13 +97,19 @@ export const useStore = create<StoreState>()((set, get) => ({
     return hydrating;
   },
 
-  execute: (label, changes) => {
+  execute: (label, changes, opts) => {
     if (changes.length === 0) return;
-    set((state) => ({
-      ...applyChanges(state, changes),
-      undoStack: [...state.undoStack, { label, changes }].slice(-HISTORY_LIMIT),
-      redoStack: [],
-    }));
+    const mergeKey = opts?.mergeKey;
+    set((state) => {
+      const top = state.undoStack[state.undoStack.length - 1];
+      const merge = mergeKey !== undefined && top?.mergeKey === mergeKey && state.redoStack.length === 0;
+      const merged = merge ? mergeChanges(top.changes, changes) : [];
+      // 并完一条不剩（新建后又删掉）⇒ 栈顶那条也拿掉，免得留一条撤了没反应的空命令
+      const undoStack = merge
+        ? [...state.undoStack.slice(0, -1), ...(merged.length > 0 ? [{ label, changes: merged, mergeKey }] : [])]
+        :[...state.undoStack, { label, changes, ...(mergeKey !== undefined ? { mergeKey } : {}) }].slice(-HISTORY_LIMIT);
+      return { ...applyChanges(state, changes), undoStack, redoStack: [] };
+    });
     queuePersist(changes);
   },
 

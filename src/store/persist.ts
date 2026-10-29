@@ -9,6 +9,7 @@ import {
   habitRepo,
   interactionRepo,
   milestoneRepo,
+  noteRepo,
   personRepo,
   reviewRepo,
   routineLogRepo,
@@ -40,6 +41,7 @@ export const repoByTable: Record<TableName, BaseRepo<SyncableEntity>> = {
   habitLogs: habitLogRepo as BaseRepo<SyncableEntity>,
   people: personRepo as BaseRepo<SyncableEntity>,
   interactions: interactionRepo as BaseRepo<SyncableEntity>,
+  notes: noteRepo as BaseRepo<SyncableEntity>,
 };
 
 const PERSIST_DEBOUNCE_MS = 500; // SPEC：所有变更自动保存（防抖 500ms）
