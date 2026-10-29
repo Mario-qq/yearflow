@@ -122,6 +122,22 @@
   --gl-wall-bleed: -96px;                                    /* 模糊会把边缘吃成透明：图往外多铺一圈 */
   --gl-fade: 160ms;                                          /* 失焦 / 回焦时垫底层的淡入淡出 */
 
+  /* ── 便签色（NOTES_SPEC）：bg = 纸面，edge = 左侧色条 / 选中环。默认便签用面板底 ── */
+  --note-default-bg: var(--bg-panel);
+  --note-default-edge: var(--border-strong);
+  --note-yellow-bg: #fdf3cf;
+  --note-yellow-edge: #e0ae2e;
+  --note-green-bg: #e3f4e5;
+  --note-green-edge: #4fa466;
+  --note-blue-bg: #e3eefc;
+  --note-blue-edge: #5389d6;
+  --note-pink-bg: #fbe6ef;
+  --note-pink-edge: #d26f98;
+  --note-purple-bg: #ede7fb;
+  --note-purple-edge: #8770d4;
+  --note-gray-bg: #ececef;
+  --note-gray-edge: #96969f;
+
   /* 「今天」光晕：今日线 / 今天列 / 今天格的统一高光 */
   --today-glow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), 0 8px 28px -10px color-mix(in srgb, var(--accent) 45%, transparent);
 
@@ -218,6 +234,19 @@
   --glass-float: rgba(32, 32, 40, 0.8);
   --glass-border: rgba(255, 255, 255, 0.08);
   --scrim: rgba(4, 4, 10, 0.45);
+
+  --note-yellow-bg: #39321f;
+  --note-yellow-edge: #cfa646;
+  --note-green-bg: #1e3125;
+  --note-green-edge: #4cae72;
+  --note-blue-bg: #1d2b40;
+  --note-blue-edge: #5e93e0;
+  --note-pink-bg: #3a2231;
+  --note-pink-edge: #d97aa2;
+  --note-purple-bg: #2a2440;
+  --note-purple-edge: #9b87e8;
+  --note-gray-bg: #29292f;
+  --note-gray-edge: #85858f;
 
   --gl-card: rgb(24 26 34 / var(--gl-a));
   --gl-card-strong: rgb(26 28 40 / min(1, calc(var(--gl-a) + 0.18)));

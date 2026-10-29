@@ -20,6 +20,7 @@ import { PomodoroWidget } from './pomodoro/PomodoroWidget';
 import { CommandPalette } from './components/CommandPalette';
 import { ShortcutHelp } from './components/ShortcutHelp';
 import { GanttToolbar } from './gantt/GanttToolbar';
+import { NotesButton, NotesHost } from './notes/NotesEntry';
 import GanttPage from './pages/GanttPage';
 import CheckInPage from './pages/CheckInPage';
 import DeskPage from './pages/DeskPage';
@@ -231,6 +232,7 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2">
             <PomodoroWidget />
+            <NotesButton />
             <SyncIndicator />
             <button
               type="button"
@@ -291,6 +293,7 @@ export default function App() {
           </Routes>
         </main>
         <MobileTabBar />
+        <NotesHost />
         <Toasts />
         <Celebration />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

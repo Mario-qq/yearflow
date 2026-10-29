@@ -12,13 +12,17 @@ import { emitGantt } from '../gantt/bus';
 import { useGanttUi } from '../gantt/uiStore';
 import { goalColor } from '../lib/colors';
 import type { GanttZoom } from '../types/domain';
+import { noteRest, noteTitle } from '../lib/derive/notes';
+import { newBlankNote, openNotes } from '../notes/uiStore';
 
 interface Command {
   id: string;
-  /** 分组徽标：命令 / 任务 / 目标 */
-  kind: '命令' | '任务' | '目标';
+  /** 分组徽标：命令 / 任务 / 目标 / 便签 */
+  kind: '命令' | '任务' | '目标' | '便签';
   label: string;
   hint?: string;
+  /** 参与匹配的全文（缺省 = label + hint）：便签按整段正文搜 */
+  search?: string;
   color?: string;
   run: () => void;
 }
@@ -112,6 +116,16 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       { id: 'go-review', kind: '命令', label: '打开月度复盘', run: () => navigate('/review') },
       { id: 'go-year', kind: '命令', label: '打开年报', hint: '一页读完这一年', run: () => navigate('/year') },
       { id: 'go-settings', kind: '命令', label: '打开设置', run: () => navigate('/settings') },
+      {
+        id: 'new-note',
+        kind: '命令',
+        label: '新建便签',
+        hint: 'Alt+N',
+        run: () => {
+          openNotes();
+          newBlankNote();
+        },
+      },
     ];
     for (const g of Object.values(s.goals)) {
       if (g.deletedAt || g.archived) continue;
@@ -141,13 +155,30 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         run: () => gotoGantt(() => emitGantt('locate-task', { taskId: t.id })),
       });
     }
+    for (const n of Object.values(s.notes)) {
+      if (n.deletedAt || n.trashedAt || n.archivedAt || !n.body.trim()) continue;
+      cmds.push({
+        id: `note-${n.id}`,
+        kind: '便签',
+        label: noteTitle(n.body),
+        hint: noteRest(n.body).replace(/\s+/g, ' ').slice(0, 40) || undefined,
+        search: n.body,
+        run: () => openNotes({ editId: n.id }),
+      });
+    }
     return cmds;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, pathname]);
 
   const results = useMemo(() => {
     const scored = commands
-      .map((c) => ({ c, score: fuzzyScore(query, `${c.label} ${c.hint ?? ''}`) }))
+      .map((c) => ({
+        c,
+        // 便签正文长，字符子序列几乎什么都能匹配上 ⇒ 正文只认「包含」，标题照常模糊
+        score: c.search
+          ? Math.max(fuzzyScore(query, c.label), c.search.toLowerCase().includes(query.toLowerCase()) ? 2 : 0)
+          : fuzzyScore(query, `${c.label} ${c.hint ?? ''}`),
+      }))
       .filter((r) => r.score > 0)
       .sort((a, b) => b.score - a.score);
     return scored.slice(0, 12).map((r) => r.c);

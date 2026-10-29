@@ -1,0 +1,522 @@
+/**
+ * 便签面板（docs/NOTES_SPEC.md）。颜色一律走 tokens.css（--note-* / 中性色），
+ * 本面板专属尺寸集中在 .nt 上的 --nt-* 变量。类名前缀 nt- 不与工作台 dk- / 人际 pp- 撞。
+ */
+.nt {
+  --nt-w: 384px; /* 面板宽（电脑） */
+  --nt-top: 48px; /* 顶栏高（h-12） */
+  --nt-gap: 8px; /* 卡片间距 */
+  --nt-pad: 12px; /* 面板内边距 */
+  --nt-card-pad: 10px 12px 8px;
+  --nt-edge: 3px; /* 卡片左侧色条 */
+  --nt-ic: 14px;
+  --nt-act: 26px; /* 卡片操作按钮 */
+  --nt-box: 14px; /* 清单勾选框 */
+  --nt-preview-fade: 28px;
+
+  position: fixed;
+  top: var(--nt-top);
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  width: min(var(--nt-w), 100vw);
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border-default);
+  color: var(--text-primary);
+  animation: nt-in var(--dur-drawer) var(--ease);
+}
+@keyframes nt-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+@media (max-width: 767px) {
+  .nt {
+    width: 100vw;
+    border-left: 0;
+  }
+}
+
+.nt-ic {
+  width: var(--nt-ic);
+  height: var(--nt-ic);
+  flex-shrink: 0;
+}
+.nt-grow {
+  flex: 1;
+}
+
+/* ── 头部 ── */
+.nt-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--nt-pad) var(--nt-pad) var(--space-2);
+}
+.nt-head b {
+  font-size: var(--font-15);
+  font-weight: 600;
+}
+.nt-count {
+  font-size: var(--font-12);
+  color: var(--text-tertiary);
+}
+.nt-back,
+.nt-new {
+  height: var(--nt-act);
+  padding: 0 var(--space-2);
+  font-size: var(--font-12);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.nt-new {
+  color: var(--accent);
+}
+.nt-back:hover,
+.nt-new:hover {
+  background: var(--row-hover);
+}
+.nt-x {
+  width: var(--nt-act);
+  height: var(--nt-act);
+  display: grid;
+  place-items: center;
+  color: var(--text-tertiary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.nt-x:hover {
+  color: var(--text-primary);
+  background: var(--row-hover);
+}
+
+/* ── 搜索兼新建 ── */
+.nt-search {
+  position: relative;
+  padding: 0 var(--nt-pad);
+}
+.nt-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 var(--space-3);
+  font-size: var(--font-13);
+  color: var(--text-primary);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color 120ms var(--ease), box-shadow 120ms var(--ease);
+}
+.nt-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.nt-input::placeholder {
+  color: var(--text-tertiary);
+}
+.nt-hint {
+  display: block;
+  padding: var(--space-1) var(--space-1) 0;
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+}
+
+/* ── 标签条 ── */
+.nt-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--nt-pad) 0;
+}
+.nt-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 22px;
+  padding: 0 var(--space-2);
+  font-size: var(--font-12);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.nt-chip span {
+  color: var(--text-tertiary);
+  font-size: var(--font-11);
+}
+.nt-chip:hover {
+  background: var(--row-hover);
+}
+.nt-chip.is-on {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* ── 列表 ── */
+.nt-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--nt-gap);
+  padding: var(--space-3) var(--nt-pad) var(--nt-pad);
+  overscroll-behavior: contain;
+}
+.nt-sec {
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+  padding: var(--space-1) var(--space-1) 0;
+}
+.nt-sec:not(:first-child) {
+  padding-top: var(--space-2);
+}
+
+/* ── 卡片 ── */
+.nt-card {
+  --nt-bg: var(--note-default-bg);
+  --nt-edge-c: var(--note-default-edge);
+  position: relative;
+  flex-shrink: 0;
+  padding: var(--nt-card-pad);
+  padding-left: calc(12px + var(--nt-edge));
+  background: var(--nt-bg);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  cursor: text;
+  transition: border-color 120ms var(--ease), box-shadow 120ms var(--ease);
+}
+.nt-card::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: -1px;
+  bottom: -1px;
+  width: var(--nt-edge);
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  background: var(--nt-edge-c);
+}
+.nt-card[data-color='default']::before {
+  opacity: 0;
+}
+.nt-card:hover {
+  border-color: var(--border-strong);
+}
+.nt-card.is-editing {
+  cursor: default;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-md);
+}
+.nt-card[data-color='yellow'],
+.nt-swatch[data-color='yellow'] {
+  --nt-bg: var(--note-yellow-bg);
+  --nt-edge-c: var(--note-yellow-edge);
+}
+.nt-card[data-color='green'],
+.nt-swatch[data-color='green'] {
+  --nt-bg: var(--note-green-bg);
+  --nt-edge-c: var(--note-green-edge);
+}
+.nt-card[data-color='blue'],
+.nt-swatch[data-color='blue'] {
+  --nt-bg: var(--note-blue-bg);
+  --nt-edge-c: var(--note-blue-edge);
+}
+.nt-card[data-color='pink'],
+.nt-swatch[data-color='pink'] {
+  --nt-bg: var(--note-pink-bg);
+  --nt-edge-c: var(--note-pink-edge);
+}
+.nt-card[data-color='purple'],
+.nt-swatch[data-color='purple'] {
+  --nt-bg: var(--note-purple-bg);
+  --nt-edge-c: var(--note-purple-edge);
+}
+.nt-card[data-color='gray'],
+.nt-swatch[data-color='gray'] {
+  --nt-bg: var(--note-gray-bg);
+  --nt-edge-c: var(--note-gray-edge);
+}
+
+.nt-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1);
+}
+.nt-flag {
+  font-size: var(--font-11);
+  line-height: 18px;
+  padding: 0 6px;
+  color: var(--text-secondary);
+  background: var(--row-hover);
+  border-radius: var(--radius-sm);
+}
+.nt-flag.is-warn {
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.nt-body {
+  position: relative;
+  font-size: var(--font-13);
+  line-height: 1.6;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.nt-body.is-empty {
+  color: var(--text-tertiary);
+}
+.nt-body.is-clipped {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--nt-preview-fade)), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--nt-preview-fade)), transparent);
+}
+.nt-line {
+  white-space: pre-wrap;
+  min-height: 1.6em;
+}
+.nt-line.nt-title {
+  font-size: var(--font-14);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.nt-check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.nt-check.is-done > span {
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+}
+.nt-box {
+  flex-shrink: 0;
+  width: var(--nt-box);
+  height: var(--nt-box);
+  margin-top: calc((1.6em - var(--nt-box)) / 2);
+  border: 1.5px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-panel);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.nt-box[aria-checked='true'] {
+  background: var(--success);
+  border-color: var(--success);
+}
+.nt-box[aria-checked='true']::after {
+  content: '';
+  width: 4px;
+  height: 8px;
+  margin-top: -2px;
+  border: solid var(--text-on-accent);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.nt-box:disabled {
+  cursor: default;
+}
+.nt-tag {
+  color: var(--accent);
+  cursor: pointer;
+}
+.nt-tag:hover {
+  text-decoration: underline;
+}
+.nt-url {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.nt-editor {
+  display: block;
+  width: 100%;
+  min-height: 72px;
+  max-height: 60vh;
+  resize: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--font-13);
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+.nt-editor::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* ── 卡片底部：时间 + 操作 ── */
+.nt-foot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  min-height: var(--nt-act);
+}
+.nt-time {
+  flex: 1;
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+  display: flex;
+  gap: var(--space-2);
+}
+.nt-progress {
+  color: var(--text-secondary);
+}
+.nt-acts {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 120ms var(--ease);
+}
+.nt-card:hover .nt-acts,
+.nt-card:focus-within .nt-acts,
+.nt-card.is-editing .nt-acts {
+  opacity: 1;
+}
+@media (hover: none) {
+  .nt-acts {
+    opacity: 1;
+  }
+}
+.nt-act {
+  width: var(--nt-act);
+  height: var(--nt-act);
+  display: grid;
+  place-items: center;
+  color: var(--text-tertiary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.nt-act:hover {
+  color: var(--text-primary);
+  background: var(--row-hover);
+}
+.nt-act.is-on {
+  color: var(--accent);
+}
+.nt-act.is-danger:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+/* 颜色 / 转待办小菜单：贴在卡片底部右侧往下弹 */
+.nt-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 2;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+}
+.nt-colors {
+  display: flex;
+  gap: 6px;
+  padding: var(--space-2);
+}
+.nt-swatch {
+  --nt-bg: var(--note-default-bg);
+  --nt-edge-c: var(--note-default-edge);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--nt-bg);
+  border: 2px solid var(--nt-edge-c);
+  cursor: pointer;
+}
+.nt-swatch[aria-checked='true'] {
+  box-shadow: 0 0 0 2px var(--bg-raised), 0 0 0 4px var(--accent);
+}
+.nt-todo-menu {
+  width: 260px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: var(--space-1);
+  display: flex;
+  flex-direction: column;
+}
+.nt-todo-menu button {
+  text-align: left;
+  padding: 6px var(--space-2);
+  font-size: var(--font-13);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nt-todo-menu button:hover {
+  background: var(--row-hover);
+}
+.nt-menu-h {
+  padding: 6px var(--space-2) 2px;
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+}
+
+/* ── 空态 / 底部 ── */
+.nt-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-2);
+  font-size: var(--font-13);
+  line-height: 1.6;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+.nt-empty b {
+  color: var(--text-secondary);
+  font-size: var(--font-14);
+}
+.nt-empty code {
+  font-size: var(--font-12);
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  background: var(--row-hover);
+}
+.nt-bottom {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--nt-pad);
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--font-12);
+  color: var(--text-tertiary);
+}
+.nt-link {
+  font-size: var(--font-12);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.nt-link span {
+  color: var(--text-tertiary);
+}
+.nt-link:hover,
+.nt-link.is-on {
+  color: var(--accent);
+}
+.nt-link.is-danger:hover {
+  color: var(--danger);
+}
+.nt-kbd {
+  font-size: var(--font-11);
+  padding: 1px 6px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+@media (max-width: 767px) {
+  .nt-kbd {
+    display: none;
+  }
+}
