@@ -15,48 +15,12 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { desktop, type PipModeInfo } from '../lib/desktop';
-import { resolveTheme, type ThemePref } from '../lib/theme';
+import { useFollowTheme } from '../lib/useFollowTheme';
 import { PipView } from './PipView';
 import { PipDock } from './PipDock';
 import { initPomodoro } from './kernel';
 import { PIP_COMPACT_MAX_H, PIP_PEEK_LEAVE_MS, PIP_TOPBAR_H } from './constants';
 import { useStore } from '../store/useStore';
-
-const THEME_KEY = 'yearflow-theme'; // lib/theme.ts 的同一个 key
-
-function readThemePref(): ThemePref {
-  try {
-    return (localStorage.getItem(THEME_KEY) as ThemePref | null) ?? 'system';
-  } catch {
-    return 'system';
-  }
-}
-
-/**
- * 主题跟随主窗：主窗切主题时会写 localStorage，我们靠 storage 事件收到。
- * 不能调 applyTheme() —— 那个函数会**回写** localStorage，两窗互相触发就成环了。
- */
-function useFollowTheme(): void {
-  useEffect(() => {
-    const apply = (): void => {
-      document.documentElement.dataset.theme = resolveTheme(readThemePref());
-    };
-    apply();
-    const onStorage = (e: StorageEvent): void => {
-      if (e.key === null || e.key === THEME_KEY) apply();
-    };
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const onScheme = (): void => {
-      if (readThemePref() === 'system') apply();
-    };
-    window.addEventListener('storage', onStorage);
-    mq.addEventListener('change', onScheme);
-    return () => {
-      window.removeEventListener('storage', onStorage);
-      mq.removeEventListener('change', onScheme);
-    };
-  }, []);
-}
 
 /**
  * 「窗已经缩到收起档了吗」—— 形态的权威事实。

@@ -29,6 +29,7 @@ import {
   nativeTheme,
   shell,
   dialog,
+  globalShortcut,
   type Rectangle,
 } from 'electron';
 import fs from 'node:fs';
@@ -663,6 +664,8 @@ function createMainWindow(hidden = false): BrowserWindow {
   });
   win.on('closed', () => {
     mainWindow = null;
+    // 贴纸与速记框靠主窗读写：主窗真关了（退出 / 关窗即退出模式）就一起关，位置留着下次恢复
+    closeAllNoteWindows();
   });
   wireGlass(win);
   void win.loadURL(pageURL('index.html'));
@@ -1009,6 +1012,190 @@ ipcMain.handle('backup:read', (_e, name: string) => {
 
 ipcMain.handle('backup:open-dir', () => shell.openPath(backupDir()));
 
+// ——— 便签：贴到桌面 + 全局速记（docs/NOTES_SPEC.md §二）———
+//
+// 贴纸窗与速记框都只是「视图」：内容经 BroadcastChannel 找主窗读写（src/notes/channel.ts），
+// 这里只管开关窗、位置记忆与全局热键。贴着哪几条、各在哪，是本机窗口状态：存 userData/sticky-notes.json，
+// 不进库、不同步（同 pip-window.json 的口径）。
+
+const NOTE_W = 260;
+const NOTE_H = 240;
+const NOTE_MIN_W = 180;
+const NOTE_MIN_H = 120;
+/** 新贴的一张相对上一张错开多少，免得叠成一张 */
+const NOTE_CASCADE = 28;
+const QUICK_W = 440;
+const QUICK_H = 200;
+const QUICK_ACCEL = 'CommandOrControl+Alt+N';
+
+const stickyWindows = new Map<string, BrowserWindow>();
+let stickyGeom: Record<string, Rectangle> = {};
+let stickyTimer: NodeJS.Timeout | null = null;
+/** 主窗没了 / 退出时连带关贴纸：这种关闭不算「取下」，位置要留着下次恢复 */
+let closingAllNotes = false;
+let quickWindow: BrowserWindow | null = null;
+let quickOk = false;
+
+const stickyFile = (): string => path.join(app.getPath('userData'), 'sticky-notes.json');
+
+function readSticky(): Record<string, Rectangle> {
+  try {
+    const raw = JSON.parse(fs.readFileSync(stickyFile(), 'utf8')) as Record<string, Rectangle>;
+    return raw && typeof raw === 'object' ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+function persistSticky(now = false): void {
+  if (stickyTimer) clearTimeout(stickyTimer);
+  stickyTimer = null;
+  const write = (): void => {
+    try {
+      fs.writeFileSync(stickyFile(), JSON.stringify(stickyGeom));
+    } catch {
+      // 位置记忆是锦上添花，写不进去不报错
+    }
+  };
+  if (now) write();
+  else stickyTimer = setTimeout(write, 500);
+}
+
+function broadcastStuck(): void {
+  const ids = [...stickyWindows.keys()];
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('note:stuck', ids);
+}
+
+/** 记下的位置要还在某块屏幕上（拔了副屏之后不能开在看不见的地方） */
+function onScreen(b: Rectangle): boolean {
+  return screen.getAllDisplays().some((d) => {
+    const w = d.workArea;
+    return b.x + 40 > w.x && b.x < w.x + w.width - 40 && b.y >= w.y - 8 && b.y < w.y + w.height - 40;
+  });
+}
+
+function newStickyRect(): Rectangle {
+  const wa = screen.getPrimaryDisplay().workArea;
+  const n = stickyWindows.size;
+  return { x: wa.x + wa.width - NOTE_W - 24 - n * NOTE_CASCADE, y: wa.y + 24 + n * NOTE_CASCADE, width: NOTE_W, height: NOTE_H };
+}
+
+function openSticky(id: string): void {
+  const open = stickyWindows.get(id);
+  if (open && !open.isDestroyed()) {
+    open.show();
+    open.focus();
+    return;
+  }
+  const saved = stickyGeom[id];
+  const rect = saved && onScreen(saved) ? saved : newStickyRect();
+  const win = new BrowserWindow({
+    ...rect,
+    minWidth: NOTE_MIN_W,
+    minHeight: NOTE_MIN_H,
+    show: false,
+    frame: false,
+    resizable: true,
+    skipTaskbar: true,
+    maximizable: false,
+    minimizable: false,
+    fullscreenable: false,
+    alwaysOnTop: true,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#17171c' : '#ffffff',
+    webPreferences: { preload: PRELOAD },
+  });
+  win.setAlwaysOnTop(true, 'floating');
+  win.setContentBounds(rect);
+  stickyWindows.set(id, win);
+  stickyGeom[id] = rect;
+  persistSticky();
+  const remember = (): void => {
+    if (win.isDestroyed()) return;
+    stickyGeom[id] = win.getContentBounds();
+    persistSticky();
+  };
+  win.on('moved', remember);
+  win.on('resized', remember);
+  win.once('ready-to-show', () => win.showInactive());
+  win.on('closed', () => {
+    stickyWindows.delete(id);
+    // 用户点 × / 便签进了回收站 = 取下；退出应用时连带关 = 下次还贴回去
+    if (!closingAllNotes && !quitting) {
+      delete stickyGeom[id];
+      persistSticky(true);
+    }
+    broadcastStuck();
+  });
+  void win.loadURL(pageURL(`note.html?id=${encodeURIComponent(id)}`));
+  broadcastStuck();
+}
+
+function closeAllNoteWindows(): void {
+  closingAllNotes = true;
+  for (const w of stickyWindows.values()) if (!w.isDestroyed()) w.close();
+  if (quickWindow && !quickWindow.isDestroyed()) quickWindow.destroy();
+  quickWindow = null;
+  persistSticky(true);
+  closingAllNotes = false;
+}
+
+/** 速记框开在光标所在那块屏幕的上三分之一处 */
+function showQuick(): void {
+  if (!quickWindow || quickWindow.isDestroyed()) {
+    quickWindow = new BrowserWindow({
+      width: QUICK_W,
+      height: QUICK_H,
+      show: false,
+      frame: false,
+      resizable: false,
+      skipTaskbar: true,
+      maximizable: false,
+      minimizable: false,
+      fullscreenable: false,
+      alwaysOnTop: true,
+      backgroundColor: nativeTheme.shouldUseDarkColors ? '#17171c' : '#ffffff',
+      webPreferences: { preload: PRELOAD },
+    });
+    quickWindow.setAlwaysOnTop(true, 'floating');
+    // 点到别处 = 收起（字留着，下次按热键还在）
+    quickWindow.on('blur', () => quickWindow?.hide());
+    quickWindow.on('closed', () => {
+      quickWindow = null;
+    });
+    void quickWindow.loadURL(pageURL('note.html?quick=1'));
+  }
+  const wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+  quickWindow.setContentBounds({
+    x: Math.round(wa.x + (wa.width - QUICK_W) / 2),
+    y: Math.round(wa.y + wa.height / 4),
+    width: QUICK_W,
+    height: QUICK_H,
+  });
+  const win = quickWindow;
+  const reveal = (): void => {
+    win.show();
+    win.focus();
+    win.webContents.send('note:quick-shown');
+  };
+  if (win.webContents.isLoading()) win.webContents.once('did-finish-load', reveal);
+  else reveal();
+}
+
+function toggleQuick(): void {
+  if (quickWindow && !quickWindow.isDestroyed() && quickWindow.isVisible() && quickWindow.isFocused()) quickWindow.hide();
+  else showQuick();
+}
+
+ipcMain.handle('note:stick', (_e, id: unknown) => {
+  if (typeof id === 'string' && id.length > 0 && id.length <= 64) openSticky(id);
+});
+ipcMain.handle('note:unstick', (_e, id: unknown) => {
+  if (typeof id === 'string') stickyWindows.get(id)?.close();
+});
+ipcMain.handle('note:stuck', () => [...stickyWindows.keys()]);
+ipcMain.handle('note:quick-status', () => ({ ok: quickOk, accelerator: 'Ctrl+Alt+N' }));
+ipcMain.handle('note:quick-hide', () => quickWindow?.hide());
+
 // ——— 生命周期 ———
 
 // 单实例：多开会出现两套 leader 选举与两份 Dexie 连接
@@ -1035,6 +1222,12 @@ if (!app.requestSingleInstanceLock()) {
     mainWindow = createMainWindow(START_HIDDEN);
     createTray();
 
+    // 便签：上次贴着的贴回去（内容由贴纸窗自己问主窗要；那条已经删了的会自己关掉）
+    stickyGeom = readSticky();
+    for (const id of Object.keys(stickyGeom)) openSticky(id);
+    // 全局速记热键：被别的软件占了 register 返回 false，设置页据此说明
+    quickOk = globalShortcut.register(QUICK_ACCEL, toggleQuick);
+
     // OS 睡眠/锁屏唤醒后广播，替代 web 端的 visibilitychange —— 番茄钟据此 catchUp() 补算
     const onResume = (): void => {
       for (const w of BrowserWindow.getAllWindows()) {
@@ -1047,7 +1240,9 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on('before-quit', () => {
     quitting = true;
+    persistSticky(true);
   });
+  app.on('will-quit', () => globalShortcut.unregisterAll());
   // 收进托盘时主窗只是隐藏、不算关闭；走到这里说明真没窗了（关窗即退出模式，或托盘没建成）
   app.on('window-all-closed', () => {
     if (!tray || !shellPrefs.closeToTray || quitting) app.quit();

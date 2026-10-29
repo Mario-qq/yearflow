@@ -41,6 +41,10 @@
 
 桌面贴纸的「哪几条贴着、在哪」是本机窗口状态，存主进程 `sticky-notes.json`，不进库、不同步。
 
+桌面版：`note.html` + `src/note-main.tsx`（贴纸 `?id=` / 速记 `?quick=1`，`notes/NoteWindow.tsx`）；主窗侧 `notes/bridge.ts`（hydrate 之后才回话 ⇒ 贴纸在主窗起来前一直重试，不会把「还没载入」误判成「已删除」）；主进程 `electron/main.cts`「便签」一节。主窗真关了（退出 / 关窗即退出模式）连带关贴纸，位置留着下次贴回。
+
+自查：`scripts/check-notes.mjs`（网页，vite dev）、`scripts/check-notes-desktop.mjs`（桌面，先 `npm run electron:build`；全局热键用 SendKeys 发真实按键）。
+
 ## 五、实施阶段
 
 W1 数据层 + 单测 → W2 面板 UI → W3 转待办 / 命令面板 / 手机入口 / 自查脚本 → W4 桌面贴纸与全局速记。上线顺序：先在 Supabase 执行 0007，再发前端（没执行时只有便签不同步，状态点报「云端缺少表 notes」）。

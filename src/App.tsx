@@ -21,6 +21,7 @@ import { CommandPalette } from './components/CommandPalette';
 import { ShortcutHelp } from './components/ShortcutHelp';
 import { GanttToolbar } from './gantt/GanttToolbar';
 import { NotesButton, NotesHost } from './notes/NotesEntry';
+import { initNoteBridge } from './notes/bridge';
 import GanttPage from './pages/GanttPage';
 import CheckInPage from './pages/CheckInPage';
 import DeskPage from './pages/DeskPage';
@@ -122,6 +123,11 @@ export default function App() {
   // 本机自动备份（只在桌面版生效）：hydrate 之后才有数据可备份
   useEffect(() => {
     if (hydrated) initAutoBackup();
+  }, [hydrated]);
+
+  // 便签贴纸 / 全局速记靠主窗读写（只在桌面版生效）：必须在 hydrate 之后，否则贴纸问到的是空库会自己关掉
+  useEffect(() => {
+    if (hydrated) initNoteBridge();
   }, [hydrated]);
 
   // 番茄钟计时内核：恢复判定与结算必须在 hydrate 之后（否则结算会进了库却不在内存）。

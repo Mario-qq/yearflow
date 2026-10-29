@@ -97,6 +97,15 @@ export interface DesktopApi {
    * 原生 hit-test 把鼠标判给「移动窗口」，:hover / onPointerEnter 一概不触发。
    */
   onPipHover(cb: (on: boolean) => void): () => void;
+  /** 便签贴到桌面（独立置顶小窗）/ 取下；位置按条记在主进程 sticky-notes.json */
+  stickNote(id: string): Promise<void>;
+  unstickNote(id: string): Promise<void>;
+  stuckNotes(): Promise<string[]>;
+  onStuckNotes(cb: (ids: string[]) => void): () => void;
+  /** 全局速记热键（Ctrl+Alt+N）注册结果 */
+  quickNoteStatus(): Promise<{ ok: boolean; accelerator: string }>;
+  hideQuickNote(): Promise<void>;
+  onQuickNoteShown(cb: () => void): () => void;
   /** 工作台透明：acrylic = 主窗带系统亚克力（Win11 22H2+） */
   glassInfo(): Promise<{ acrylic: boolean; geom: GlassGeom | null }>;
   /** 当前桌面壁纸（缩小后的 JPEG data URL）；纯色背景 / 读不到为 null */

@@ -104,6 +104,25 @@ const api = {
     ipcRenderer.on('pip:mode', handler);
     return () => ipcRenderer.off('pip:mode', handler);
   },
+  /** 便签贴到桌面 / 取下（NOTES_SPEC §二）。内容不走 IPC：贴纸窗经 BroadcastChannel 找主窗读写 */
+  stickNote: (id: string): Promise<void> => ipcRenderer.invoke('note:stick', id),
+  unstickNote: (id: string): Promise<void> => ipcRenderer.invoke('note:unstick', id),
+  stuckNotes: (): Promise<string[]> => ipcRenderer.invoke('note:stuck'),
+  onStuckNotes: (cb: (ids: string[]) => void): (() => void) => {
+    const handler = (_e: unknown, ids: string[]): void => cb(ids);
+    ipcRenderer.on('note:stuck', handler);
+    return () => ipcRenderer.off('note:stuck', handler);
+  },
+  /** 全局速记热键是否注册成功（被别的软件占了就是 false） */
+  quickNoteStatus: (): Promise<{ ok: boolean; accelerator: string }> => ipcRenderer.invoke('note:quick-status'),
+  /** 速记框收起（隐藏而不销毁：下次按热键秒开、没存的字还在） */
+  hideQuickNote: (): Promise<void> => ipcRenderer.invoke('note:quick-hide'),
+  /** 速记框每次被热键唤起（窗口是复用的，页面据此重新聚焦） */
+  onQuickNoteShown: (cb: () => void): (() => void) => {
+    const handler = (): void => cb();
+    ipcRenderer.on('note:quick-shown', handler);
+    return () => ipcRenderer.off('note:quick-shown', handler);
+  },
   /** 工作台透明：是否有系统亚克力 + 当前窗口几何（见 main.cts「工作台透明」） */
   glassInfo: (): Promise<{ acrylic: boolean; geom: GlassGeomView | null }> => ipcRenderer.invoke('glass:info'),
   /** 当前桌面壁纸（缩小后的 data URL），读不到为 null */

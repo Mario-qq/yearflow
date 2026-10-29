@@ -12,6 +12,7 @@ const PATHS = {
   restore: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4',
   close: 'M6 6l12 12M18 6L6 18',
   note: 'M5 4h14v11l-5 5H5zM14 20v-5h5',
+  desk: 'M3 5h18v12H3zM8 21h8M12 17v4M14 8h4v4h-4z',
 } as const;
 
 export type NoteIconName = keyof typeof PATHS;

@@ -520,3 +520,116 @@
     display: none;
   }
 }
+
+/* ── 桌面版独立窗口：贴纸 / 速记框（NoteWindow.tsx）。整窗即一张便签 ── */
+.nt-win {
+  --nt-bar: 30px;
+  --nt-bg: var(--note-default-bg);
+  --nt-edge-c: var(--note-default-edge);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--nt-bg);
+  color: var(--text-primary);
+  border-top: 3px solid var(--nt-edge-c);
+  box-sizing: border-box;
+}
+.nt-win[data-color='yellow'] {
+  --nt-bg: var(--note-yellow-bg);
+  --nt-edge-c: var(--note-yellow-edge);
+}
+.nt-win[data-color='green'] {
+  --nt-bg: var(--note-green-bg);
+  --nt-edge-c: var(--note-green-edge);
+}
+.nt-win[data-color='blue'] {
+  --nt-bg: var(--note-blue-bg);
+  --nt-edge-c: var(--note-blue-edge);
+}
+.nt-win[data-color='pink'] {
+  --nt-bg: var(--note-pink-bg);
+  --nt-edge-c: var(--note-pink-edge);
+}
+.nt-win[data-color='purple'] {
+  --nt-bg: var(--note-purple-bg);
+  --nt-edge-c: var(--note-purple-edge);
+}
+.nt-win[data-color='gray'] {
+  --nt-bg: var(--note-gray-bg);
+  --nt-edge-c: var(--note-gray-edge);
+}
+/* 顶条整条可拖动窗口；按钮挖掉拖动区。⚠️ 拖动区上真实鼠标不进渲染进程（:hover 全废）⇒ 按钮常显，不做悬停才出现 */
+.nt-win-bar {
+  flex-shrink: 0;
+  height: var(--nt-bar);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-1) 0 var(--space-2);
+  font-size: var(--font-12);
+  color: var(--text-tertiary);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.nt-win-bar b {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.nt-win-btn {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+.nt-win-btn:hover {
+  color: var(--text-primary);
+  background: var(--row-hover);
+}
+.nt-win-colors {
+  display: flex;
+  gap: 6px;
+  padding: 0 var(--space-3) var(--space-2);
+}
+.nt-win-text {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  resize: none;
+  padding: var(--space-1) var(--space-3) var(--space-3);
+  font: inherit;
+  font-size: var(--font-13);
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+.nt-win-text::placeholder {
+  color: var(--text-tertiary);
+}
+.nt-win-wait,
+.nt-win-hint,
+.nt-win-foot {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+}
+.nt-win-hint {
+  color: var(--warning);
+}
+/* 窗口本身是直角的：这里不做圆角，否则四角露出窗底色 */
+.nt-quick {
+  border: 1px solid var(--border-default);
+  border-top: 3px solid var(--accent);
+}
+.nt-quick .nt-win-text {
+  font-size: var(--font-15);
+}
+.nt-win-state {
+  font-size: var(--font-11);
+  color: var(--text-tertiary);
+}

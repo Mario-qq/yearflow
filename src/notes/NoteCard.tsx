@@ -19,6 +19,8 @@ import {
 import { useStore } from '../store/useStore';
 import { flushNow } from '../store/persist';
 import { showToast } from '../lib/toast';
+import { desktop } from '../lib/desktop';
+import { useStuckNotes } from './bridge';
 import { NOTE_COLORS, NOTE_PREVIEW_LINES, NOTE_SAVE_DEBOUNCE_MS } from './constants';
 import { relTime } from './format';
 import { NoteIcon } from './icons';
@@ -46,6 +48,8 @@ export function NoteCard({ note, view, editing, onTag }: Props) {
   const [menu, setMenu] = useState<'color' | 'todo' | null>(null);
   const progress = checklistProgress(note.body);
   const conflictOrigin = useStore((s) => (note.conflictOf ? s.notes[note.conflictOf] : undefined));
+  const stuck = useStuckNotes((s) => s.ids.includes(note.id));
+  const d = desktop();
 
   const open = (e: MouseEvent) => {
     if (view === 'trash' || editing) return;
@@ -61,8 +65,9 @@ export function NoteCard({ note, view, editing, onTag }: Props) {
       onClick={open}
       onMouseLeave={() => setMenu(null)}
     >
-      {(note.conflictOf || note.localOnly || note.convertedTo?.length) && (
+      {(note.conflictOf || note.localOnly || note.convertedTo?.length || stuck) && (
         <div className="nt-flags">
+          {stuck && <span className="nt-flag">贴在桌面</span>}
           {note.conflictOf && (
             <span className="nt-flag is-warn" title="同步时两边都改过：这是另一边的版本，合并完删掉即可">
               冲突副本{conflictOrigin ? '' : '（原便签已不在）'}
@@ -106,6 +111,19 @@ export function NoteCard({ note, view, editing, onTag }: Props) {
               <button type="button" className="nt-act" title="转成待办（进工作台「待处理」）" onClick={() => onConvertClick(note, setMenu)}>
                 <NoteIcon name="todo" />
               </button>
+              {d && view === 'active' && (
+                <button
+                  type="button"
+                  className={`nt-act${stuck ? ' is-on' : ''}`}
+                  title={stuck ? '从桌面取下' : '贴到桌面（置顶小窗，可直接改）'}
+                  onClick={() => {
+                    if (editing) editNote(null);
+                    void (stuck ? d.unstickNote(note.id) : d.stickNote(note.id));
+                  }}
+                >
+                  <NoteIcon name="desk" />
+                </button>
+              )}
               <button
                 type="button"
                 className={`nt-act${note.localOnly ? ' is-on' : ''}`}

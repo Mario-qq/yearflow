@@ -42,9 +42,9 @@ export default defineConfig({
       },
     }),
   ],
-  // 桌面版多一个 pip.html 入口：小窗是独立窗口、独立 React root，不能再靠 createPortal
+  // 桌面版多 pip.html / note.html 两个入口：小窗、便签贴纸与速记框都是独立窗口、独立 React root
   build: isElectron
-    ? { rollupOptions: { input: { index: 'index.html', pip: 'pip.html' } } }
+    ? { rollupOptions: { input: { index: 'index.html', pip: 'pip.html', note: 'note.html' } } }
     : undefined,
   // 预览代理会通过 PORT 环境变量指定端口（vite 默认不读它）
   server: { port: Number(process.env.PORT) || 5173, strictPort: !!process.env.PORT },

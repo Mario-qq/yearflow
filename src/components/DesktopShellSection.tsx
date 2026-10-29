@@ -1,5 +1,5 @@
 /**
- * 设置页「桌面常驻」（只在桌面版出现）：关窗收进托盘 / 开机自启。偏好由主进程持有（本机 shell-prefs.json），
+ * 设置页「桌面常驻」（只在桌面版出现）：关窗收进托盘 / 开机自启 / 全局速记热键状态。偏好由主进程持有（本机 shell-prefs.json），
  * 托盘右键菜单也能改，两边经 shell:prefs 广播保持一致。
  */
 import { useEffect, useState } from 'react';
@@ -10,10 +10,12 @@ const tip: React.CSSProperties = { fontSize: 'var(--font-12)', color: 'var(--tex
 
 export function DesktopShellSection() {
   const [prefs, setPrefs] = useState<ShellPrefsView | null>(null);
+  const [quick, setQuick] = useState<{ ok: boolean; accelerator: string } | null>(null);
   useEffect(() => {
     const d = desktop();
     if (!d) return;
     void d.getShellPrefs().then(setPrefs);
+    void d.quickNoteStatus().then(setQuick);
     return d.onShellPrefs(setPrefs);
   }, []);
   const d = desktop();
@@ -32,6 +34,14 @@ export function DesktopShellSection() {
         开机自启
         <span style={tip}>{prefs.canAutoStart ? '登录后静默在托盘，不弹窗' : '开发模式下不可用'}</span>
       </label>
+      {quick && (
+        <div style={row}>
+          全局速记 {quick.accelerator}
+          <span style={{ ...tip, color: quick.ok ? 'var(--text-tertiary)' : 'var(--warning)' }}>
+            {quick.ok ? '在任何软件里按下，弹出速记框记一条便签' : '这个快捷键被别的软件占用了，速记框用不了；关掉占用它的软件后重开 YearFlow'}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
