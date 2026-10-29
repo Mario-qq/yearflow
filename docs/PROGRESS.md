@@ -1105,3 +1105,17 @@ Document PiP 与主页面**同一个 JS realm**，所以旧实现是 `createPort
 ### 2026-10-28 补：收起顶部菜单栏
 
 负责人拍板：主窗 `autoHideMenuBar: true`，File / Edit / View / Window 默认收起，玻璃直通标题栏下沿；按 Alt 临时呼出，菜单快捷键（刷新、缩放、开发者工具）照常生效。`check-glass.mjs` 加一项断言菜单栏默认不可见且为自动隐藏（16 项全过），`electron:build` 后 `desktop-smoke` 全过。
+
+## 2026-10-29 便签（docs/NOTES_SPEC.md）
+
+负责人：要一个备忘录 / 便签功能，生产级，先出方案确认。方案七个问题负责人「全按推荐」：全局入口 + Alt+N 右侧面板、手机端要、清单要 / 图片附件不做、桌面贴纸与全局速记要、关联目标人物放 v2、加「仅本机」开关。
+
+**边界**：便签 = 要记住的东西，没有日期 / 完成 / 统计；要去做的事点「转待办」进工作台「待处理」。
+
+- **W1 数据层**：`Note`（domain.ts）、Dexie v6 `notes`、云端 `supabase/migrations/0007_notes.sql`、备份 schema（老备份补空数组）、设置页计数。派生 `lib/derive/notes.ts`（标题 / 标签 / 清单 / 搜索 / 分区 / 回收站过期）。同步：**冲突副本**（远端赢了而本机正文有没推的修改 ⇒ 本机版另存一条，`db/sync/merge.ts noteConflictCopies`）、**仅本机**推送只推不含正文的墓碑（`redactForPush`）。撤销：`execute(label, changes, { mergeKey })` 一次编辑会话合成一条，新建后清空收起与新建抵消。
+- **W2/W3 面板**：顶栏「便签」按钮（手机只显示图标）、Alt+N、命令面板「新建便签」与按正文搜便签、速查表。面板 lazy 分包：搜索兼新建（回车记下 / Ctrl+回车展开写）、标签条、置顶 / 其他、卡片预览（清单可勾、标签可点、网址可开）、原位编辑（防抖 500ms、清单回车续行、编辑中远端改了 ⇒ 冲突副本）、颜色 6+1、置顶、转待办（整条 / 某一行）、仅本机、归档、回收站（30 天自动清）。
+- **W4 桌面版**：便签「贴到桌面」= 无边框置顶小窗，直接改字、换色、回面板、取下；重开应用自动贴回（位置存 userData/sticky-notes.json）。全局热键 Ctrl+Alt+N 弹速记框（失焦收起、字留着）；被占用时设置页说明。小窗不碰库：经 BroadcastChannel 让主窗执行（`notes/channel.ts` 说明原因）。顺手把番茄钟小窗的主题跟随抽成 `lib/useFollowTheme.ts` 共用。
+
+**验收**：`tsc -b` + `tsc -p electron` + `oxlint` 干净；vitest 393 全绿（新增 notes 派生 15、同步冲突 / 脱敏 6、noteActions 10）。`check-notes.mjs` 41 项全过（连跑三次）；`electron:build` 后 `check-notes-desktop.mjs` 20 项全过（含重开贴回、SendKeys 真按热键）、`desktop-smoke` 全过；`check-people` 回归全过（顶栏多了按钮，截图已更新）。截图 `docs/screenshots/notes/` 逐张过目（深浅、编辑态、回收站、甘特页、手机）。自查中修掉一个真问题：清单续行的光标原先下一帧才设，打字快时字落到错的位置。
+
+**负责人要做的**：① Supabase SQL Editor 执行 `supabase/migrations/0007_notes.sql`（不执行只有便签不同步，状态点会提示）② 右键托盘「退出」后重开桌面版。
