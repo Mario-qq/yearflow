@@ -11,6 +11,9 @@ import { ruleLabel } from '../lib/derive/desk';
 import { relDay, md, toastUndo } from './format';
 import { useDeskUi } from './uiStore';
 import { HabitEditor } from './Habits';
+import { DEFAULT_REMIND, REMIND_OPTS, remindLabel } from '../lib/derive/meetings';
+import { askWebNotifyPermission } from './meetingNudge';
+import { isDesktop } from '../lib/desktop';
 
 const close = () => useDeskUi.getState().set({ editor: null });
 
@@ -82,12 +85,15 @@ function ItemEditor({ item, today }: { item: WorkItem; today: string }) {
       kind: d.kind,
       person: d.kind === 'followup' ? d.person?.trim() || undefined : undefined,
       mode: d.kind === 'followup' ? (d.mode ?? 'inform') : undefined,
+      time: d.kind === 'meeting' ? d.time || undefined : undefined,
+      remind: d.kind === 'meeting' && d.remind?.length ? [...d.remind].sort((a, b) => b - a) : undefined,
       urgency: d.urgency,
       date: d.date || undefined,
       dueDate: d.dueDate || undefined,
       goalId: d.goalId || undefined,
       scope: d.scope,
     };
+    if (patch.remind) askWebNotifyPermission();
     const changed = editItem(item.id, patch);
     close();
     if (changed) {
@@ -107,8 +113,9 @@ function ItemEditor({ item, today }: { item: WorkItem; today: string }) {
           options={[
             ['todo', '待办'],
             ['followup', '跟进'],
+            ['meeting', '会议'],
           ]}
-          onChange={(kind) => set({ kind })}
+          onChange={(kind) => set(kind === 'meeting' && d.kind !== 'meeting' && !d.remind ? { kind, remind: [...DEFAULT_REMIND] } : { kind })}
         />
         {d.kind === 'followup' && (
           <>
@@ -130,6 +137,36 @@ function ItemEditor({ item, today }: { item: WorkItem; today: string }) {
           </>
         )}
       </Field>
+      {d.kind === 'meeting' && (
+        <>
+          <Field k="几点开">
+            <input type="time" className="dk-in tnum" aria-label="会议开始时间" value={d.time ?? ''} onChange={(e) => set({ time: e.target.value || undefined })} />
+            {!d.time && <span className="dk-ed-tip warn">定了时间才能提醒</span>}
+            {d.time && !d.date && <span className="dk-ed-tip warn">排了日子才能提醒</span>}
+          </Field>
+          <Field k="提醒">
+            <div className="dk-rmd" role="group" aria-label="会议提醒">
+              {REMIND_OPTS.map((m) => {
+                const on = Boolean(d.remind?.includes(m));
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    aria-pressed={on}
+                    className={on ? 'on' : ''}
+                    onClick={() => set({ remind: on ? d.remind!.filter((x) => x !== m) : [...(d.remind ?? []), m] })}
+                  >
+                    {remindLabel(m)}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+          <span className="dk-ed-tip dk-rmd-tip">
+            {d.remind?.length ? (isDesktop() ? '到点发系统通知（关窗收进托盘也照常）' : '网页开着时到点通知；装桌面版关窗也能提醒') : '不提醒'}
+          </span>
+        </>
+      )}
       <Field k="紧急度">
         <Seg label="紧急度" value={d.urgency} options={URGENCY_OPTS} onChange={(urgency) => set({ urgency })} />
       </Field>

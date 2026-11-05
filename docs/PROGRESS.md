@@ -1119,3 +1119,17 @@ Document PiP 与主页面**同一个 JS realm**，所以旧实现是 `createPort
 **验收**：`tsc -b` + `tsc -p electron` + `oxlint` 干净；vitest 393 全绿（新增 notes 派生 15、同步冲突 / 脱敏 6、noteActions 10）。`check-notes.mjs` 41 项全过（连跑三次）；`electron:build` 后 `check-notes-desktop.mjs` 20 项全过（含重开贴回、SendKeys 真按热键）、`desktop-smoke` 全过；`check-people` 回归全过（顶栏多了按钮，截图已更新）。截图 `docs/screenshots/notes/` 逐张过目（深浅、编辑态、回收站、甘特页、手机）。自查中修掉一个真问题：清单续行的光标原先下一帧才设，打字快时字落到错的位置。
 
 **负责人要做的**：① Supabase SQL Editor 执行 `supabase/migrations/0007_notes.sql`（不执行只有便签不同步，状态点会提示）② 右键托盘「退出」后重开桌面版。
+
+## 2026-11-05 会议提醒（DESK_SPEC §3.2b）
+
+负责人：加了会议事项，能设置什么时间通知我。
+
+- **数据**：`WorkItem.kind` 加 `'meeting'`，新字段 `time`（开始 HH:mm）、`remind`（提前分钟数组，0=准时、1440=前一天）；全可选，老数据与云端表零改动，备份 zod 已加。`deskPlan` 改类型时清掉不属于该类型的字段。
+- **派生**：`lib/derive/meetings.ts`（`meetingRemindersDue / untilText / remindLabel / pruneSent`），单测 7 条；`parseQuickAdd` 认会议（会议词 + 时间，上午/下午/晚上，1–6 点按下午），原「明天 3点 开会 → 待办」用例按新口径改写，新增 2 条。
+- **界面**：编辑卡类型多「会议」→ 几点开 + 提醒多选；行首开始时间、行尾铃铛；一句话预览显示会议与提醒档；新建按钮悬停提示补写法。
+- **提醒**：`desk/meetingNudge.ts` 每 20 秒 + 睡眠醒来 + 切回标签页判一次；桌面版系统通知（有声）、网页版浏览器通知；App 级横幅 `MeetingAlerts` 点「知道了」才收起（toast 2.6 秒太容易错过）。
+
+**验收**：`tsc -b` 干净，vitest 26 文件 / 402 全绿。浏览器（vite dev）实测：一句话建会议 → 19:45 真轮询到点发出（已发记录写入）→ 改「准时」后 19:48 真轮询挂出横幅，深浅两套主题看过，「知道了」收起。`electron:build` 后 `scripts/check-meeting-desktop.mjs`（独立 profile、app:// 生产构建）8 项全过：预览认出会议、行首时间、铃铛、横幅、主进程系统通知、收起、同一条不重发。截图 `screenshots/meeting/`。
+
+**负责人要做的**：右键托盘「退出 YearFlow」后从快捷方式重开桌面版。
+

@@ -100,8 +100,8 @@ describe('一句话新建', () => {
     expect(p('工作日 9点半 看 MRP 批次')).toMatchObject({ time: '09:30', title: '看 MRP 批次' });
     expect(p('每月5号 14点30 对账')).toMatchObject({ time: '14:30', title: '对账' });
     expect(p('每天 25:00 乱写')).toMatchObject({ kind: 'routine', title: '25:00 乱写' });
-    expect(p('明天 3点 开会')).toMatchObject({ kind: 'todo', title: '3点 开会' });
-    expect(p('明天 3点 开会').time).toBeUndefined();
+    expect(p('明天 3点 交报表')).toMatchObject({ kind: 'todo', title: '3点 交报表' });
+    expect(p('明天 3点 交报表').time).toBeUndefined();
   });
 
   it('规则词夹在正文里不算例行', () => {
@@ -119,5 +119,19 @@ describe('v3：重要', () => {
   it('标题里夹着的星号不算', () => {
     expect(p('算 2*3 的结果').important).toBeUndefined();
     expect(p('算 2*3 的结果').title).toBe('算 2*3 的结果');
+  });
+});
+
+describe('会议', () => {
+  it('会议词 + 时间 ⇒ 会议，默认提前 10 分钟提醒；1–6 点按下午', () => {
+    expect(p('明天 3点 开会')).toMatchObject({ kind: 'meeting', title: '开会', time: '15:00', remind: [10] });
+    expect(p('周会 9:30')).toMatchObject({ kind: 'meeting', title: '周会', time: '09:30' });
+    expect(p('下午2点半 供应商评审 #SAP')).toMatchObject({ kind: 'meeting', time: '14:30', title: '供应商评审' });
+    expect(p('上午10点 面试')).toMatchObject({ kind: 'meeting', time: '10:00' });
+    expect(p('晚上8点 家长会议')).toMatchObject({ kind: 'meeting', time: '20:00' });
+  });
+  it('没写时间 / 待处理 ⇒ 还是待办', () => {
+    expect(p('准备周会材料')).toMatchObject({ kind: 'todo' });
+    expect(p('3点 开会 待处理')).toMatchObject({ kind: 'todo', title: '3点 开会', date: null });
   });
 });

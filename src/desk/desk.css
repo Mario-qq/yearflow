@@ -2568,3 +2568,49 @@
     transition: none;
   }
 }
+
+/* ── 会议：编辑卡里的提醒多选、行上的开始时间与铃铛 ── */
+.dk-rmd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.dk-rmd button {
+  height: 24px;
+  padding: 0 8px;
+  font-size: var(--font-12);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  font-variant-numeric: tabular-nums;
+}
+.dk-rmd button:hover {
+  color: var(--text-primary);
+}
+.dk-rmd button.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.dk-rmd-tip {
+  margin: -4px 0 0 54px;
+}
+.dk-row .dk-tm {
+  margin-right: 6px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--accent);
+}
+.dk-row.done .dk-tm,
+.dk-row.skipped .dk-tm {
+  color: inherit;
+  font-weight: inherit;
+}
+.dk-m .bell {
+  display: inline-flex;
+  color: var(--text-tertiary);
+}
+.dk-m .bell svg {
+  width: 11px;
+  height: 11px;
+}

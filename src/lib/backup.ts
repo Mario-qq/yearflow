@@ -131,7 +131,7 @@ const focusSessionSchema = z.object({
 // ── 工作台（DESK_SPEC §七）──
 const workItemSchema = z.object({
   id: z.string().min(1),
-  kind: z.enum(['todo', 'followup']),
+  kind: z.enum(['todo', 'followup', 'meeting']),
   title: z.string(),
   note: z.string().optional(),
   urgency: z.enum(['urgent', 'soon', 'normal']),
@@ -140,6 +140,8 @@ const workItemSchema = z.object({
   dueDate: dateStr.optional(),
   person: z.string().optional(),
   mode: z.enum(['inform', 'dispatch']).optional(),
+  time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  remind: z.array(z.number().int().min(0)).optional(),
   goalId: z.string().optional(),
   important: z.boolean().optional(),
   focusOn: dateStr.optional(),

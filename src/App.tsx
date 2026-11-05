@@ -12,6 +12,8 @@ import { initAutoBackup } from './lib/autoBackup';
 import { initPomodoro } from './pomodoro/kernel';
 import { initStudyAutoCheckIn } from './desk/study';
 import { initStudyNudges } from './desk/studyNudge';
+import { initMeetingNudges } from './desk/meetingNudge';
+import { MeetingAlerts } from './desk/MeetingAlerts';
 import { DesktopBridge } from './components/DesktopBridge';
 import { GlassLayer } from './components/GlassLayer';
 import { desktop } from './lib/desktop';
@@ -139,6 +141,8 @@ export default function App() {
     initPomodoro();
     // 学习到点提醒（只在桌面版跑；关窗收进托盘后照常提醒）
     initStudyNudges();
+    // 会议提醒（桌面版发系统通知；网页版页面开着时发浏览器通知 + toast）
+    initMeetingNudges();
   }, [hydrated]);
 
   // 桌面版：小窗是原生窗口，用户从窗内的 × 关掉时只有主进程知道，靠这条广播回填 pipOpen
@@ -301,6 +305,7 @@ export default function App() {
         <MobileTabBar />
         <NotesHost />
         <Toasts />
+        <MeetingAlerts />
         <Celebration />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} />

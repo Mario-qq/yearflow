@@ -9,6 +9,7 @@ import { patchItem, toggleItem, toggleOccurrence } from '../store/deskActions';
 import { useStore } from '../store/useStore';
 import { goalColor } from '../lib/colors';
 import { CHECK_ANIM_MS, personColor } from './constants';
+import { remindLabel } from '../lib/derive/meetings';
 import { md, relDay, weekdayCn } from './format';
 import { itemKey, occKey } from './keys';
 import { clickSelect } from './selection';
@@ -103,6 +104,16 @@ export function ItemRow({ item, today, rolled, compact, inZone, inFocus, showWhe
   if (!compact) {
     if (item.kind === 'followup' && !hideWho) meta.push(<WhoChip key="who" item={item} />);
     if (hideWho && item.kind === 'followup') meta.push(<span key="mode">{item.mode === 'dispatch' ? '下发' : '告知'}</span>);
+    if (item.kind === 'meeting' && item.remind?.length && item.time && item.status === 'open') {
+      meta.push(
+        <span key="bell" className="bell" title={`提醒：${[...item.remind].sort((a, b) => b - a).map(remindLabel).join('、')}`}>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M4 11V7a4 4 0 0 1 8 0v4l1.2 1.5H2.8Z" />
+            <path d="M6.5 14a1.6 1.6 0 0 0 3 0" />
+          </svg>
+        </span>,
+      );
+    }
     if (goal) meta.push(<span key="g" className="gd" title={`#${goal.name}`} style={{ '--c': goalColor(goal.color) } as React.CSSProperties} />);
     if (item.focusOn && !inFocus && item.status === 'open' && item.focusOn >= today) {
       meta.push(
@@ -174,6 +185,7 @@ export function ItemRow({ item, today, rolled, compact, inZone, inFocus, showWhe
         ) : (
           <>
             {item.important && <i className="dk-imp" aria-label="重要" title="重要" />}
+            {item.kind === 'meeting' && item.time && <span className="dk-tm">{item.time}</span>}
             {item.title}
           </>
         )}

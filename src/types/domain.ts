@@ -207,7 +207,8 @@ export type WorkItemStatus = 'open' | 'done' | 'dropped';
  */
 export interface WorkItem {
   id: string;
-  kind: 'todo' | 'followup';
+  /** meeting = 会议：带开始时间 time，可设到点前提醒 remind（老数据只有 todo/followup，零迁移） */
+  kind: 'todo' | 'followup' | 'meeting';
   title: string;
   note?: string;
   urgency: Urgency;
@@ -216,6 +217,10 @@ export interface WorkItem {
   dueDate?: string; // 截止日
   person?: string; // 跟进对象（kind=followup 必有）
   mode?: 'inform' | 'dispatch'; // 待告知 / 待下发
+  /** 会议开始时间 HH:mm（kind=meeting 才有；和 date 一起定出那一刻） */
+  time?: string;
+  /** 会议提醒：开始前几分钟各提醒一次（0 = 准时，1440 = 前一天同一时刻）；缺省/空 = 不提醒 */
+  remind?: number[];
   goalId?: string; // 仅标签与筛选，不计入甘特进度
   /** 重要（艾森豪威尔矩阵的另一轴）：与紧急度独立；缺省 = 不重要 ⇒ 老数据零迁移 */
   important?: boolean;

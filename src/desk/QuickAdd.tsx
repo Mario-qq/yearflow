@@ -6,13 +6,15 @@
 import { useMemo, useState } from 'react';
 import type { Urgency, WorkScope } from '../types/domain';
 import { parseQuickAdd } from '../lib/desk/parseQuickAdd';
+import { remindLabel } from '../lib/derive/meetings';
+import { askWebNotifyPermission } from './meetingNudge';
 import { addDays, isFocusOn, MAX_FOCUS } from '../lib/derive/desk';
 import { createFromQuickAdd } from '../store/deskActions';
 import { useStore } from '../store/useStore';
 import { isWeekendDate, md, relDay, toastUndo } from './format';
 import { useDeskUi } from './uiStore';
 
-const SYNTAX_HINT = '新建（N）\n也可以一句话写完：!! 紧急 · ! 尽快 · * 重要 · @人 · 今天/周三/下周一/10.20 · 截止周五 · #目标 · 每周三/工作日/每月5号（可带 9:00）· ~生活 · 待处理';
+const SYNTAX_HINT = '新建（N）\n也可以一句话写完：!! 紧急 · ! 尽快 · * 重要 · @人 · 今天/周三/下周一/10.20 · 截止周五 · #目标 · 每周三/工作日/每月5号（可带 9:00）· ~生活 · 待处理\n会议：写「下午3点 周会」这类带时间的会议，默认提前 10 分钟提醒';
 
 interface Pick {
   scope?: WorkScope;
@@ -63,8 +65,9 @@ export function QuickAdd({ today }: { today: string }) {
     if (!typed) return close();
     if (!parsed.title) return;
     const r = { ...parsed, scope, urgency, important, date: isRoutine ? null : date };
+    if (r.kind === 'meeting') askWebNotifyPermission();
     createFromQuickAdd(r, focus);
-    toastUndo(r.kind === 'routine' ? `已建例行：${r.title}（${r.ruleLabel}）` : `已加到${r.date ? relDay(r.date, today) : '待处理'}：${r.title}${focus ? '（要事）' : ''}`);
+    toastUndo(r.kind === 'routine' ? `已建例行：${r.title}（${r.ruleLabel}）` : r.kind === 'meeting' && r.date ? `已加会议：${relDay(r.date, today)} ${r.time} ${r.title}` : `已加到${r.date ? relDay(r.date, today) : '待处理'}：${r.title}${focus ? '（要事）' : ''}`);
     setText('');
     setPick({});
   };
@@ -87,10 +90,11 @@ export function QuickAdd({ today }: { today: string }) {
 
   const chips: React.ReactNode[] = [];
   if (typed) {
-    const kind = isRoutine ? `例行 · ${parsed.ruleLabel}` : parsed.kind === 'followup' ? (parsed.mode === 'dispatch' ? '跟进 · 待下发' : '跟进 · 待告知') : '待办';
+    const kind = isRoutine ? `例行 · ${parsed.ruleLabel}` : parsed.kind === 'meeting' ? '会议' : parsed.kind === 'followup' ? (parsed.mode === 'dispatch' ? '跟进 · 待下发' : '跟进 · 待告知') : '待办';
     chips.push(<span key="k" className="dk-chip k">{kind}</span>);
     if (parsed.person) chips.push(<span key="p" className="dk-chip">@{parsed.person}</span>);
     if (parsed.time) chips.push(<span key="tm" className="dk-chip tnum">{parsed.time}</span>);
+    if (parsed.remind?.length) chips.push(<span key="rmd" className="dk-chip">{parsed.remind.map(remindLabel).join('、')}提醒（编辑里可改）</span>);
     if (parsed.dueDate) chips.push(<span key="due" className="dk-chip">截止 {md(parsed.dueDate)}</span>);
     if (parsed.goalId) chips.push(<span key="g" className="dk-chip">#{goals[parsed.goalId]?.name}</span>);
     if (parsed.unknownGoal) chips.push(<span key="ug" className="dk-chip warn">没有叫「{parsed.unknownGoal}」的目标</span>);

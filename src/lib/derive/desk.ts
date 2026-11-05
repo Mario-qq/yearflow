@@ -166,11 +166,12 @@ export function effectiveUrgency(item: WorkItem, today: string): Urgency {
   return item.urgency;
 }
 
-/** 排序：紧急度 → 重要（同紧急度里重要的在前）→ 截止日 → 创建顺序 */
+/** 排序：紧急度 → 重要（同紧急度里重要的在前）→ 会议按开始时间（排在没时间的前面）→ 截止日 → 创建顺序 */
 export function compareItems(a: WorkItem, b: WorkItem, today: string): number {
   return (
     URGENCY_RANK[effectiveUrgency(b, today)] - URGENCY_RANK[effectiveUrgency(a, today)] ||
     Number(Boolean(b.important)) - Number(Boolean(a.important)) ||
+    (a.kind === 'meeting' && a.time ? a.time : '~').localeCompare(b.kind === 'meeting' && b.time ? b.time : '~') ||
     (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') ||
     a.order - b.order
   );

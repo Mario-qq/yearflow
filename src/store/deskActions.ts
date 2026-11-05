@@ -45,6 +45,9 @@ export interface NewItemInput {
   goalId?: string;
   note?: string;
   important?: boolean;
+  /** 会议开始时间 HH:mm 与提醒（kind=meeting 才用） */
+  time?: string;
+  remind?: number[];
   /** 新建即设为这天的要事（不检查上限，调用方先判断） */
   focusOn?: string;
 }
@@ -64,6 +67,8 @@ export function createItem(input: NewItemInput): string {
     ...(input.date ? { date: input.date } : {}),
     ...(input.dueDate ? { dueDate: input.dueDate } : {}),
     ...(input.kind === 'followup' && input.person ? { person: input.person, mode: input.mode ?? 'inform' } : {}),
+    ...(input.kind === 'meeting' && input.time ? { time: input.time } : {}),
+    ...(input.kind === 'meeting' && input.remind?.length ? { remind: input.remind } : {}),
     ...(input.goalId ? { goalId: input.goalId } : {}),
     ...(input.note ? { note: input.note } : {}),
     ...(input.important ? { important: true } : {}),
@@ -104,8 +109,10 @@ export function createRoutine(input: NewRoutineInput): string {
 export function createFromQuickAdd(r: QuickAddResult, focus = false): string {
   if (r.kind === 'routine' && r.rule) return createRoutine({ title: r.title, rule: r.rule, scope: r.scope, time: r.time });
   return createItem({
-    kind: r.kind === 'followup' ? 'followup' : 'todo',
+    kind: r.kind === 'followup' ? 'followup' : r.kind === 'meeting' ? 'meeting' : 'todo',
     title: r.title,
+    time: r.time,
+    remind: r.remind,
     urgency: r.urgency,
     scope: r.scope,
     date: r.date,

@@ -67,15 +67,20 @@ export function planEditItem(s: DeskState, id: string, patch: Partial<WorkItem>,
     if (moved.deferCount === undefined) delete after.deferCount;
   }
   if (after.kind === 'followup' && !after.person?.trim()) after.kind = 'todo';
-  if (after.kind === 'todo') {
+  if (after.kind !== 'followup') {
     delete after.person;
     delete after.mode;
   } else {
     after.person = after.person!.trim();
     after.mode = after.mode ?? 'inform';
   }
+  if (after.kind !== 'meeting') {
+    delete after.time;
+    delete after.remind;
+  } else if (after.remind && !after.remind.length) delete after.remind;
   after.title = after.title.trim() || before.title;
-  const changed = (Object.keys({ ...before, ...after }) as (keyof WorkItem)[]).some((k) => k !== 'updatedAt' && before[k] !== after[k]);
+  const same = (k: keyof WorkItem) => (k === 'remind' ? String(before.remind ?? '') === String(after.remind ?? '') : before[k] === after[k]);
+  const changed = (Object.keys({ ...before, ...after }) as (keyof WorkItem)[]).some((k) => k !== 'updatedAt' && !same(k));
   if (!changed) return [];
   after.updatedAt = stamp;
   return [{ table: 'workItems', type: 'put', before, after }];

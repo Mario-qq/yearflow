@@ -4,16 +4,19 @@
  *
  *   !! 紧急 · ! 尽快 · @人（后面加空格）· 今天/明天/后天/周三/下周一/10.20/10月20日 · 截止周五 / ddl 10.31
  *   * 重要（独立的一个星号，或 ★）· #目标名 · 每天/工作日/每周一三/每月5号/每月最后一天/每月第二个周三/每月最后一个周五 · ~生活 · 待处理
- *   例行可带时间：9:00 / 9点 / 9点半 / 14点30（只在例行里认，待办标题里的「3点」原样保留）
+ *   例行可带时间：9:00 / 9点 / 9点半 / 14点30
+ *   会议：标题里有「会议/开会/例会/周会/面试/评审…」又写了时间 ⇒ 建会议（默认提前 10 分钟提醒）；
+ *   可加「上午/下午/晚上」，光写 1–6 点按下午算。其余待办标题里的「3点」原样保留
  *
  * 不写日子 = 今天；写「待处理」= 不排日子。日期词在句首/句尾可以不加空格，句中要用空格隔开
  * （否则「今天的报表」会被吃掉一个「今天」）。
  */
 import type { RoutineRule, Urgency, WorkScope } from '../../types/domain';
 import { fmtDay, toDay } from '../date';
+import { DEFAULT_REMIND } from '../derive/meetings';
 
 export interface QuickAddResult {
-  kind: 'todo' | 'followup' | 'routine';
+  kind: 'todo' | 'followup' | 'meeting' | 'routine';
   title: string;
   urgency: Urgency;
   scope: WorkScope;
@@ -28,8 +31,10 @@ export interface QuickAddResult {
   rule?: RoutineRule;
   /** 例行规则的原话，如「每周一三」 */
   ruleLabel?: string;
-  /** 例行的时间点 HH:mm（排序与提醒用） */
+  /** 例行的时间点 / 会议开始时间 HH:mm */
   time?: string;
+  /** 会议提醒（提前几分钟） */
+  remind?: number[];
   /** 重要（写了独立的 * 或 ★） */
   important?: boolean;
 }
@@ -98,6 +103,9 @@ function parseRule(text: string): { rule: RoutineRule; label: string } | null {
   return null;
 }
 
+/** 会议词：标题里出现它、又写了时间 ⇒ 会议 */
+const MEETING_WORD = /会议|开会|例会|周会|月会|晨会|早会|碰头会|评审|面试|复盘会|沟通会|讨论会|meeting|call/i;
+
 const DISPATCH_VERB = /^(下发|发给|分派|派给|转给|转发)\s*/;
 const INFORM_VERB = /^(告知|通知|告诉|跟.{0,3}说)\s*/;
 
@@ -112,13 +120,18 @@ export function parseQuickAdd(input: string, ctx: { today: string; goals: { id: 
   if (routine) cut(routine.label);
 
   let time: string | undefined;
-  if (routine) {
-    const tm = /\s(\d{1,2})(?:[:：](\d{2})|点(半|(\d{1,2})分?)?)(?=\s)/.exec(t);
+  let timeRaw = '';
+  const meeting = !routine && MEETING_WORD.test(t);
+  if (routine || meeting) {
+    const tm = /\s(上午|早上|中午|下午|晚上)?(\d{1,2})(?:[:：](\d{2})|点(半|(\d{1,2})分?)?)(?=\s)/.exec(t);
     if (tm) {
-      const h = Number(tm[1]);
-      const min = tm[2] !== undefined ? Number(tm[2]) : tm[3] === '半' ? 30 : tm[4] !== undefined ? Number(tm[4]) : 0;
+      let h = Number(tm[2]);
+      const min = tm[3] !== undefined ? Number(tm[3]) : tm[4] === '半' ? 30 : tm[5] !== undefined ? Number(tm[5]) : 0;
+      const pm = tm[1] === '下午' || tm[1] === '晚上' || (tm[1] === '中午' && h < 3) || (!tm[1] && meeting && h >= 1 && h <= 6);
+      if (pm && h < 12) h += 12;
       if (h <= 23 && min <= 59) {
         time = `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+        timeRaw = tm[0].trim();
         t = t.replace(tm[0], ' ');
       }
     }
@@ -215,6 +228,22 @@ export function parseQuickAdd(input: string, ctx: { today: string; goals: { id: 
 
   const finalDate = date === undefined ? today : date;
   const weekend = finalDate !== null && [0, 6].includes(toDay(finalDate).day());
+  if (meeting && time && finalDate !== null) {
+    return {
+      kind: 'meeting',
+      title,
+      urgency,
+      scope: scope ?? (weekend ? 'life' : 'work'),
+      date: finalDate,
+      time,
+      remind: [...DEFAULT_REMIND],
+      ...(goalId ? { goalId } : {}),
+      ...(unknownGoal ? { unknownGoal } : {}),
+      ...(important ? { important } : {}),
+    };
+  }
+  // 会议词 + 时间但放进了待处理：不算会议，时间原样还给标题
+  if (meeting && time) title = `${timeRaw} ${title}`;
   return {
     kind: person ? 'followup' : 'todo',
     title,
