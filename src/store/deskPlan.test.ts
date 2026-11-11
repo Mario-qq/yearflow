@@ -51,6 +51,13 @@ describe('事项', () => {
     expect('doneAt' in back).toBe(false);
   });
 
+  it('拖过期的事项今天做完：挪到完成当天，保留拖延记录', () => {
+    const late = after(planToggleItem(state({ items: [wi('a', { date: '2026-10-10' })] }), 'a', NOW)[0]) as WorkItem;
+    expect(late).toMatchObject({ status: 'done', date: '2026-10-16', deferCount: 1 });
+    const more = after(planToggleItem(state({ items: [wi('a', { date: '2026-10-10', deferCount: 3 })] }), 'a', NOW)[0]) as WorkItem;
+    expect(more.deferCount).toBe(3);
+  });
+
   it('不做了也记 doneAt；未知 id 忽略', () => {
     const cs = planPatchItems(state({ items: [wi('a')] }), ['a', 'nope'], { status: 'dropped' }, NOW);
     expect(cs).toHaveLength(1);

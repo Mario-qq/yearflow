@@ -6,6 +6,16 @@
 import type { DayMark, Routine, RoutineLog, WorkItem } from '../types/domain';
 import { isFocusOn, MAX_FOCUS, moveItem, routineLogId } from '../lib/derive/desk';
 import type { Change, EntityMaps } from './types';
+import dayjs from 'dayjs';
+
+/** 拖过期的事项在「今天」做完：记到完成当天，并保留拖延记录（deferCount 至少 1） */
+function settleOverdue(after: WorkItem, stamp: string): void {
+  const day = dayjs(stamp).format('YYYY-MM-DD');
+  if (after.date && after.date < day) {
+    after.date = day;
+    after.deferCount = Math.max(after.deferCount ?? 0, 1);
+  }
+}
 
 type DeskState = Pick<EntityMaps, 'workItems' | 'routines' | 'routineLogs' | 'dayMarks'>;
 
@@ -27,6 +37,7 @@ export function planToggleItem(s: DeskState, id: string, stamp: string): Change[
   if (before.status === 'open') {
     after.status = 'done';
     after.doneAt = stamp;
+    settleOverdue(after, stamp);
   } else {
     after.status = 'open';
     delete after.doneAt;
@@ -43,6 +54,7 @@ export function planPatchItems(s: DeskState, ids: string[], patch: Partial<WorkI
     // patch 里显式给 undefined = 删掉这个字段（如清除截止日），不留 undefined 键进库/同步
     for (const [k, v] of Object.entries(patch)) if (v === undefined) delete (after as unknown as Record<string, unknown>)[k];
     if (patch.status === 'done' || patch.status === 'dropped') after.doneAt = stamp;
+    if (patch.status === 'done' && before.status === 'open') settleOverdue(after, stamp);
     if (patch.status === 'open') delete after.doneAt;
     out.push({ table: 'workItems', type: 'put', before, after });
   }
