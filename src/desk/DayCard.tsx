@@ -9,8 +9,9 @@ import type { RoutineOccurrence } from '../lib/derive/desk';
 import { useStore } from '../store/useStore';
 import { MAX_FOCUS } from '../lib/derive/desk';
 import { isWeekendDate, weekdayCn } from './format';
-import { PlanRows } from './PlanSection';
-import type { PlanRowData } from './usePlanRows';
+import { PastPlanRows, PlanRows } from './PlanSection';
+import { usePlanRows, type PlanRowData } from './usePlanRows';
+import { usePlanVisibility } from './pickModel';
 import { ItemRow, RoutineRow } from './Rows';
 import type { DayData } from './useDeskData';
 import { useDeskUi } from './uiStore';
@@ -89,6 +90,9 @@ export function DayCard({ data, today, plan, planHidden, rail }: { data: DayData
   const droppedOpen = useDeskUi((s) => s.openFolds.has(date));
   const planFolded = useDeskUi((s) => s.planFolded);
   const togglePlanFold = useDeskUi((s) => s.togglePlanFold);
+  // 过去的日卡回看那天打过卡的年度计划（今天的走 plan 分区）
+  const { visible: dayPlan } = usePlanVisibility(usePlanRows(date));
+  const pastPlan = date < today ? dayPlan.filter((p) => p.status) : [];
   if (rail) return <Rail data={data} today={today} />;
 
   const past = date < today;
@@ -103,7 +107,7 @@ export function DayCard({ data, today, plan, planHidden, rail }: { data: DayData
   const missed = past ? occ.filter((o) => o.status === 'open' && (o.routine.rule.type === 'weekly' || o.routine.rule.type.startsWith('monthly'))) : [];
   const focusDone = focus.filter((i) => i.status === 'done').length;
   const canPickFocus = isToday && focus.length < MAX_FOCUS && day.rolled.length + day.open.length > focus.filter((i) => i.status === 'open').length;
-  const empty = focus.length === 0 && work.n === 0 && life.n === 0 && day.dropped.length === 0 && openN === 0 && missed.length === 0 && !(isToday && plan?.length);
+  const empty = focus.length === 0 && work.n === 0 && life.n === 0 && day.dropped.length === 0 && openN === 0 && missed.length === 0 && !(isToday && plan?.length) && pastPlan.length === 0;
 
   return (
     <div className={['dk-day', weekend ? 'weekend' : '', past ? 'past' : '', isToday ? 'today' : ''].join(' ')} data-day={date}>
@@ -219,7 +223,8 @@ export function DayCard({ data, today, plan, planHidden, rail }: { data: DayData
             {!planFolded && <PlanRows rows={plan} today={today} />}
           </div>
         )}
-        {empty && <div className="dk-empty">{past ? '—' : '空'}</div>}
+        {pastPlan.length > 0 && <PastPlanRows rows={pastPlan} />}
+        {empty &&<div className="dk-empty">{past ? '—' : '空'}</div>}
       </div>
     </div>
   );

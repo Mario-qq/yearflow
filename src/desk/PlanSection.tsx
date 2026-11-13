@@ -13,6 +13,43 @@ function openPlanMenu(p: PlanRowData, x: number, y: number) {
   useDeskUi.getState().set({ sel: new Set(), menu: { kind: 'plan', goalId: p.goalId, taskId: p.taskId, status: p.status, recordId: p.recordId, x, y } });
 }
 
+/** 过去的日卡：那天打过卡的年度计划（只读回看；改打卡去甘特图，免得在旧卡上误点记到今天） */
+export function PastPlanRows({ rows }: { rows: PlanRowData[] }) {
+  const doneN = rows.filter((p) => p.status === 'done' || p.status === 'skipped').length;
+  return (
+    <div className="dk-plan">
+      <div className="dk-sec">
+        <span className="dk-sec-t">
+          年度计划
+          {doneN > 0 && <span className="n tnum">{doneN}</span>}
+        </span>
+      </div>
+      {rows.map((p) => {
+        const done = p.status === 'done' || p.status === 'skipped';
+        return (
+          <div
+            key={`${p.goalId}:${p.taskId}`}
+            className={['dk-row plan', done ? 'done' : ''].join(' ')}
+            style={{ '--c': p.color } as React.CSSProperties}
+            title={`来自甘特图：${p.goalName} · ${p.taskName}`}
+          >
+            <span className="dk-chk" aria-hidden />
+            <span className="dk-rb">
+              <span className="dk-t">
+                {p.goalName} · {p.taskName}
+              </span>
+              <span className="dk-m">
+                {p.status === 'partial' && <span>做了一点</span>}
+                {p.status === 'skipped' && <span>跳过</span>}
+              </span>
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function PlanRows({ rows, today }: { rows: PlanRowData[]; today: string }) {
   const personLit = useDeskUi((s) => s.personLit);
   return (
